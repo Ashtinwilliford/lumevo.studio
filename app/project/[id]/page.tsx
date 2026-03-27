@@ -8,7 +8,7 @@ import { VIBE_LABELS, TONE_LABELS, AUDIENCE_GOAL_LABELS } from "../../../lib/typ
 
 const STATUS_STYLE: Record<Project["status"], { bg: string; text: string; label: string }> = {
   draft:      { bg: "rgba(113,113,122,0.15)", text: "#71717a", label: "Draft" },
-  generating: { bg: "rgba(232,255,71,0.1)",  text: "#e8ff47", label: "Generating…" },
+  generating: { bg: "rgba(255,224,130,0.15)",  text: "#FFE082", label: "Generating…" },
   ready:      { bg: "rgba(74,222,128,0.12)", text: "#4ade80", label: "Ready" },
 };
 
@@ -40,7 +40,7 @@ export default function ProjectPage() {
   if (!project) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#09090b" }}>
-        <div style={{ width: 8, height: 8, background: "#e8ff47", borderRadius: "50%" }} />
+        <div style={{ width: 8, height: 8, background: "#FFE082", borderRadius: "50%" }} />
       </div>
     );
   }
@@ -90,7 +90,7 @@ export default function ProjectPage() {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap');
-        :root { --bg:#09090b; --surface:#111113; --surface2:#18181b; --border:rgba(255,255,255,0.07); --accent:#e8ff47; --accent2:#ff6b6b; --text:#f4f4f5; --muted:#71717a; --radius:14px; }
+        :root { --bg:#09090b; --surface:#111113; --surface2:#18181b; --border:rgba(255,255,255,0.07); --accent:#FFE082; --accent2:#C62828; --text:#f4f4f5; --muted:#71717a; --radius:14px; }
         * { box-sizing:border-box; margin:0; padding:0; }
         body { background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,sans-serif; min-height:100vh; }
 
@@ -108,7 +108,7 @@ export default function ProjectPage() {
 
         .action-row { display:flex; gap:10px; flex-wrap:wrap; }
         .btn-delete { display:flex; align-items:center; gap:6px; background:transparent; color:var(--muted); font-family:inherit; font-size:13px; font-weight:500; border:1px solid var(--border); border-radius:999px; padding:8px 18px; cursor:pointer; transition:all 0.15s; }
-        .btn-delete:hover { border-color:rgba(255,107,107,0.4); color:#ff6b6b; }
+        .btn-delete:hover { border-color:rgba(198,40,40,0.4); color:var(--accent2); }
 
         .divider { border:none; border-top:1px solid var(--border); margin:0 0 40px; }
 
@@ -117,7 +117,7 @@ export default function ProjectPage() {
         .nav-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
 
         .nav-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px 24px; cursor:pointer; transition:border-color 0.2s,transform 0.2s; text-decoration:none; display:block; position:relative; }
-        .nav-card:hover { border-color:rgba(255,255,255,0.15); transform:translateY(-2px); }
+        .nav-card:hover { border-color:rgba(198,40,40,0.3); transform:translateY(-2px); }
         .nav-card-disabled { opacity:0.45; cursor:default; pointer-events:none; }
 
         .nav-icon { font-size:24px; margin-bottom:12px; display:block; }
