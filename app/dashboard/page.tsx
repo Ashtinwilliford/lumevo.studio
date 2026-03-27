@@ -7,9 +7,9 @@ import type { Project } from "../../lib/types";
 import { VIBE_LABELS, TONE_LABELS } from "../../lib/types";
 
 const STATUS_STYLE: Record<Project["status"], { bg: string; text: string; label: string }> = {
-  draft:      { bg: "rgba(113,113,122,0.15)", text: "#71717a", label: "Draft" },
-  generating: { bg: "rgba(255,224,130,0.15)",  text: "#FFE082", label: "Generating…" },
-  ready:      { bg: "rgba(74,222,128,0.12)", text: "#4ade80", label: "Ready" },
+  draft:      { bg: "rgba(0,0,0,0.06)", text: "#78716c", label: "Draft" },
+  generating: { bg: "rgba(198,40,40,0.1)",  text: "#C62828", label: "Generating…" },
+  ready:      { bg: "rgba(22,163,74,0.1)", text: "#16a34a", label: "Ready" },
 };
 
 function ProjectCard({ project, onOpen, onDelete }: { project: Project; onOpen: () => void; onDelete: () => void }) {
@@ -82,14 +82,14 @@ export default function DashboardPage() {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap');
-        :root { --bg:#09090b; --surface:#111113; --surface2:#18181b; --border:rgba(255,255,255,0.07); --accent:#FFE082; --accent2:#C62828; --text:#f4f4f5; --muted:#71717a; --radius:14px; }
+        :root { --bg:#FFF9E6; --surface:#ffffff; --surface2:#FFF3CC; --border:rgba(0,0,0,0.08); --accent:#C62828; --accent2:#C62828; --text:#1a1a1a; --muted:#78716c; --radius:14px; }
         * { box-sizing:border-box; margin:0; padding:0; }
         body { background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,sans-serif; min-height:100vh; }
         .dash-wrap { max-width:1100px; margin:0 auto; padding:48px 24px 80px; }
         .dash-header { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:36px; gap:16px; flex-wrap:wrap; }
-        .dash-logo { font-family:'Syne',sans-serif; font-size:13px; font-weight:800; letter-spacing:3px; text-transform:uppercase; color:var(--accent2); margin-bottom:4px; }
+        .dash-logo { font-family:'Syne',sans-serif; font-size:13px; font-weight:800; letter-spacing:3px; text-transform:uppercase; color:var(--accent); margin-bottom:4px; }
         .dash-title { font-family:'Syne',sans-serif; font-size:34px; font-weight:800; letter-spacing:-0.5px; }
-        .btn-primary { display:flex; align-items:center; gap:8px; background:var(--accent2); color:#fff; font-family:inherit; font-size:14px; font-weight:600; border:none; border-radius:999px; padding:12px 24px; cursor:pointer; white-space:nowrap; transition:opacity 0.2s,transform 0.15s; }
+        .btn-primary { display:flex; align-items:center; gap:8px; background:var(--accent); color:#fff; font-family:inherit; font-size:14px; font-weight:600; border:none; border-radius:999px; padding:12px 24px; cursor:pointer; white-space:nowrap; transition:opacity 0.2s,transform 0.15s; }
         .btn-primary:hover { opacity:0.9; transform:translateY(-1px); }
         .filter-row { display:flex; gap:4px; margin-bottom:28px; background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:4px; width:fit-content; }
         .filter-tab { background:transparent; border:none; color:var(--muted); font-family:inherit; font-size:13px; font-weight:500; padding:7px 18px; border-radius:999px; cursor:pointer; transition:all 0.15s; }
@@ -99,12 +99,12 @@ export default function DashboardPage() {
         .stat-num { font-family:'Syne',sans-serif; font-size:28px; font-weight:800; color:var(--text); }
         .stat-label { font-size:12px; color:var(--muted); }
         .cards-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
-        .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; cursor:pointer; transition:border-color 0.2s,transform 0.2s; }
-        .card:hover { border-color:rgba(255,255,255,0.15); transform:translateY(-2px); }
+        .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; cursor:pointer; transition:border-color 0.2s,transform 0.2s,box-shadow 0.2s; }
+        .card:hover { border-color:rgba(0,0,0,0.15); transform:translateY(-2px); box-shadow:0 4px 20px rgba(0,0,0,0.06); }
         .card-thumb { height:130px; background:var(--surface2); overflow:hidden; }
         .card-thumb-img { width:100%; height:100%; object-fit:cover; }
-        .card-thumb-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#18181b 0%,#222226 100%); }
-        .card-thumb-placeholder span { font-family:'Syne',sans-serif; font-size:26px; font-weight:800; color:#333336; letter-spacing:2px; }
+        .card-thumb-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#FFF3CC 0%,#FFE99A 100%); }
+        .card-thumb-placeholder span { font-family:'Syne',sans-serif; font-size:26px; font-weight:800; color:rgba(0,0,0,0.12); letter-spacing:2px; }
         .card-body { padding:16px 18px 18px; }
         .card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:8px; }
         .card-title { font-size:15px; font-weight:600; color:var(--text); line-height:1.3; flex:1; }
@@ -115,7 +115,7 @@ export default function DashboardPage() {
         .card-footer { display:flex; align-items:center; justify-content:space-between; }
         .card-date { font-size:12px; color:var(--muted); }
         .delete-btn { background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1; padding:0 4px; transition:color 0.15s; }
-        .delete-btn:hover { color:var(--accent2); }
+        .delete-btn:hover { color:var(--accent); }
         .empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:380px; gap:12px; text-align:center; }
         .empty-icon { font-size:40px; color:var(--accent); margin-bottom:4px; }
         .empty-title { font-family:'Syne',sans-serif; font-size:20px; font-weight:700; color:var(--text); }
