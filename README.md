@@ -1,36 +1,109 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Lumevo Studio – Feature Drop 1
 
-## Getting Started
+## What's new
 
-First, run the development server:
+### Files added / updated
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+lib/
+  types.ts              ← Core data model (Project, Vibe, Tone, AudienceGoal, etc.)
+  projectStore.ts       ← localStorage CRUD (swap for Supabase/Firebase later)
+  aiGeneration.ts       ← Client-side generation helpers (calls /api/generate/*)
+
+app/
+  api/generate/content/
+    route.ts            ← Next.js API route (mock now, Anthropic SDK ready)
+  dashboard/
+    page.tsx            ← Rebuilt: project grid, stats, filter tabs, delete
+  project/[id]/script/
+    page.tsx            ← Rebuilt: title, description, vibe/tone/goal chips, generate + output
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Step-by-step integration
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 1 — Copy files
 
-## Learn More
+Drop every file above into your existing Next.js project at the paths shown.
 
-To learn more about Next.js, take a look at the following resources:
+### 2 — No new dependencies needed yet
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+When you're ready for real AI generation:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm install @anthropic-ai/sdk
+```
 
-## Deploy on Vercel
+Then add to `.env.local`:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 3 — Enable real generation
+
+Open `app/api/generate/content/route.ts`, uncomment the Anthropic block at the bottom, and remove the `return NextResponse.json(mock)` line above it.
+
+### 4 — Wire the upload page to the store
+
+In your existing `project/[id]/upload/page.tsx`, call `patchProject` after files are picked:
+
+```ts
+import { patchProject } from "@/lib/projectStore";
+import type { UploadedFile } from "@/lib/types";
+
+patchProject(id, {
+  uploadedFiles: files.map(f => ({
+    name: f.name,
+    type: f.type.startsWith("video") ? "video" : "image",
+    size: f.size,
+    url: URL.createObjectURL(f),
+  })),
+  thumbnail: firstImagePreviewUrl,
+});
+```
+
+### 5 — Create project from the create page
+
+In your existing `app/create/page.tsx`:
+
+```ts
+import { createAndSaveProject } from "@/lib/projectStore";
+
+const project = createAndSaveProject({ title: "My new project" });
+router.push(`/project/${project.id}`);
+```
+
+---
+
+## Data model quick reference
+
+```ts
+interface Project {
+  id: string
+  title: string
+  description: string
+  vibe: Vibe | ""
+  tone: Tone | ""
+  audienceGoal: AudienceGoal | ""
+  uploadedFiles: UploadedFile[]
+  generated?: GeneratedContent
+  status: "draft" | "generating" | "ready"
+  createdAt: string
+  updatedAt: string
+  thumbnail?: string
+}
+```
+
+---
+
+## What's next
+
+| Feature | File to build |
+|---|---|
+| Voice cloning settings | app/project/[id]/voice/page.tsx |
+| Brand style / color palette | app/project/[id]/brand/page.tsx |
+| Export / publish queue | app/project/[id]/export/page.tsx |
+| Video auto-generation | app/api/generate/video/route.ts |
+| User auth + cloud storage | lib/auth.ts + Supabase |
