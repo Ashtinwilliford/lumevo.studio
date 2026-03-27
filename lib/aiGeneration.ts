@@ -41,3 +41,4 @@ export async function generateContentStructure(project: Project): Promise<Conten
   const result = await generateContent(project);
   return result.contentStructure;
 }
+
