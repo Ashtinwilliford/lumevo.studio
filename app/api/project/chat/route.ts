@@ -11,7 +11,6 @@ const client = new OpenAI({
 interface ProjectState {
   title: string | null;
   platforms: string[] | null;
-  mediaType: "voiceover" | "music" | "both" | null;
   vibe: string | null;
   duration: number | null;
 }
@@ -28,53 +27,58 @@ export async function POST(req: NextRequest) {
 
   const brandRows = await query("SELECT * FROM brand_profiles WHERE user_id = $1", [session.id]);
   const brand = brandRows.rows[0];
-  const brandContext = brand
-    ? `Their niche: ${brand.niche || "content creation"}. Voice: ${brand.voice_style || "conversational"}. Audience: ${brand.target_audience || "general"}.`
+  const brandContext = brand?.tone_summary
+    ? `Their brand voice: ${brand.tone_summary}.`
+    : brand?.voice_style
+    ? `Their content style: ${brand.voice_style}, niche: ${brand.niche || "lifestyle"}.`
     : "";
+
+  // Figure out where we are in the flow
+  const hasTitle = !!projectState.title;
+  const hasPlatform = !!(projectState.platforms?.length);
+  const hasVibe = !!projectState.vibe;
+  const hasDuration = !!projectState.duration;
+  const allCollected = hasTitle && hasPlatform && hasVibe && hasDuration;
 
   const knownSoFar = [
     projectState.title ? `Topic: "${projectState.title}"` : null,
-    projectState.platforms?.length ? `Platform(s): ${projectState.platforms.join(", ")}` : null,
-    projectState.mediaType ? `Media type: ${projectState.mediaType}` : null,
+    projectState.platforms?.length ? `Platform: ${projectState.platforms.join(" + ")}` : null,
     projectState.vibe ? `Vibe: "${projectState.vibe}"` : null,
     projectState.duration ? `Duration: ${projectState.duration}s` : null,
   ].filter(Boolean).join(" | ");
 
-  const systemPrompt = `You are Lumevo's creative director AI. You're having a warm, natural conversation with ${userName} to plan and launch their next post project.
+  const systemPrompt = `You are Lumevo — a creative AI director having a fast, warm, punchy conversation with ${userName} to plan their next piece of content.
 
 ${brandContext}
 
-Your mission: collect these 5 things naturally through conversation — don't ask for all at once:
-1. What the post is about (topic/title)
-2. Platform(s): instagram, tiktok, youtube, or multiple
-3. Media style: "voiceover" (their cloned voice narrating), "music" (background track only), or "both"
-4. Vibe or script direction (mood, feeling, what they want to convey)
-5. Duration: 15, 30, or 60 seconds
+STRICT STEP ORDER — only ask ONE thing per message:
+- Step 1 (if no title yet): Find out what the content is about. Be curious and specific.
+- Step 2 (if no platform yet): Ask which platform — Instagram, TikTok, or both.
+- Step 3 (if no vibe yet): Ask for the mood/vibe/direction. Give 1-2 short examples to spark ideas.
+- Step 4 (if no duration yet): Ask how long — 15, 30, or 60 seconds.
+- Step 5 (ALL 4 collected): Say something like "Perfect, I have everything I need. Now I just need your media — drop in your clips, photos, or audio and I'll handle the rest." Then set needsUpload: true.
 
 Rules:
-- Be warm, fun, and specific — like a real creative director who knows them
-- Use their first name occasionally (${userName})
-- One or two questions max per message, never a list of questions
-- When they say something like "summer trip to Belize", pull the platform question naturally
-- When they say "both" for platforms, confirm and move on
-- When you have 4 of the 5 pieces, tell them to upload their media (set needsUpload: true)
-- When you have ALL 5 pieces AND they've been prompted to upload, set readyToCreate: true
-- Keep messages SHORT — 1-3 sentences max, snappy
+- Keep messages SHORT — 1-3 sentences MAX. No lists. No essays.
+- Be warm and snappy — like a creative director who's excited about their work
+- Use ${userName}'s name occasionally
+- When they give you vague answers, accept them and move forward
+- Never repeat a question you already asked
+- Never ask about media type (voiceover vs music) — that's handled automatically
 
-Known so far: ${knownSoFar || "nothing yet — just getting started"}
+Currently known: ${knownSoFar || "nothing yet — just getting started"}
 
-RESPOND WITH ONLY THIS JSON OBJECT (no markdown, no code blocks, pure JSON):
+RESPOND WITH ONLY THIS JSON (no markdown, no code fences):
 {
-  "message": "your short conversational message",
+  "message": "your short reply",
   "extracted": {
-    "title": null or "string",
-    "platforms": null or ["instagram","tiktok","youtube"],
-    "mediaType": null or "voiceover" or "music" or "both",
-    "vibe": null or "string describing mood/direction",
+    "title": null or "string of what they're making",
+    "platforms": null or ["instagram"] or ["tiktok"] or ["instagram","tiktok"],
+    "vibe": null or "short mood/direction description",
     "duration": null or 15 or 30 or 60
   },
-  "needsUpload": false,
-  "readyToCreate": false
+  "currentStep": "title" or "platform" or "vibe" or "duration" or "upload",
+  "needsUpload": false or true
 }`;
 
   const completion = await client.chat.completions.create({
@@ -83,8 +87,8 @@ RESPOND WITH ONLY THIS JSON OBJECT (no markdown, no code blocks, pure JSON):
       { role: "system", content: systemPrompt },
       ...messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
     ],
-    max_tokens: 300,
-    temperature: 0.85,
+    max_tokens: 250,
+    temperature: 0.8,
     response_format: { type: "json_object" },
   });
 
@@ -92,14 +96,25 @@ RESPOND WITH ONLY THIS JSON OBJECT (no markdown, no code blocks, pure JSON):
   let parsed: {
     message: string;
     extracted: Partial<ProjectState>;
+    currentStep: string;
     needsUpload: boolean;
-    readyToCreate: boolean;
   };
 
   try {
     parsed = JSON.parse(raw);
   } catch {
-    parsed = { message: "Let me think on that — what's the vibe you're going for?", extracted: {}, needsUpload: false, readyToCreate: false };
+    parsed = {
+      message: "Sorry, got a bit lost there — what were we saying?",
+      extracted: {},
+      currentStep: "title",
+      needsUpload: false,
+    };
+  }
+
+  // Safety: if all collected and not yet upload, force upload step
+  if (allCollected && !parsed.needsUpload) {
+    parsed.needsUpload = true;
+    parsed.currentStep = "upload";
   }
 
   return NextResponse.json(parsed);

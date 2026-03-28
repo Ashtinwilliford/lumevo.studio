@@ -469,6 +469,7 @@ interface ProjectState {
   mediaType: "voiceover" | "music" | "both" | null;
   vibe: string | null; duration: number | null;
 }
+type ChatStep = "title" | "platform" | "vibe" | "duration" | "upload" | null;
 
 function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
   const firstName = user.name.split(" ")[0];
@@ -483,6 +484,7 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [msgCounter, setMsgCounter] = useState(1);
   const [stepIdx, setStepIdx] = useState(0);
+  const [currentStep, setCurrentStep] = useState<ChatStep>(null);
   const [result, setResult] = useState<{ script: string; audioBase64: string | null; projectId: string; hasVoice: boolean; caption?: string } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -526,21 +528,19 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
       if (data.extracted) {
         if (data.extracted.title) newState.title = data.extracted.title;
         if (data.extracted.platforms) newState.platforms = data.extracted.platforms;
-        if (data.extracted.mediaType) newState.mediaType = data.extracted.mediaType;
         if (data.extracted.vibe) newState.vibe = data.extracted.vibe;
         if (data.extracted.duration) newState.duration = data.extracted.duration;
+        // default mediaType to "both" for generation
+        if (!newState.mediaType) newState.mediaType = "both";
       }
       setProjectState(newState);
+      if (data.currentStep) setCurrentStep(data.currentStep as ChatStep);
       if (data.needsUpload) setNeedsUpload(true);
 
       setIsTyping(false);
       const aiId = msgCounter + 1;
       setMsgCounter(c => c + 2);
       setMessages(prev => [...prev, { role: "ai", content: data.message, id: aiId }]);
-
-      if (data.readyToCreate && newState.title) {
-        setTimeout(() => startGeneration(newState, selectedIds), 800);
-      }
     } catch {
       setIsTyping(false);
       setMessages(prev => [...prev, { role: "ai", content: "Sorry, I hit a snag. Try saying that again.", id: msgCounter + 1 }]);
@@ -600,12 +600,9 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
   }
 
   function handleConfirmUploads() {
-    const count = selectedIds.length;
-    const msg = count > 0
-      ? `I've selected ${count} file${count > 1 ? "s" : ""} — ready to go!`
-      : "I don't have media to add right now, just use my brand voice.";
     setNeedsUpload(false);
-    sendMessage(msg);
+    // Kick off generation immediately with whatever state + selected files
+    startGeneration(projectState, selectedIds);
   }
 
   function handleReset() {
@@ -615,17 +612,16 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
     setProjectState({ title: null, platforms: null, mediaType: null, vibe: null, duration: null });
     setSelectedIds([]);
     setNeedsUpload(false);
+    setCurrentStep(null);
     setStepIdx(0);
     setInput("");
   }
 
-  const quickReplies: string[] = !projectState.platforms
-    ? ["Instagram", "TikTok", "Both — Instagram & TikTok"]
-    : !projectState.mediaType
-    ? ["Voiceover", "Background music", "Both"]
-    : !projectState.duration
-    ? ["15 seconds", "30 seconds", "60 seconds"]
-    : [];
+  // Quick replies tied exactly to what the AI just asked about
+  const quickReplies: string[] =
+    currentStep === "platform" ? ["Instagram", "TikTok", "Both — Instagram & TikTok"] :
+    currentStep === "duration" ? ["15 seconds", "30 seconds", "60 seconds"] :
+    [];
 
   if (phase === "generating") {
     return (
@@ -655,42 +651,69 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
 
   if (phase === "done" && result) {
     const platforms = projectState.platforms?.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" + ") || "Video";
+    const scriptLines = result.script.split(/\n+/).filter(Boolean);
+
     return (
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>✦ Ready to post</div>
-            <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 26, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 4 }}>{projectState.title}</h2>
-            <p style={{ fontSize: 14, color: "#7c7660" }}>{platforms} · {projectState.duration || 30}s {projectState.mediaType === "both" ? "· Voice + Music" : projectState.mediaType === "voiceover" ? "· Voice" : "· Music"}</p>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>✦ Content ready</div>
+            <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 24, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 4, lineHeight: 1.2 }}>{projectState.title}</h2>
+            <p style={{ fontSize: 13, color: "#7c7660" }}>{platforms} · {projectState.duration || 30}s{projectState.vibe ? ` · ${projectState.vibe.slice(0, 40)}` : ""}</p>
           </div>
-          <button onClick={handleReset} style={{ background: "#111", color: "#fff", border: "none", borderRadius: 999, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            + New Project
+          <button onClick={handleReset} style={{ background: "#111", color: "#fff", border: "none", borderRadius: 999, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+            + New
           </button>
         </div>
 
+        {/* Voice narration */}
         {result.audioBase64 && (
-          <div style={{ background: "#fff", borderRadius: 20, padding: 24, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 12 }}>🎙 Your Voice Narration</div>
-            <audio controls style={{ width: "100%", borderRadius: 8 }} src={`data:audio/mpeg;base64,${result.audioBase64}`} />
+          <div style={{ background: "#1a1a1a", borderRadius: 20, padding: "20px 22px", marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 12 }}>Your Voice</div>
+            <audio controls style={{ width: "100%", borderRadius: 8, accentColor: "#FF2D2D" }} src={`data:audio/mpeg;base64,${result.audioBase64}`} />
           </div>
         )}
 
-        <div style={{ background: "#fff", borderRadius: 20, padding: 24, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 12 }}>📋 Caption</div>
-          <p style={{ fontSize: 15, lineHeight: 1.7, color: "#1a1a1a", fontStyle: "italic" }}>
-            &quot;{projectState.vibe ? `${projectState.title} — ${projectState.vibe.slice(0, 80)}` : projectState.title}&quot;
-          </p>
+        {/* Script as storyboard */}
+        <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 14, overflow: "hidden" }}>
+          <div style={{ padding: "18px 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>Script</div>
+            <button onClick={() => navigator.clipboard?.writeText(result.script)} style={{ fontSize: 11, fontWeight: 700, color: "#FF2D2D", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Copy</button>
+          </div>
+          <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+            {scriptLines.map((line, i) => (
+              <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <div style={{ width: 24, height: 24, borderRadius: 6, background: i === 0 ? "#FF2D2D" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: i === 0 ? "#fff" : "#7c7660", flexShrink: 0, marginTop: 2 }}>
+                  {i === 0 ? "▶" : i + 1}
+                </div>
+                <p style={{ fontSize: 14, lineHeight: 1.7, color: "#1a1a1a", margin: 0, flex: 1 }}>{line}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div style={{ background: "#fff", borderRadius: 20, padding: 24, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 12 }}>🎬 Voiceover Script</div>
-          <p style={{ fontSize: 14, lineHeight: 1.8, color: "#1a1a1a", whiteSpace: "pre-wrap" }}>{result.script}</p>
-        </div>
+        {/* Caption */}
+        {result.caption && (
+          <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 14, overflow: "hidden" }}>
+            <div style={{ padding: "18px 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>Caption</div>
+              <button onClick={() => navigator.clipboard?.writeText(result.caption || "")} style={{ fontSize: 11, fontWeight: 700, color: "#FF2D2D", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Copy</button>
+            </div>
+            <div style={{ padding: "16px 20px" }}>
+              <p style={{ fontSize: 14, lineHeight: 1.75, color: "#1a1a1a", margin: 0, whiteSpace: "pre-wrap" }}>{result.caption}</p>
+            </div>
+          </div>
+        )}
 
+        {/* Voice upsell */}
         {!result.hasVoice && (
-          <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "18px 22px" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Want to hear yourself narrate this?</div>
-            <div style={{ fontSize: 13, color: "#7c7660" }}>Add your ElevenLabs Voice ID in Settings and Lumevo will narrate every video in your actual voice.</div>
+          <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "16px 20px", display: "flex", gap: 14, alignItems: "center" }}>
+            <div style={{ fontSize: 24, flexShrink: 0 }}>🎙</div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>Add your voice clone</div>
+              <div style={{ fontSize: 12, color: "#7c7660" }}>Add your ElevenLabs Voice ID in Settings — Lumevo will narrate every video in your actual voice.</div>
+            </div>
           </div>
         )}
       </div>
@@ -729,20 +752,21 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
           )}
 
           {needsUpload && !isTyping && (
-            <div style={{ marginTop: 8, background: "#fafaf4", borderRadius: 16, padding: 18, border: "1.5px solid rgba(255,45,45,0.15)" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: "#1a1a1a" }}>
-                Select your media for this video
-                {selectedIds.length > 0 && <span style={{ marginLeft: 8, fontSize: 11, background: "#F8F8A6", padding: "2px 10px", borderRadius: 999 }}>{selectedIds.length} selected</span>}
+            <div style={{ marginTop: 8 }}>
+              <div style={{ background: "linear-gradient(135deg, #FF2D2D 0%, #cc1f1f 100%)", borderRadius: 16, padding: "18px 20px", marginBottom: 12, color: "#fff" }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", opacity: 0.7, marginBottom: 6 }}>Step 2 of 2</div>
+                <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Add your media</div>
+                <div style={{ fontSize: 13, opacity: 0.85 }}>Select clips, photos, or audio you want in this video — or skip and I&apos;ll write from your brand voice alone.</div>
               </div>
 
               {media.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 220, overflowY: "auto", marginBottom: 12 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto", marginBottom: 10 }}>
                   {media.map(u => {
                     const sel = selectedIds.includes(u.id);
                     return (
                       <div key={u.id} onClick={() => toggleSelect(u.id)}
-                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${sel ? "#FF2D2D" : "rgba(0,0,0,0.07)"}`, cursor: "pointer", background: sel ? "rgba(255,45,45,0.04)" : "#fff", transition: "all 0.15s" }}>
-                        <div style={{ width: 30, height: 30, borderRadius: 7, background: sel ? "#FF2D2D" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: sel ? "#fff" : "#FF2D2D", flexShrink: 0 }}>
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${sel ? "#FF2D2D" : "rgba(0,0,0,0.08)"}`, cursor: "pointer", background: sel ? "rgba(255,45,45,0.04)" : "#fafaf4", transition: "all 0.15s" }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 8, background: sel ? "#FF2D2D" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: sel ? "#fff" : "#FF2D2D", flexShrink: 0, fontWeight: 700 }}>
                           {sel ? "✓" : MEDIA_ICON[u.file_type] || "◻"}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -754,18 +778,20 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
                   })}
                 </div>
               ) : (
-                <div style={{ fontSize: 13, color: "#b5b09a", marginBottom: 10 }}>No media in your library yet — upload below.</div>
+                <div style={{ background: "#fafaf4", borderRadius: 10, padding: "14px 16px", marginBottom: 10, fontSize: 13, color: "#7c7660", textAlign: "center" }}>
+                  No media yet — upload something below or skip to use your brand voice
+                </div>
               )}
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button onClick={() => fileRef.current?.click()} disabled={uploadingFile}
-                  style={{ background: "#111", color: "#fff", border: "none", borderRadius: 999, padding: "9px 16px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  {uploadingFile ? "Uploading…" : "↑ Upload new"}
+                  style={{ background: "#111", color: "#fff", border: "none", borderRadius: 999, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                  {uploadingFile ? "Uploading…" : "↑ Upload file"}
                 </button>
                 <input ref={fileRef} type="file" style={{ display: "none" }} onChange={handleFileUpload} accept="video/*,image/*,audio/*" />
                 <button onClick={handleConfirmUploads}
-                  style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "9px 18px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  {selectedIds.length > 0 ? `Continue with ${selectedIds.length} file${selectedIds.length > 1 ? "s" : ""}` : "Continue without media"}
+                  style={{ flex: 1, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", minWidth: 160 }}>
+                  {selectedIds.length > 0 ? `Create with ${selectedIds.length} file${selectedIds.length > 1 ? "s" : ""} →` : "Create from brand voice →"}
                 </button>
               </div>
             </div>

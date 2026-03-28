@@ -76,14 +76,37 @@ Rules:
 - End with a natural, low-pressure CTA
 - Format: clean paragraphs, no stage directions, just the spoken words`;
 
-  const completion = await client.chat.completions.create({
-    model: "gpt-4o",
-    messages: [{ role: "user", content: systemPrompt }],
-    max_tokens: 500,
-    temperature: 0.8,
-  });
+  const captionPrompt = `You are a social media caption writer for ${user?.name || "a creator"} on ${platformContext}.
+
+Brand Voice:
+${brandContext}
+
+Write ONE punchy caption for a ${duration}-second video titled: "${title}"
+- 2-3 sentences max
+- Hook in the first line
+- Sound like a real person, not a brand
+- Include 3-5 relevant hashtags at the end
+- No em-dashes, no "hey guys"
+
+Respond with ONLY the caption text including hashtags. Nothing else.`;
+
+  const [completion, captionCompletion] = await Promise.all([
+    client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: systemPrompt }],
+      max_tokens: 500,
+      temperature: 0.8,
+    }),
+    client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "user", content: captionPrompt }],
+      max_tokens: 150,
+      temperature: 0.85,
+    }),
+  ]);
 
   const script = completion.choices[0]?.message?.content?.trim() || "";
+  const caption = captionCompletion.choices[0]?.message?.content?.trim() || "";
 
   const projectRows = await query(
     `INSERT INTO projects (user_id, title, project_type, target_platform, target_duration, prompt_text, status, generated_content)
@@ -133,5 +156,5 @@ Rules:
     await query("UPDATE projects SET status = 'scripted' WHERE id = $1", [projectId]);
   }
 
-  return NextResponse.json({ projectId, script, audioBase64, hasVoice: !!voiceId });
+  return NextResponse.json({ projectId, script, caption, audioBase64, hasVoice: !!voiceId });
 }
