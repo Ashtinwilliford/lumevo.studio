@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { login } from "../../lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,11 +14,23 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    const result = login(email, password);
-    setLoading(false);
-    if ("error" in result) { setError(result.error); return; }
-    router.push("/dashboard");
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Login failed");
+      } else {
+        router.push("/dashboard");
+      }
+    } catch {
+      setError("Something went wrong. Try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -51,8 +62,6 @@ export default function LoginPage() {
         .divider { display: flex; align-items: center; gap: 14px; margin: 20px 0; }
         .divider-line { flex: 1; border-top: 1px solid rgba(0,0,0,0.08); }
         .divider-text { font-size: 12px; color: #b5b09a; }
-        .demo-btn { width: 100%; background: transparent; border: 1.5px solid rgba(0,0,0,0.1); color: #7c7660; font-family: inherit; font-size: 14px; font-weight: 500; padding: 12px; border-radius: 999px; cursor: pointer; transition: border-color 0.2s; }
-        .demo-btn:hover { border-color: rgba(0,0,0,0.2); color: #1a1a1a; }
       `}</style>
       <div className="page">
         <nav className="nav">
@@ -74,12 +83,8 @@ export default function LoginPage() {
               <input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
               <button className="btn" type="submit" disabled={loading}>{loading ? "Logging in…" : "Log In"}</button>
             </form>
-            <div className="divider">
-              <div className="divider-line" /><span className="divider-text">or</span><div className="divider-line" />
-            </div>
-            <button className="demo-btn" onClick={() => { setEmail("demo@lumevo.studio"); setPassword("demo123456"); }}>Fill demo credentials</button>
             <div className="switch">
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
               <button className="switch-link" onClick={() => router.push("/signup")}>Sign up free</button>
             </div>
           </div>

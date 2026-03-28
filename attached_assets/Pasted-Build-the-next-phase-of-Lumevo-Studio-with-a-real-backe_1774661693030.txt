@@ -1,0 +1,704 @@
+Build the next phase of Lumevo Studio with a real backend architecture, database schema, job pipeline, and app page structure.
+
+This app is an AI social media manager that learns from what users upload and then creates content and edited videos in their style.
+
+## Core Product Logic
+
+The app should work like this:
+
+1. User signs up
+2. User uploads videos, images, captions, scripts, or ideas
+3. System analyzes the uploads
+4. System updates the user’s brand/personality profile
+5. User chooses a target output:
+   - caption
+   - hook
+   - post
+   - video script
+   - 30 second video
+   - 1 minute video
+   - 2 minute video
+   - 3 minute video
+6. System creates content in the user’s style
+7. For video generation, system can:
+   - mute original audio
+   - keep partial audio if useful
+   - add background music
+   - generate voiceover
+   - assemble clips/images into one finished video
+8. Final content is saved to the user’s project history
+
+This should be built as a real full-stack product, not a mockup.
+
+---
+
+# DATABASE SCHEMA
+
+Create database models/tables for the following:
+
+## 1. users
+Fields:
+- id
+- name
+- email
+- password_hash or auth_provider_id
+- subscription_tier
+- created_at
+- updated_at
+
+## 2. subscriptions
+Fields:
+- id
+- user_id
+- tier_name
+- stripe_customer_id
+- stripe_subscription_id
+- status
+- billing_cycle
+- current_period_end
+- created_at
+- updated_at
+
+## 3. brand_profiles
+Each user has a profile that gets smarter over time.
+
+Fields:
+- id
+- user_id
+- brand_name
+- tone_summary
+- personality_summary
+- audience_summary
+- visual_style_summary
+- font_preferences
+- color_preferences
+- music_preferences
+- voice_preferences
+- pacing_style
+- cta_style
+- platform_focus
+- confidence_score
+- learning_progress_percent
+- created_at
+- updated_at
+
+## 4. uploads
+Stores every asset the user uploads.
+
+Fields:
+- id
+- user_id
+- project_id nullable
+- file_type
+  - image
+  - video
+  - audio
+  - caption
+  - script
+  - text
+- file_name
+- file_url
+- storage_provider
+- mime_type
+- file_size
+- duration nullable
+- transcript_text nullable
+- extracted_metadata_json
+- analysis_status
+- created_at
+- updated_at
+
+## 5. projects
+A project is a content generation or video generation request.
+
+Fields:
+- id
+- user_id
+- title
+- project_type
+  - caption
+  - hook
+  - post
+  - script
+  - video
+- target_platform
+  - tiktok
+  - instagram
+  - youtube
+  - general
+- target_duration
+  - 30
+  - 60
+  - 120
+  - 180
+- prompt_text
+- status
+  - draft
+  - queued
+  - analyzing
+  - scripting
+  - voiceover
+  - editing
+  - rendering
+  - completed
+  - failed
+- brand_profile_snapshot_json
+- created_at
+- updated_at
+
+## 6. project_assets
+Join table connecting projects to uploads.
+
+Fields:
+- id
+- project_id
+- upload_id
+- asset_role
+  - primary_video
+  - supporting_video
+  - image
+  - brand_asset
+  - reference_caption
+  - reference_script
+- sort_order
+- created_at
+
+## 7. generated_contents
+Stores text outputs.
+
+Fields:
+- id
+- user_id
+- project_id
+- content_type
+  - caption
+  - hook
+  - script
+  - content_plan
+  - rewritten_post
+- prompt_used
+- generated_text
+- style_notes_json
+- created_at
+
+## 8. creative_briefs
+This is the structured AI plan before rendering.
+
+Fields:
+- id
+- project_id
+- summary
+- tone
+- story_arc
+- music_direction
+- voiceover_required boolean
+- keep_original_audio boolean
+- mute_original_audio boolean
+- selected_clip_plan_json
+- text_overlay_plan_json
+- transition_plan_json
+- render_settings_json
+- created_at
+- updated_at
+
+## 9. voiceovers
+Stores narration output.
+
+Fields:
+- id
+- project_id
+- script_content
+- provider
+- provider_voice_id
+- audio_url
+- duration
+- status
+- created_at
+- updated_at
+
+## 10. music_tracks
+Stores selected music for the project.
+
+Fields:
+- id
+- project_id
+- track_name
+- provider
+- track_url
+- license_type
+- mood
+- duration
+- created_at
+
+## 11. render_jobs
+Tracks video render pipeline.
+
+Fields:
+- id
+- project_id
+- status
+  - queued
+  - processing
+  - completed
+  - failed
+- timeline_json
+- output_url nullable
+- thumbnail_url nullable
+- error_message nullable
+- started_at nullable
+- finished_at nullable
+- created_at
+- updated_at
+
+## 12. analytics_snapshots
+For future insights and growth tracking.
+
+Fields:
+- id
+- user_id
+- project_id nullable
+- platform
+- metric_date
+- views nullable
+- likes nullable
+- comments nullable
+- shares nullable
+- saves nullable
+- watch_time nullable
+- engagement_rate nullable
+- created_at
+
+## 13. saved_outputs
+Stores finished deliverables users can revisit.
+
+Fields:
+- id
+- user_id
+- project_id
+- output_type
+  - text
+  - voiceover
+  - video
+- title
+- file_url nullable
+- text_content nullable
+- created_at
+
+---
+
+# BACKEND SERVICES
+
+Create clear backend service modules for these responsibilities:
+
+## auth service
+Handles:
+- sign up
+- login
+- logout
+- session management
+- route protection
+- tier checks
+
+## upload service
+Handles:
+- file uploads
+- validation
+- storage
+- file metadata extraction
+- linking uploads to projects
+
+## analysis service
+Handles:
+- transcript extraction from videos/audio
+- image understanding
+- clip metadata extraction
+- scene detection hooks
+- style signal extraction
+- updating brand profile data
+
+## brand profile service
+Handles:
+- creating the initial brand profile
+- updating tone/style/personality from uploads
+- storing learning progress
+- generating a readable “your AI is learning you” dashboard summary
+
+## content generation service
+Handles:
+- captions
+- hooks
+- scripts
+- rewritten posts
+- content ideas
+- platform-specific variations
+- generating in the user’s stored style
+
+## creative brief service
+Handles:
+- turning prompt + uploads + brand profile into a structured video plan
+- choosing whether to mute original audio
+- deciding if voiceover is needed
+- selecting pacing and story flow
+- preparing the edit decision list
+
+## voiceover service
+Handles:
+- sending scripts to ElevenLabs
+- receiving audio
+- saving audio URL
+- tracking voiceover generation status
+
+## music selection service
+Handles:
+- selecting licensed music by mood, pace, and video length
+- attaching music to project
+- storing music metadata
+
+## render service
+Handles:
+- timeline creation
+- video assembly
+- audio mixing
+- text overlays
+- export
+- thumbnails
+- final render output URL
+
+## billing service
+Handles:
+- Stripe plans
+- subscriptions
+- feature gating
+- usage limits by tier
+
+---
+
+# JOB QUEUE / WORKER PIPELINE
+
+Do not render videos directly in the request cycle.
+
+Set up async jobs and workers.
+
+Create jobs for:
+
+## upload_analysis_job
+- reads uploaded assets
+- extracts transcript and metadata
+- stores analysis results
+- triggers brand profile update
+
+## brand_profile_update_job
+- updates the user’s learning profile
+- recalculates confidence score
+- saves learned tone/style/personality
+
+## content_generation_job
+- creates captions, hooks, or scripts
+- saves results in generated_contents
+
+## creative_brief_job
+- builds the structured plan for a video project
+- creates creative_briefs record
+
+## voiceover_generation_job
+- sends script to ElevenLabs
+- stores voiceover file and status
+
+## music_selection_job
+- picks a music track
+- stores project music record
+
+## render_video_job
+- builds the timeline JSON
+- renders vertical video
+- stores final MP4
+- updates project and render_jobs statuses
+
+## notification_job
+- notifies frontend when processing steps finish
+- supports progress states
+
+---
+
+# APP PAGES / ROUTES
+
+Build these pages:
+
+## Public
+- landing page
+- pricing page
+- login
+- sign up
+
+## Authenticated app
+- dashboard
+- uploads
+- create content
+- create video
+- brand profile
+- project history
+- analytics
+- billing/account
+- settings
+
+---
+
+# PAGE DETAILS
+
+## Dashboard
+Show:
+- welcome header
+- current subscription tier
+- quick actions
+- recent projects
+- current learning progress
+- summary cards:
+  - Brand Voice
+  - Visual Identity
+  - Audience Vibe
+  - Content Patterns
+- CTA buttons:
+  - Upload Content
+  - Create in My Style
+  - Generate Video
+
+## Uploads page
+Allow users to upload:
+- video files
+- image files
+- captions
+- text prompts
+- scripts
+
+Show:
+- upload list
+- analysis status
+- metadata summary
+- transcript preview when available
+
+## Create Content page
+User can choose:
+- caption
+- hook
+- script
+- rewrite
+- content ideas
+
+Inputs:
+- prompt
+- platform
+- style strength
+- optional uploaded references
+
+Output:
+- generated text
+- save button
+- regenerate button
+- export/copy
+
+## Create Video page
+User can choose:
+- 30 sec
+- 1 min
+- 2 min
+- 3 min
+
+Inputs:
+- prompt
+- desired tone
+- voiceover on/off
+- music mood
+- target platform
+- uploaded clips/images
+
+Show progress:
+- analyzing
+- scripting
+- generating voiceover
+- editing
+- rendering
+- complete
+
+Output:
+- video preview
+- download
+- save to library
+
+## Brand Profile page
+Show a living profile with:
+- tone summary
+- personality summary
+- visual style summary
+- audience summary
+- favorite hooks/CTAs
+- content themes
+- learning progress bar
+- confidence score
+
+This page should feel like:
+“Your AI manager is learning you.”
+
+## Project History page
+Show:
+- all past text and video projects
+- statuses
+- thumbnails
+- filters by type/platform/date
+- reopen and reuse
+
+## Analytics page
+For now create a structured placeholder layout with:
+- top performing content
+- content type performance
+- audience signals
+- future recommendations
+
+## Billing / Account page
+Show:
+- current plan
+- upgrade options
+- usage meter
+- invoices placeholder
+- subscription management
+
+---
+
+# SUBSCRIPTION FEATURE GATING
+
+Implement 4 tiers:
+
+## Free – Starter
+- limited uploads
+- limited generations
+- no advanced brand memory
+- no premium video generation
+
+## Creator – Growth
+- more generations
+- basic personalization
+- weekly content idea generation
+- basic brand learning
+
+## Pro – Brand Builder
+- full brand personality profile
+- stronger generation in their style
+- multi-platform generation
+- better project history
+- advanced planning features
+
+## Elite – AI Manager
+- AI Video Creator + Manager
+- best personalization
+- longest video options
+- premium voiceover tools
+- advanced creative brief system
+- strongest analytics
+- highest limits
+
+Add backend checks so premium features are blocked for lower tiers.
+
+---
+
+# INITIAL VIDEO MVP RULES
+
+For the first working version, prioritize this:
+
+- support 30 second and 1 minute vertical videos first
+- use uploaded videos and images
+- allow prompt-based storytelling
+- generate a short script
+- send script to ElevenLabs for voiceover
+- mute original audio by default
+- add one background music track
+- add simple text overlays
+- export final MP4
+- save to project history
+
+Keep 2 minute and 3 minute support structured but optional for first implementation.
+
+---
+
+# API ENDPOINTS
+
+Create clean API routes like:
+
+- POST /api/auth/signup
+- POST /api/auth/login
+- GET /api/me
+- POST /api/uploads
+- GET /api/uploads
+- POST /api/projects
+- GET /api/projects
+- GET /api/projects/:id
+- POST /api/projects/:id/generate-content
+- POST /api/projects/:id/generate-video
+- GET /api/projects/:id/status
+- GET /api/brand-profile
+- POST /api/brand-profile/refresh
+- POST /api/billing/create-checkout-session
+- POST /api/webhooks/stripe
+- POST /api/voiceover/generate
+
+---
+
+# UI STYLE
+
+Use a premium SaaS design.
+The product should feel:
+- modern
+- sleek
+- creator-focused
+- feminine but elevated
+- not childish
+- premium and intelligent
+
+Use strong dashboard cards, soft gradients, clean spacing, and a polished layout.
+
+---
+
+# IMPORTANT PRODUCT MESSAGING
+
+Keep this visible throughout the app:
+
+You Upload. Lumevo Learns. We Create.
+
+Also reinforce this idea:
+- this is not a generic AI tool
+- this is a system that trains on the user
+- every upload improves future content
+- the app should feel like an AI social media manager, not just a generator
+
+---
+
+# IMPLEMENTATION ORDER
+
+Build in this order:
+
+## Phase 1
+- auth
+- landing page
+- pricing
+- dashboard shell
+- uploads
+- brand profile structure
+- database schema
+
+## Phase 2
+- content generation
+- project creation
+- project history
+- basic feature gating
+
+## Phase 3
+- creative brief generation
+- ElevenLabs voiceover integration
+- video generation pipeline
+- render job tracking
+
+## Phase 4
+- analytics
+- stronger brand memory
+- advanced tier logic
+- better video editing intelligence
+
+Please build this with clean architecture, modular services, reusable components, and real database models.

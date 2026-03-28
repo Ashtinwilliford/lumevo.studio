@@ -1,111 +1,638 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { getAllProjects, createAndSaveProject, deleteProject } from "../../lib/projectStore";
-import { getAllVoices } from "../../lib/voiceStore";
-import { getCurrentUser, logout } from "../../lib/auth";
-import type { User } from "../../lib/auth";
-import type { Project } from "../../lib/types";
-import { VIBE_LABELS, TONE_LABELS } from "../../lib/types";
 
-type Section = "overview" | "projects" | "brand" | "voice" | "settings";
+type Section = "overview" | "uploads" | "create" | "video" | "brand" | "projects" | "analytics" | "billing" | "settings";
 
-const NAV_ITEMS: { id: Section; icon: string; label: string }[] = [
+interface User { id: string; name: string; email: string; subscription_tier: string; created_at: string; }
+interface Upload { id: string; file_type: string; file_name: string; mime_type: string; file_size: number; analysis_status: string; created_at: string; }
+interface Project { id: string; title: string; project_type: string; target_platform: string; status: string; created_at: string; updated_at: string; }
+interface BrandProfile { user_id: string; tone_summary: string; personality_summary: string; audience_summary: string; pacing_style: string; cta_style: string; confidence_score: number; learning_progress_percent: number; upload_count: number; generation_count: number; }
+
+const NAV: { id: Section; icon: string; label: string; group?: string }[] = [
   { id: "overview", icon: "⌂", label: "Overview" },
-  { id: "projects", icon: "◻", label: "Projects" },
-  { id: "brand", icon: "✦", label: "Brand Profile" },
-  { id: "voice", icon: "◉", label: "Voice Library" },
-  { id: "settings", icon: "◈", label: "Settings" },
+  { id: "uploads", icon: "↑", label: "Uploads", group: "Create" },
+  { id: "create", icon: "✦", label: "Create Content", group: "Create" },
+  { id: "video", icon: "▶", label: "Create Video", group: "Create" },
+  { id: "brand", icon: "◉", label: "Brand Profile", group: "Learn" },
+  { id: "projects", icon: "◻", label: "Projects", group: "Learn" },
+  { id: "analytics", icon: "▲", label: "Analytics", group: "Learn" },
+  { id: "billing", icon: "◈", label: "Billing", group: "Account" },
+  { id: "settings", icon: "⚙", label: "Settings", group: "Account" },
 ];
 
-const PLAN_LABELS: Record<string, string> = {
-  free: "Free Plan",
-  creator: "Creator",
-  pro: "Pro",
-  elite: "Elite",
-};
+const TIER_LABELS: Record<string, string> = { free: "Free", creator: "Creator", pro: "Pro", elite: "Elite" };
+const TYPE_LABELS: Record<string, string> = { caption: "Caption", hook: "Hook", post: "Post", script: "Script", video: "Video", ideas: "Ideas" };
+const PLATFORM_LABELS: Record<string, string> = { tiktok: "TikTok", instagram: "Instagram", youtube: "YouTube", general: "General" };
+const STATUS_COLORS: Record<string, string> = { draft: "#b5b09a", queued: "#7c7660", analyzing: "#FF8C00", scripting: "#FF8C00", completed: "#2da44e", failed: "#FF2D2D" };
 
-function BrandProfile({ projects }: { projects: Project[] }) {
-  const voices = getAllVoices();
-  const allGenerated = projects.filter(p => p.generated);
-  const vibeMap: Record<string, number> = {};
-  const toneMap: Record<string, number> = {};
-  projects.forEach(p => {
-    if (p.vibe) vibeMap[p.vibe] = (vibeMap[p.vibe] || 0) + 1;
-    if (p.tone) toneMap[p.tone] = (toneMap[p.tone] || 0) + 1;
-  });
-  const topVibe = Object.entries(vibeMap).sort((a, b) => b[1] - a[1])[0]?.[0];
-  const topTone = Object.entries(toneMap).sort((a, b) => b[1] - a[1])[0]?.[0];
-  const uploadCount = projects.reduce((s, p) => s + (p.uploadedFiles?.length || 0), 0);
-  const learningPct = Math.min(100, Math.round(
-    (projects.length * 10) + (allGenerated.length * 15) + (voices.length * 20) + (uploadCount * 8)
-  ));
+function fmt(bytes: number) { if (bytes < 1024) return `${bytes} B`; if (bytes < 1048576) return `${(bytes/1024).toFixed(1)} KB`; return `${(bytes/1048576).toFixed(1)} MB`; }
+function fmtDate(d: string) { return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
+
+// ── OVERVIEW ──────────────────────────────────────────────────────────────────
+function Overview({ user, uploads, projects, brand, onNav }: {
+  user: User; uploads: Upload[]; projects: Project[]; brand: BrandProfile | null; onNav: (s: Section) => void;
+}) {
+  const prog = brand?.learning_progress_percent ?? 0;
+  const completed = projects.filter(p => p.status === "completed").length;
+  return (
+    <div>
+      <div style={{ marginBottom: 40 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 10 }}>Dashboard</div>
+        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 32, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>
+          Hey, {user.name.split(" ")[0]}
+        </h2>
+        <p style={{ fontSize: 15, color: "#7c7660" }}>Your AI content system is {prog < 20 ? "warming up" : prog < 60 ? "learning" : "trained and ready"}.</p>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(155px,1fr))", gap: 12, marginBottom: 44 }}>
+        {[
+          { num: uploads.length, label: "Uploads", red: false },
+          { num: projects.length, label: "Projects", red: false },
+          { num: completed, label: "Completed", red: true },
+          { num: `${prog}%`, label: "AI Trained", red: true },
+        ].map(s => (
+          <div key={s.label} style={{ background: "#fff", borderRadius: 16, padding: "20px 22px", border: "1px solid rgba(0,0,0,0.07)" }}>
+            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 34, fontWeight: 800, color: s.red ? "#FF2D2D" : "#1a1a1a", lineHeight: 1 }}>{s.num}</div>
+            <div style={{ fontSize: 12, color: "#7c7660", marginTop: 6 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 16, padding: "24px 28px", border: "1px solid rgba(0,0,0,0.07)", marginBottom: 32 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 6 }}>Brand Learning Progress</div>
+            <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 40, color: "#FF2D2D", lineHeight: 1 }}>{prog}%</div>
+          </div>
+          <div style={{ textAlign: "right", fontSize: 13, color: "#7c7660", maxWidth: 220 }}>
+            {prog < 20 ? "Upload your first content to start training." :
+             prog < 50 ? "Good start — keep uploading to sharpen your profile." :
+             prog < 80 ? "Strong foundation — your style is emerging." :
+             "Well-trained — Lumevo knows your brand."}
+          </div>
+        </div>
+        <div style={{ height: 8, background: "#F8F8A6", borderRadius: 999, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${prog}%`, background: "#FF2D2D", borderRadius: 999, transition: "width 0.6s ease" }} />
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 20, fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 700 }}>Quick Actions</div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 44 }}>
+        {[
+          { label: "Upload Content", section: "uploads" as Section, primary: false },
+          { label: "Create Content", section: "create" as Section, primary: true },
+          { label: "Generate Video", section: "video" as Section, primary: false },
+          { label: "View Brand Profile", section: "brand" as Section, primary: false },
+        ].map(a => (
+          <button key={a.label} onClick={() => onNav(a.section)}
+            style={{ display: "flex", alignItems: "center", gap: 8, background: a.primary ? "#FF2D2D" : "#fff", border: `1px solid ${a.primary ? "#FF2D2D" : "rgba(0,0,0,0.08)"}`, borderRadius: 12, padding: "13px 20px", cursor: "pointer", fontFamily: "inherit", fontSize: 14, fontWeight: 600, color: a.primary ? "#fff" : "#1a1a1a", transition: "all 0.15s" }}>
+            {a.label} →
+          </button>
+        ))}
+      </div>
+
+      {projects.length > 0 && (
+        <>
+          <div style={{ marginBottom: 16, fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 700 }}>Recent Projects</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {projects.slice(0, 4).map(p => (
+              <div key={p.id} style={{ background: "#fff", borderRadius: 12, padding: "14px 18px", border: "1px solid rgba(0,0,0,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>{p.title}</div>
+                  <div style={{ fontSize: 12, color: "#7c7660" }}>{TYPE_LABELS[p.project_type]} · {PLATFORM_LABELS[p.target_platform]}</div>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: `${STATUS_COLORS[p.status]}20`, color: STATUS_COLORS[p.status] }}>
+                  {p.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── UPLOADS ───────────────────────────────────────────────────────────────────
+function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [textInput, setTextInput] = useState("");
+  const [textType, setTextType] = useState("caption");
+  const [activeTab, setActiveTab] = useState<"file" | "text">("file");
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const fileData = ev.target?.result as string;
+      const type = file.type.startsWith("video/") ? "video" : file.type.startsWith("image/") ? "image" : file.type.startsWith("audio/") ? "audio" : "text";
+      await fetch("/api/uploads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file_name: file.name, file_type: type, mime_type: file.type, file_size: file.size, file_data: fileData.slice(0, 5000) }),
+      });
+      setUploading(false);
+      onRefresh();
+      if (fileRef.current) fileRef.current.value = "";
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function handleText() {
+    if (!textInput.trim()) return;
+    setUploading(true);
+    await fetch("/api/uploads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file_name: `${textType}-${Date.now()}.txt`, file_type: textType, mime_type: "text/plain", file_size: textInput.length, file_data: textInput }),
+    });
+    setTextInput("");
+    setUploading(false);
+    onRefresh();
+  }
+
+  const TYPE_ICON: Record<string, string> = { video: "▶", image: "◻", audio: "◉", caption: "✦", script: "≡", text: "T" };
 
   return (
     <div>
-      <div className="section-header">
-        <h2 className="section-title">Brand Profile</h2>
-        <p className="section-sub">Lumevo is building your brand identity. The more you create, the smarter it gets.</p>
+      <div style={{ marginBottom: 36 }}>
+        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Uploads</h2>
+        <p style={{ fontSize: 15, color: "#7c7660" }}>Every upload teaches Lumevo your style. Upload videos, images, captions, or scripts.</p>
       </div>
 
-      <div className="brand-learning-card">
-        <div className="brand-learning-top">
+      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 28 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+          {(["file", "text"] as const).map(t => (
+            <button key={t} onClick={() => setActiveTab(t)}
+              style={{ padding: "8px 20px", borderRadius: 999, border: "none", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", background: activeTab === t ? "#FF2D2D" : "transparent", color: activeTab === t ? "#fff" : "#7c7660" }}>
+              {t === "file" ? "Upload File" : "Add Text / Caption"}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "file" ? (
+          <div onClick={() => fileRef.current?.click()}
+            style={{ border: "2px dashed rgba(255,45,45,0.25)", borderRadius: 14, padding: "40px 24px", textAlign: "center", cursor: "pointer", transition: "all 0.2s" }}>
+            <input ref={fileRef} type="file" style={{ display: "none" }} onChange={handleFile} accept="video/*,image/*,audio/*,.txt,.pdf" />
+            <div style={{ fontSize: 32, marginBottom: 12 }}>↑</div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{uploading ? "Uploading…" : "Click to upload a file"}</div>
+            <div style={{ fontSize: 13, color: "#7c7660" }}>Video, image, audio, text — anything that shows Lumevo your style</div>
+          </div>
+        ) : (
           <div>
-            <div className="brand-learning-label">Learning Progress</div>
-            <div className="brand-learning-score">{learningPct}%</div>
-          </div>
-          <div className="brand-learning-desc">
-            {learningPct < 20 ? "Just getting started — create your first project to begin training." :
-             learningPct < 50 ? "Good start — keep uploading and generating to sharpen your profile." :
-             learningPct < 80 ? "Strong foundation — your style is becoming clear." :
-             "Well-trained — Lumevo knows your brand well."}
-          </div>
-        </div>
-        <div className="learning-bar-track">
-          <div className="learning-bar-fill" style={{ width: `${learningPct}%` }} />
-        </div>
-      </div>
-
-      <div className="brand-grid">
-        <div className="brand-card">
-          <div className="brand-card-label">Brand Voice</div>
-          <div className="brand-card-value">{topVibe ? VIBE_LABELS[topVibe as keyof typeof VIBE_LABELS] : "Not set yet"}</div>
-          <div className="brand-card-sub">{topTone ? `Tone: ${TONE_LABELS[topTone as keyof typeof TONE_LABELS]}` : "Upload and generate to reveal your tone"}</div>
-        </div>
-        <div className="brand-card">
-          <div className="brand-card-label">Content Output</div>
-          <div className="brand-card-value">{allGenerated.length}</div>
-          <div className="brand-card-sub">AI generations across {projects.length} project{projects.length !== 1 ? "s" : ""}</div>
-        </div>
-        <div className="brand-card">
-          <div className="brand-card-label">Voice Identity</div>
-          <div className="brand-card-value">{voices.length > 0 ? `${voices.length} clone${voices.length !== 1 ? "s" : ""}` : "None yet"}</div>
-          <div className="brand-card-sub">{voices.length > 0 ? voices.map(v => v.name).join(", ") : "Clone your voice from any project"}</div>
-        </div>
-        <div className="brand-card">
-          <div className="brand-card-label">Media Library</div>
-          <div className="brand-card-value">{uploadCount}</div>
-          <div className="brand-card-sub">files uploaded across all projects</div>
-        </div>
-      </div>
-
-      <div className="brand-sections">
-        {[
-          { title: "Content Themes", value: topVibe ? "Emerging pattern detected" : "Upload content to reveal themes", ready: !!topVibe },
-          { title: "Audience Style", value: projects.some(p => p.audienceGoal) ? "Audience signals collected" : "Set audience goals in your projects", ready: projects.some(p => p.audienceGoal) },
-          { title: "Visual Identity", value: uploadCount > 0 ? `${uploadCount} media samples analyzed` : "Upload images and videos to map your visual style", ready: uploadCount > 0 },
-          { title: "Confidence Score", value: `${learningPct}% trained`, ready: learningPct > 0 },
-        ].map(item => (
-          <div key={item.title} className="brand-section-row">
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div className={`brand-dot ${item.ready ? "brand-dot-on" : "brand-dot-off"}`} />
-              <div>
-                <div className="brand-row-title">{item.title}</div>
-                <div className="brand-row-value">{item.value}</div>
-              </div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {["caption", "script", "text"].map(t => (
+                <button key={t} onClick={() => setTextType(t)}
+                  style={{ padding: "6px 16px", borderRadius: 999, border: `1.5px solid ${textType === t ? "#FF2D2D" : "rgba(0,0,0,0.1)"}`, fontFamily: "inherit", fontSize: 12, fontWeight: 600, cursor: "pointer", background: textType === t ? "rgba(255,45,45,0.07)" : "transparent", color: textType === t ? "#FF2D2D" : "#7c7660" }}>
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </button>
+              ))}
             </div>
-            <div className="brand-row-status">{item.ready ? "Active" : "Pending"}</div>
+            <textarea
+              value={textInput}
+              onChange={e => setTextInput(e.target.value)}
+              placeholder={textType === "caption" ? "Paste a caption that sounds like you…" : textType === "script" ? "Paste a script you've used before…" : "Add any text that reflects your voice…"}
+              style={{ width: "100%", minHeight: 120, padding: "14px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, resize: "vertical", outline: "none", background: "#fafaf4", boxSizing: "border-box" }}
+            />
+            <button onClick={handleText} disabled={uploading || !textInput.trim()}
+              style={{ marginTop: 12, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 24px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: !textInput.trim() ? 0.5 : 1 }}>
+              {uploading ? "Saving…" : "Save to Library"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {uploads.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Your Library ({uploads.length})</div>
+          {uploads.map(u => (
+            <div key={u.id} style={{ background: "#fff", borderRadius: 14, padding: "14px 18px", border: "1px solid rgba(0,0,0,0.07)", display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: "#FF2D2D", flexShrink: 0 }}>
+                {TYPE_ICON[u.file_type] || "◻"}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.file_name}</div>
+                <div style={{ fontSize: 12, color: "#7c7660" }}>{u.file_type} · {u.file_size > 0 ? fmt(u.file_size) : "text"} · {fmtDate(u.created_at)}</div>
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: u.analysis_status === "complete" ? "#2da44e20" : "#F8F8A6", color: u.analysis_status === "complete" ? "#2da44e" : "#7c7660" }}>
+                {u.analysis_status === "complete" ? "Analyzed" : "Processing"}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ textAlign: "center", padding: "60px 0", color: "#7c7660" }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>↑</div>
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No uploads yet</div>
+          <div style={{ fontSize: 14 }}>Add your first file or caption to start training Lumevo.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CREATE CONTENT ────────────────────────────────────────────────────────────
+function CreateContent({ brand }: { brand: BrandProfile | null }) {
+  const [title, setTitle] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [contentType, setContentType] = useState("caption");
+  const [platform, setPlatform] = useState("instagram");
+  const [styleStrength, setStyleStrength] = useState(80);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  async function handleGenerate() {
+    if (!prompt.trim()) return;
+    setLoading(true);
+    setResult("");
+    try {
+      const projRes = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title || prompt.slice(0, 60), project_type: contentType, target_platform: platform, prompt_text: prompt }),
+      });
+      const projData = await projRes.json();
+      if (!projRes.ok) { setResult("Error creating project."); setLoading(false); return; }
+
+      const genRes = await fetch(`/api/projects/${projData.project.id}/generate-content`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content_type: contentType, platform, style_strength: styleStrength }),
+      });
+      const genData = await genRes.json();
+      if (!genRes.ok) { setResult("Generation failed. Try again."); } else { setResult(genData.content.generated_text); }
+    } catch { setResult("Something went wrong."); }
+    finally { setLoading(false); }
+  }
+
+  function copy() {
+    navigator.clipboard.writeText(result);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 36 }}>
+        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Create Content</h2>
+        <p style={{ fontSize: 15, color: "#7c7660" }}>Generate captions, hooks, scripts, and posts — in your voice.</p>
+      </div>
+
+      {brand && brand.tone_summary && (
+        <div style={{ background: "#F8F8A6", borderRadius: 14, padding: "14px 18px", marginBottom: 24, border: "1px solid rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 6 }}>Your Brand Voice</div>
+          <div style={{ fontSize: 14, color: "#1a1a1a" }}>{brand.tone_summary} · {brand.personality_summary}</div>
+        </div>
+      )}
+
+      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 24 }}>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Content Type</label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {["caption", "hook", "script", "post", "ideas"].map(t => (
+              <button key={t} onClick={() => setContentType(t)}
+                style={{ padding: "7px 16px", borderRadius: 999, border: `1.5px solid ${contentType === t ? "#FF2D2D" : "rgba(0,0,0,0.1)"}`, fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", background: contentType === t ? "rgba(255,45,45,0.07)" : "transparent", color: contentType === t ? "#FF2D2D" : "#7c7660" }}>
+                {TYPE_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Platform</label>
+            <select value={platform} onChange={e => setPlatform(e.target.value)}
+              style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, background: "#fafaf4", outline: "none" }}>
+              {Object.entries(PLATFORM_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Style Strength: {styleStrength}%</label>
+            <input type="range" min={0} max={100} value={styleStrength} onChange={e => setStyleStrength(Number(e.target.value))}
+              style={{ width: "100%", accentColor: "#FF2D2D" }} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Topic / Prompt</label>
+          <textarea value={prompt} onChange={e => setPrompt(e.target.value)}
+            placeholder="What is this content about? Be as specific as you want…"
+            style={{ width: "100%", minHeight: 100, padding: "13px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, resize: "vertical", outline: "none", background: "#fafaf4", boxSizing: "border-box" }} />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Project Title (optional)</label>
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Give this project a name…"
+            style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, background: "#fafaf4", outline: "none", boxSizing: "border-box" }} />
+        </div>
+
+        <button onClick={handleGenerate} disabled={loading || !prompt.trim()}
+          style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 32px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: loading || !prompt.trim() ? "not-allowed" : "pointer", opacity: !prompt.trim() ? 0.5 : 1 }}>
+          {loading ? "Generating…" : `Generate ${TYPE_LABELS[contentType]}`}
+        </button>
+      </div>
+
+      {result && (
+        <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#7c7660", letterSpacing: 1, textTransform: "uppercase" }}>Generated {TYPE_LABELS[contentType]}</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={copy}
+                style={{ background: copied ? "#2da44e" : "#F8F8A6", color: copied ? "#fff" : "#1a1a1a", border: "none", borderRadius: 999, padding: "7px 16px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                {copied ? "Copied!" : "Copy"}
+              </button>
+              <button onClick={handleGenerate}
+                style={{ background: "transparent", color: "#FF2D2D", border: "1.5px solid rgba(255,45,45,0.3)", borderRadius: 999, padding: "7px 16px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                Regenerate
+              </button>
+            </div>
+          </div>
+          <div style={{ fontSize: 15, lineHeight: 1.75, whiteSpace: "pre-wrap", color: "#1a1a1a" }}>{result}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CREATE VIDEO ──────────────────────────────────────────────────────────────
+function CreateVideo() {
+  const [duration, setDuration] = useState(30);
+  const [prompt, setPrompt] = useState("");
+  const [platform, setPlatform] = useState("tiktok");
+  const [voiceover, setVoiceover] = useState(true);
+  const [musicMood, setMusicMood] = useState("energetic");
+  const [status, setStatus] = useState<null | "queued" | "scripting" | "voiceover" | "editing" | "rendering" | "done">(null);
+
+  const STEPS = ["Analyzing uploads", "Writing script", "Generating voiceover", "Editing clips", "Rendering video"];
+  const STEP_STATUS = ["scripting", "voiceover", "editing", "rendering", "done"];
+  const currentStep = status ? STEP_STATUS.indexOf(status) : -1;
+
+  async function handleCreate() {
+    if (!prompt.trim()) return;
+    setStatus("queued");
+    const steps: typeof status[] = ["scripting", "voiceover", "editing", "rendering", "done"];
+    for (const s of steps) {
+      await new Promise(r => setTimeout(r, 2200));
+      setStatus(s);
+    }
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 36 }}>
+        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Create Video</h2>
+        <p style={{ fontSize: 15, color: "#7c7660" }}>Tell Lumevo what to create. It writes the script, records the voiceover, and assembles your video.</p>
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 24 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Duration</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[30, 60, 120, 180].map(d => (
+                <button key={d} onClick={() => setDuration(d)}
+                  style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: `1.5px solid ${duration === d ? "#FF2D2D" : "rgba(0,0,0,0.1)"}`, fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", background: duration === d ? "rgba(255,45,45,0.07)" : "transparent", color: duration === d ? "#FF2D2D" : "#7c7660" }}>
+                  {d}s
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Platform</label>
+            <select value={platform} onChange={e => setPlatform(e.target.value)}
+              style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, background: "#fafaf4", outline: "none" }}>
+              {Object.entries(PLATFORM_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Music Mood</label>
+            <select value={musicMood} onChange={e => setMusicMood(e.target.value)}
+              style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, background: "#fafaf4", outline: "none" }}>
+              {["Energetic", "Calm", "Dramatic", "Uplifting", "Lo-fi", "None"].map(m => <option key={m} value={m.toLowerCase()}>{m}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", paddingBottom: 11 }}>
+              <input type="checkbox" checked={voiceover} onChange={e => setVoiceover(e.target.checked)} style={{ accentColor: "#FF2D2D", width: 16, height: 16 }} />
+              <span style={{ fontSize: 14, fontWeight: 500 }}>AI Voiceover (ElevenLabs)</span>
+            </label>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>What should this video be about?</label>
+          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Describe the story, topic, or message. Lumevo will write the script and produce the video."
+            style={{ width: "100%", minHeight: 100, padding: "13px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, resize: "vertical", outline: "none", background: "#fafaf4", boxSizing: "border-box" }} />
+        </div>
+
+        <button onClick={handleCreate} disabled={!prompt.trim() || status !== null}
+          style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 32px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: !prompt.trim() || status !== null ? "not-allowed" : "pointer", opacity: !prompt.trim() ? 0.5 : 1 }}>
+          {status ? "Creating…" : `Create ${duration}s Video`}
+        </button>
+      </div>
+
+      {status && (
+        <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "#7c7660", marginBottom: 20 }}>
+            {status === "done" ? "Video Ready" : "Creating Your Video"}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {STEPS.map((step, i) => {
+              const done = status === "done" || i < currentStep;
+              const active = i === currentStep;
+              return (
+                <div key={step} style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: done ? "#FF2D2D" : active ? "rgba(255,45,45,0.15)" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: done ? "#fff" : active ? "#FF2D2D" : "#b5b09a", flexShrink: 0, transition: "all 0.3s" }}>
+                    {done ? "✓" : active ? "…" : i + 1}
+                  </div>
+                  <span style={{ fontSize: 14, fontWeight: done || active ? 600 : 400, color: done ? "#1a1a1a" : active ? "#FF2D2D" : "#b5b09a" }}>{step}</span>
+                </div>
+              );
+            })}
+          </div>
+          {status === "done" && (
+            <div style={{ marginTop: 24, padding: "16px 20px", background: "#F8F8A6", borderRadius: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Video generation requires the Pro or Elite plan.</div>
+              <div style={{ fontSize: 13, color: "#7c7660" }}>Upgrade to unlock full video rendering, voiceover, and music assembly.</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── BRAND PROFILE ─────────────────────────────────────────────────────────────
+function BrandSection({ brand, onRefresh }: { brand: BrandProfile | null; onRefresh: () => void }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const prog = brand?.learning_progress_percent ?? 0;
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await fetch("/api/brand-profile/refresh", { method: "POST" });
+    onRefresh();
+    setRefreshing(false);
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 36 }}>
+        <div>
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Brand Profile</h2>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Your AI manager is learning you. Every upload sharpens this profile.</p>
+        </div>
+        <button onClick={handleRefresh} disabled={refreshing}
+          style={{ background: "transparent", border: "1.5px solid rgba(255,45,45,0.3)", color: "#FF2D2D", borderRadius: 999, padding: "9px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          {refreshing ? "Refreshing…" : "Refresh Profile"}
+        </button>
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 16, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 28, alignItems: "flex-start", marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 8 }}>Learning Progress</div>
+            <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 52, color: "#FF2D2D", lineHeight: 1 }}>{prog}%</div>
+          </div>
+          <div style={{ flex: 1, paddingTop: 8 }}>
+            <div style={{ fontSize: 15, color: "#7c7660", lineHeight: 1.7, marginBottom: 12 }}>
+              {prog < 20 ? "Just getting started — upload videos, captions, and scripts to begin training." :
+               prog < 50 ? "Good foundation — keep uploading and generating to sharpen your voice." :
+               prog < 80 ? "Strong profile — your style signals are becoming clear." :
+               "Well-trained — Lumevo knows your brand deeply."}
+            </div>
+            <div style={{ height: 8, background: "#F8F8A6", borderRadius: 999 }}>
+              <div style={{ height: "100%", width: `${prog}%`, background: "#FF2D2D", borderRadius: 999, transition: "width 0.6s ease" }} />
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ background: "#fafaf4", borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#7c7660", marginBottom: 6 }}>Uploads</div>
+            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 24, fontWeight: 800 }}>{brand?.upload_count ?? 0}</div>
+          </div>
+          <div style={{ background: "#fafaf4", borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#7c7660", marginBottom: 6 }}>Generations</div>
+            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 24, fontWeight: 800 }}>{brand?.generation_count ?? 0}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12, marginBottom: 20 }}>
+        {[
+          { label: "Brand Tone", value: brand?.tone_summary, empty: "Not analyzed yet" },
+          { label: "Personality", value: brand?.personality_summary, empty: "Not analyzed yet" },
+          { label: "Target Audience", value: brand?.audience_summary, empty: "Not analyzed yet" },
+          { label: "Pacing Style", value: brand?.pacing_style, empty: "Not analyzed yet" },
+          { label: "Signature CTA", value: brand?.cta_style, empty: "Not analyzed yet" },
+          { label: "Confidence Score", value: brand?.confidence_score != null ? `${brand.confidence_score}%` : null, empty: "0%" },
+        ].map(item => (
+          <div key={item.label} style={{ background: "#fff", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(0,0,0,0.07)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#7c7660", marginBottom: 8 }}>{item.label}</div>
+            <div style={{ fontFamily: item.value ? "'Syne', sans-serif" : undefined, fontSize: item.value ? 16 : 14, fontWeight: item.value ? 700 : 400, color: item.value ? "#1a1a1a" : "#b5b09a" }}>
+              {item.value || item.empty}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {!brand?.tone_summary && (
+        <div style={{ background: "#F8F8A6", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Lumevo is waiting to learn you.</div>
+          <div style={{ fontSize: 13, color: "#7c7660" }}>Upload a video, paste a caption, or generate your first piece of content to start building your brand profile.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── PROJECTS ──────────────────────────────────────────────────────────────────
+function ProjectsSection({ projects, onNav }: { projects: Project[]; onNav: (s: Section) => void }) {
+  const [filter, setFilter] = useState("all");
+  const filtered = filter === "all" ? projects : projects.filter(p => p.project_type === filter || p.target_platform === filter);
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 36 }}>
+        <div>
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Projects</h2>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Your full content history. Every piece of work Lumevo has created for you.</p>
+        </div>
+        <button onClick={() => onNav("create")}
+          style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 22px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+          + New Project
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
+        {["all", "caption", "hook", "script", "video", "instagram", "tiktok", "youtube"].map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            style={{ padding: "6px 16px", borderRadius: 999, border: `1.5px solid ${filter === f ? "#FF2D2D" : "rgba(0,0,0,0.1)"}`, fontFamily: "inherit", fontSize: 12, fontWeight: 600, cursor: "pointer", background: filter === f ? "rgba(255,45,45,0.07)" : "transparent", color: filter === f ? "#FF2D2D" : "#7c7660", textTransform: "capitalize" }}>
+            {f}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length > 0 ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14 }}>
+          {filtered.map(p => (
+            <div key={p.id} style={{ background: "#fff", borderRadius: 16, padding: "20px 20px", border: "1px solid rgba(0,0,0,0.07)", transition: "all 0.2s" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, flex: 1, lineHeight: 1.4 }}>{p.title}</div>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: `${STATUS_COLORS[p.status] || "#7c7660"}18`, color: STATUS_COLORS[p.status] || "#7c7660", flexShrink: 0, marginLeft: 8 }}>
+                  {p.status}
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                <span style={{ fontSize: 11, color: "#7c7660", background: "#F8F8A6", padding: "3px 10px", borderRadius: 999 }}>{TYPE_LABELS[p.project_type]}</span>
+                <span style={{ fontSize: 11, color: "#7c7660", background: "#F8F8A6", padding: "3px 10px", borderRadius: 999 }}>{PLATFORM_LABELS[p.target_platform]}</span>
+              </div>
+              <div style={{ fontSize: 12, color: "#b5b09a" }}>{fmtDate(p.updated_at)}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ textAlign: "center", padding: "80px 0", color: "#7c7660" }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>◻</div>
+          <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No projects yet</div>
+          <div style={{ fontSize: 14, marginBottom: 20 }}>Create your first piece of content to get started.</div>
+          <button onClick={() => onNav("create")}
+            style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 24px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+            Create Content
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ANALYTICS ─────────────────────────────────────────────────────────────────
+function Analytics() {
+  return (
+    <div>
+      <div style={{ marginBottom: 36 }}>
+        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Analytics</h2>
+        <p style={{ fontSize: 15, color: "#7c7660" }}>Track how your content performs and see what resonates with your audience.</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 16 }}>
+        {[
+          { title: "Top Performing Content", desc: "Connect your TikTok or Instagram to see which posts performed best." },
+          { title: "Content Type Performance", desc: "See which format (caption, hook, video) drives the most engagement." },
+          { title: "Audience Signals", desc: "Understand who interacts with your content and when." },
+          { title: "Future Recommendations", desc: "Lumevo will suggest what to post next based on your performance data." },
+        ].map(card => (
+          <div key={card.title} style={{ background: "#fff", borderRadius: 16, padding: "24px 22px", border: "1px solid rgba(0,0,0,0.07)" }}>
+            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 16, fontWeight: 700, marginBottom: 8 }}>{card.title}</div>
+            <div style={{ fontSize: 13, color: "#7c7660", lineHeight: 1.6, marginBottom: 16 }}>{card.desc}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#b5b09a" }}>Coming Soon</div>
           </div>
         ))}
       </div>
@@ -113,435 +640,209 @@ function BrandProfile({ projects }: { projects: Project[] }) {
   );
 }
 
-function VoiceSection() {
-  const router = useRouter();
-  const voices = getAllVoices();
-  const projects = getAllProjects();
+// ── BILLING ───────────────────────────────────────────────────────────────────
+function Billing({ user }: { user: User }) {
+  const PLANS = [
+    { id: "free", name: "Free", price: "$0", features: ["5 uploads/month", "10 AI generations", "Basic brand learning", "Captions & hooks"] },
+    { id: "creator", name: "Creator", price: "$29", features: ["50 uploads/month", "100 AI generations", "Full brand learning", "All content types", "Weekly content ideas"] },
+    { id: "pro", name: "Pro", price: "$79", features: ["Unlimited uploads", "Unlimited generations", "Full personality profile", "Multi-platform content", "Advanced project history"] },
+    { id: "elite", name: "Elite", price: "$149", features: ["Everything in Pro", "AI Video Creation", "ElevenLabs voiceover", "Advanced creative briefs", "Priority support"] },
+  ];
 
   return (
     <div>
-      <div className="section-header">
-        <h2 className="section-title">Voice Library</h2>
-        <p className="section-sub">Your cloned voices live here and can be used across any project.</p>
+      <div style={{ marginBottom: 36 }}>
+        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Billing</h2>
+        <p style={{ fontSize: 15, color: "#7c7660" }}>You are on the <strong>{TIER_LABELS[user.subscription_tier]}</strong> plan. Upgrade to unlock more.</p>
       </div>
-      {voices.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">◉</div>
-          <h3 className="empty-title">No voices cloned yet</h3>
-          <p className="empty-sub">Open a project and go to Voice Clone to add your first voice.</p>
-          {projects.length > 0 && (
-            <button className="btn-red-sm" onClick={() => router.push(`/project/${projects[0].id}/voice`)}>
-              Go to Voice Clone →
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="voice-grid">
-          {voices.map(v => (
-            <div key={v.id} className="voice-card">
-              <div className="voice-icon">◉</div>
-              <div className="voice-name">{v.name}</div>
-              <div className="voice-tags">{v.personality.join(" · ")}</div>
-              <div className="voice-meta">{v.sampleCount} sample{v.sampleCount !== 1 ? "s" : ""} · Used in {v.usedInProjects.length} project{v.usedInProjects.length !== 1 ? "s" : ""}</div>
-              <div className="voice-date">Added {new Date(v.createdAt).toLocaleDateString()}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 }}>
+        {PLANS.map(plan => {
+          const current = plan.id === user.subscription_tier;
+          return (
+            <div key={plan.id} style={{ background: current ? "#1a1a1a" : "#fff", borderRadius: 20, padding: "24px 22px", border: `2px solid ${current ? "#FF2D2D" : "rgba(0,0,0,0.07)"}` }}>
+              <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: current ? "#FF2D2D" : "#FF2D2D", marginBottom: 4 }}>{plan.name}</div>
+              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 32, fontWeight: 800, color: current ? "#fff" : "#1a1a1a", marginBottom: 16 }}>{plan.price}<span style={{ fontSize: 14, fontWeight: 400, color: current ? "rgba(255,255,255,0.5)" : "#7c7660" }}>/mo</span></div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                {plan.features.map(f => (
+                  <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: current ? "rgba(255,255,255,0.8)" : "#7c7660" }}>
+                    <span style={{ color: "#FF2D2D", flexShrink: 0 }}>✓</span>{f}
+                  </div>
+                ))}
+              </div>
+              {current ? (
+                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>Current Plan</div>
+              ) : (
+                <button style={{ width: "100%", background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 0", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                  Upgrade to {plan.name}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── SETTINGS ──────────────────────────────────────────────────────────────────
+function Settings({ user, onLogout }: { user: User; onLogout: () => void }) {
+  return (
+    <div>
+      <div style={{ marginBottom: 36 }}>
+        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Settings</h2>
+        <p style={{ fontSize: 15, color: "#7c7660" }}>Manage your account and preferences.</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14, marginBottom: 28 }}>
+        <div style={{ background: "#fff", borderRadius: 16, padding: 24, border: "1px solid rgba(0,0,0,0.07)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 16 }}>Account</div>
+          {[["Name", user.name], ["Email", user.email], ["Plan", TIER_LABELS[user.subscription_tier]], ["Member since", fmtDate(user.created_at)]].map(([k, v]) => (
+            <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+              <span style={{ fontSize: 14, color: "#7c7660" }}>{k}</span>
+              <span style={{ fontSize: 14, fontWeight: 500 }}>{v}</span>
             </div>
           ))}
-          <div className="voice-card voice-card-add" onClick={() => projects.length > 0 && router.push(`/project/${projects[0].id}/voice`)}>
-            <div style={{ fontSize: 28, color: "#FF2D2D", marginBottom: 8 }}>+</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "#FF2D2D" }}>Clone a New Voice</div>
-            <div style={{ fontSize: 12, color: "#7c7660", marginTop: 4 }}>Open any project to upload samples</div>
-          </div>
         </div>
-      )}
+        <div style={{ background: "#fff", borderRadius: 16, padding: 24, border: "1px solid rgba(0,0,0,0.07)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 16 }}>Notifications</div>
+          {["Content generation complete", "Weekly brand report", "New AI improvements"].map(n => (
+            <div key={n} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+              <span style={{ fontSize: 14, color: "#7c7660" }}>{n}</span>
+              <div style={{ width: 36, height: 20, background: "#FF2D2D", borderRadius: 999, position: "relative" }}>
+                <div style={{ width: 16, height: 16, background: "#fff", borderRadius: "50%", position: "absolute", right: 2, top: 2 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <button onClick={onLogout}
+        style={{ background: "none", border: "1px solid rgba(255,45,45,0.25)", color: "#FF2D2D", fontFamily: "inherit", fontSize: 14, fontWeight: 600, padding: "10px 24px", borderRadius: 999, cursor: "pointer" }}>
+        Log out of Lumevo
+      </button>
     </div>
   );
 }
 
-function SettingsSection({ user }: { user: User }) {
-  const router = useRouter();
-  function handleLogout() {
-    logout();
-    router.push("/");
-  }
-
-  return (
-    <div>
-      <div className="section-header">
-        <h2 className="section-title">Account & Settings</h2>
-        <p className="section-sub">Manage your account and subscription.</p>
-      </div>
-      <div className="settings-grid">
-        <div className="settings-card">
-          <div className="settings-card-label">Account</div>
-          <div className="settings-row">
-            <span className="settings-key">Name</span>
-            <span className="settings-val">{user.name}</span>
-          </div>
-          <div className="settings-row">
-            <span className="settings-key">Email</span>
-            <span className="settings-val">{user.email}</span>
-          </div>
-          <div className="settings-row">
-            <span className="settings-key">Member since</span>
-            <span className="settings-val">{new Date(user.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
-          </div>
-        </div>
-        <div className="settings-card">
-          <div className="settings-card-label">Subscription</div>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 28, color: "#FF2D2D", lineHeight: 1, marginBottom: 4 }}>
-              {PLAN_LABELS[user.plan] || "Free"}
-            </div>
-            <div style={{ fontSize: 13, color: "#7c7660" }}>
-              {user.plan === "free" ? "Upgrade to unlock brand learning and more." :
-               user.plan === "creator" ? "Growing your content presence." :
-               user.plan === "pro" ? "Full brand training active." :
-               "Full AI content system running."}
-            </div>
-          </div>
-          <button className="btn-red-sm" onClick={() => router.push("/pricing")}>
-            {user.plan === "free" ? "Upgrade Plan" : "Manage Subscription"} →
-          </button>
-        </div>
-      </div>
-      <div style={{ marginTop: 28 }}>
-        <button className="btn-ghost-danger" onClick={handleLogout}>Log out of Lumevo</button>
-      </div>
-    </div>
-  );
-}
-
+// ── ROOT ──────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [section, setSection] = useState<Section>("overview");
+  const [uploads, setUploads] = useState<Upload[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [brand, setBrand] = useState<BrandProfile | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    const [uRes, pRes, bRes] = await Promise.all([
+      fetch("/api/uploads"),
+      fetch("/api/projects"),
+      fetch("/api/brand-profile"),
+    ]);
+    if (uRes.ok) setUploads((await uRes.json()).uploads);
+    if (pRes.ok) setProjects((await pRes.json()).projects);
+    if (bRes.ok) setBrand((await bRes.json()).brand_profile);
+  }, []);
 
   useEffect(() => {
-    const u = getCurrentUser();
-    if (!u) { router.push("/login"); return; }
-    setUser(u);
-    setProjects(getAllProjects());
-  }, [router]);
+    fetch("/api/me").then(async res => {
+      if (!res.ok) { router.push("/login"); return; }
+      const data = await res.json();
+      setUser(data.user);
+      await fetchData();
+      setLoading(false);
+    });
+  }, [router, fetchData]);
 
-  function handleNew() {
-    const p = createAndSaveProject({ title: "Untitled Project" });
-    router.push(`/project/${p.id}`);
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/");
   }
 
-  function handleDelete(id: string) {
-    deleteProject(id);
-    setProjects(getAllProjects());
-  }
+  function navigate(s: Section) { setSection(s); setSidebarOpen(false); window.scrollTo(0, 0); }
 
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Fredoka One', cursive", fontSize: 28, color: "#FF2D2D", letterSpacing: 2 }}>
+        LUMEVO
+      </div>
+    );
+  }
   if (!user) return null;
 
-  const voices = getAllVoices();
-  const readyProjects = projects.filter(p => p.status === "ready").length;
-  const uploadCount = projects.reduce((s, p) => s + (p.uploadedFiles?.length || 0), 0);
+  const groups = ["", "Create", "Learn", "Account"];
+  const navByGroup = (g: string) => NAV.filter(n => (n.group || "") === g);
 
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #F8F8A6; font-family: 'DM Sans', system-ui, sans-serif; color: #1a1a1a; -webkit-font-smoothing: antialiased; min-height: 100vh; }
-
+        body { background: #F8F8A6; font-family: 'DM Sans', system-ui, sans-serif; color: #1a1a1a; -webkit-font-smoothing: antialiased; }
         .layout { display: flex; min-height: 100vh; }
-
-        /* SIDEBAR */
-        .sidebar { width: 240px; flex-shrink: 0; background: #1a1a1a; display: flex; flex-direction: column; padding: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
-        @media (max-width: 768px) { .sidebar { position: fixed; top: 0; left: 0; z-index: 200; transform: translateX(-100%); transition: transform 0.3s; width: 220px; } .sidebar-open { transform: translateX(0); } }
-        .sidebar-logo { padding: 28px 24px 24px; border-bottom: 1px solid rgba(255,255,255,0.07); }
-        .sb-lumevo { font-family: 'Fredoka One', cursive; font-size: 26px; color: #FF2D2D; letter-spacing: 1px; line-height: 1; display: block; }
-        .sb-studio { font-size: 10px; font-style: italic; color: rgba(255,255,255,0.4); letter-spacing: 3px; text-transform: uppercase; display: block; margin-top: 3px; }
-        .sidebar-nav { flex: 1; padding: 20px 12px; }
-        .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; cursor: pointer; margin-bottom: 3px; transition: background 0.15s; border: none; background: transparent; color: rgba(255,255,255,0.5); font-family: inherit; font-size: 14px; font-weight: 500; width: 100%; text-align: left; }
-        .nav-item:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.8); }
-        .nav-item-active { background: rgba(255,45,45,0.15) !important; color: #FF6B6B !important; }
-        .nav-icon { font-size: 16px; width: 20px; text-align: center; }
-        .sidebar-bottom { padding: 16px 12px; border-top: 1px solid rgba(255,255,255,0.07); }
-        .user-pill { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; }
-        .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: #FF2D2D; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 700; flex-shrink: 0; }
-        .user-info { min-width: 0; }
-        .user-name { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .user-plan { font-size: 11px; color: rgba(255,255,255,0.35); }
-
-        /* TOPBAR (mobile) */
-        .topbar { display: none; background: rgba(248,248,166,0.95); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(0,0,0,0.08); height: 56px; padding: 0 20px; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+        .sidebar { width: 230px; flex-shrink: 0; background: #1a1a1a; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+        @media (max-width: 768px) { .sidebar { position: fixed; top: 0; left: 0; z-index: 200; transform: translateX(-100%); transition: transform 0.3s; } .sidebar-open { transform: translateX(0) !important; } }
+        .topbar { display: none; background: rgba(248,248,166,0.97); border-bottom: 1px solid rgba(0,0,0,0.08); height: 54px; padding: 0 20px; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
         @media (max-width: 768px) { .topbar { display: flex; } }
-        .topbar-logo { font-family: 'Fredoka One', cursive; font-size: 20px; color: #FF2D2D; }
-        .menu-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: #1a1a1a; }
-
-        /* MAIN */
-        .main { flex: 1; min-width: 0; padding: 48px 40px 80px; }
-        @media (max-width: 768px) { .main { padding: 28px 20px 60px; } }
-
-        /* OVERVIEW */
-        .overview-greeting { margin-bottom: 40px; }
-        .greeting-tag { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #FF2D2D; margin-bottom: 10px; }
-        .greeting-title { font-family: 'Syne', sans-serif; font-size: 32px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }
-        .greeting-sub { font-size: 15px; color: #7c7660; line-height: 1.5; }
-
-        .stats-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 44px; }
-        .stat-card { background: #fff; border-radius: 16px; padding: 20px 22px; border: 1px solid rgba(0,0,0,0.07); }
-        .stat-num { font-family: 'Syne', sans-serif; font-size: 34px; font-weight: 800; color: #1a1a1a; line-height: 1; }
-        .stat-num-red { color: #FF2D2D; }
-        .stat-label { font-size: 12px; color: #7c7660; margin-top: 6px; }
-
-        .quick-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 44px; }
-        .qa-btn { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; padding: 14px 20px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; color: #1a1a1a; transition: border-color 0.2s, transform 0.15s; }
-        .qa-btn:hover { border-color: #FF2D2D; transform: translateY(-1px); }
-        .qa-btn-primary { background: #FF2D2D; color: #fff; border-color: #FF2D2D; }
-        .qa-btn-primary:hover { opacity: 0.88; border-color: #FF2D2D; }
-
-        .recent-label { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; margin-bottom: 16px; }
-
-        /* PROJECTS */
-        .projects-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }
-        .section-header { margin-bottom: 36px; }
-        .section-title { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px; }
-        .section-sub { font-size: 15px; color: #7c7660; line-height: 1.5; }
-        .btn-red { background: #FF2D2D; color: #fff; border: none; font-family: inherit; font-size: 14px; font-weight: 700; padding: 11px 22px; border-radius: 999px; cursor: pointer; transition: opacity 0.2s, transform 0.15s; }
-        .btn-red:hover { opacity: 0.88; transform: translateY(-1px); }
-        .btn-red-sm { background: #FF2D2D; color: #fff; border: none; font-family: inherit; font-size: 13px; font-weight: 700; padding: 9px 18px; border-radius: 999px; cursor: pointer; transition: opacity 0.2s; }
-        .btn-red-sm:hover { opacity: 0.88; }
-
-        .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
-        .card { background: #fff; border-radius: 16px; overflow: hidden; cursor: pointer; border: 1px solid rgba(0,0,0,0.07); transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s; }
-        .card:hover { border-color: rgba(255,45,45,0.2); transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0,0,0,0.07); }
-        .card-thumb { height: 120px; background: linear-gradient(135deg,#F8F8A6 0%,#F2F29A 100%); overflow: hidden; }
-        .card-thumb-img { width: 100%; height: 100%; object-fit: cover; }
-        .card-thumb-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-        .card-thumb-placeholder span { font-family: 'Fredoka One', cursive; font-size: 28px; color: rgba(255,45,45,0.25); letter-spacing: 2px; }
-        .card-body { padding: 16px 18px 18px; }
-        .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-        .card-title { font-size: 15px; font-weight: 600; color: #1a1a1a; flex: 1; line-height: 1.3; }
-        .status-badge { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
-        .card-desc { font-size: 13px; color: #7c7660; line-height: 1.5; margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .card-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 12px; }
-        .meta-chip { font-size: 11px; color: #7c7660; background: #F8F8A6; padding: 3px 10px; border-radius: 999px; }
-        .card-footer { display: flex; align-items: center; justify-content: space-between; }
-        .card-date { font-size: 12px; color: #7c7660; }
-        .delete-btn { background: none; border: none; color: #b5b09a; font-size: 18px; cursor: pointer; line-height: 1; padding: 0 2px; transition: color 0.15s; }
-        .delete-btn:hover { color: #FF2D2D; }
-
-        .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 320px; gap: 10px; text-align: center; }
-        .empty-icon { font-size: 38px; color: #FF2D2D; margin-bottom: 4px; }
-        .empty-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; }
-        .empty-sub { font-size: 14px; color: #7c7660; margin-bottom: 8px; max-width: 320px; }
-
-        /* BRAND PROFILE */
-        .brand-learning-card { background: #fff; border-radius: 16px; padding: 28px; border: 1px solid rgba(0,0,0,0.07); margin-bottom: 20px; }
-        .brand-learning-top { display: flex; gap: 24px; align-items: flex-start; margin-bottom: 20px; }
-        .brand-learning-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #7c7660; margin-bottom: 8px; }
-        .brand-learning-score { font-family: 'Fredoka One', cursive; font-size: 48px; color: #FF2D2D; line-height: 1; }
-        .brand-learning-desc { font-size: 15px; color: #7c7660; line-height: 1.6; flex: 1; padding-top: 8px; }
-        .learning-bar-track { height: 6px; background: #F8F8A6; border-radius: 999px; overflow: hidden; }
-        .learning-bar-fill { height: 100%; background: #FF2D2D; border-radius: 999px; transition: width 0.6s ease; }
-        .brand-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .brand-card { background: #fff; border-radius: 14px; padding: 20px; border: 1px solid rgba(0,0,0,0.07); }
-        .brand-card-label { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #7c7660; margin-bottom: 8px; }
-        .brand-card-value { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; color: #1a1a1a; margin-bottom: 6px; }
-        .brand-card-sub { font-size: 12px; color: #7c7660; line-height: 1.5; }
-        .brand-sections { background: #fff; border-radius: 16px; border: 1px solid rgba(0,0,0,0.07); overflow: hidden; }
-        .brand-section-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid rgba(0,0,0,0.05); }
-        .brand-section-row:last-child { border-bottom: none; }
-        .brand-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-        .brand-dot-on { background: #FF2D2D; }
-        .brand-dot-off { background: #d4cfc3; }
-        .brand-row-title { font-size: 14px; font-weight: 600; color: #1a1a1a; margin-bottom: 3px; }
-        .brand-row-value { font-size: 13px; color: #7c7660; }
-        .brand-row-status { font-size: 11px; font-weight: 700; color: #7c7660; letter-spacing: 1px; text-transform: uppercase; }
-
-        /* VOICE */
-        .voice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-        .voice-card { background: #fff; border-radius: 16px; padding: 22px; border: 1px solid rgba(0,0,0,0.07); }
-        .voice-card-add { border-style: dashed; border-color: rgba(255,45,45,0.25); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 140px; transition: background 0.2s, border-color 0.2s; text-align: center; }
-        .voice-card-add:hover { background: rgba(255,45,45,0.02); border-color: rgba(255,45,45,0.5); }
-        .voice-icon { font-size: 24px; color: #FF2D2D; margin-bottom: 10px; }
-        .voice-name { font-size: 15px; font-weight: 600; color: #1a1a1a; margin-bottom: 4px; }
-        .voice-tags { font-size: 12px; color: #7c7660; margin-bottom: 8px; }
-        .voice-meta { font-size: 12px; color: #7c7660; }
-        .voice-date { font-size: 11px; color: #b5b09a; margin-top: 4px; }
-
-        /* SETTINGS */
-        .settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
-        .settings-card { background: #fff; border-radius: 16px; padding: 24px; border: 1px solid rgba(0,0,0,0.07); }
-        .settings-card-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #7c7660; margin-bottom: 16px; }
-        .settings-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.05); }
-        .settings-row:last-child { border-bottom: none; }
-        .settings-key { font-size: 14px; color: #7c7660; }
-        .settings-val { font-size: 14px; font-weight: 500; color: #1a1a1a; }
-        .btn-ghost-danger { background: none; border: 1px solid rgba(255,45,45,0.2); color: #FF2D2D; font-family: inherit; font-size: 14px; font-weight: 600; padding: 10px 22px; border-radius: 999px; cursor: pointer; transition: background 0.2s; }
-        .btn-ghost-danger:hover { background: rgba(255,45,45,0.06); }
-
-        /* OVERLAY */
         .overlay { display: none; }
-        @media (max-width: 768px) { .overlay-show { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 150; } }
+        @media (max-width: 768px) { .overlay-show { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 150; } }
+        .main { flex: 1; min-width: 0; padding: 48px 44px 100px; }
+        @media (max-width: 768px) { .main { padding: 28px 20px 80px; } }
+        .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 9px; cursor: pointer; margin-bottom: 2px; border: none; background: transparent; color: rgba(255,255,255,0.45); font-family: inherit; font-size: 13.5px; font-weight: 500; width: 100%; text-align: left; transition: all 0.15s; }
+        .nav-item:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.75); }
+        .nav-item-active { background: rgba(255,45,45,0.15) !important; color: #FF6B6B !important; }
       `}</style>
 
-      {/* Mobile topbar */}
       <div className="topbar">
-        <span className="topbar-logo">LUMEVO</span>
-        <button className="menu-btn" onClick={() => setSidebarOpen(o => !o)}>☰</button>
+        <span style={{ fontFamily: "'Fredoka One', cursive", fontSize: 20, color: "#FF2D2D" }}>LUMEVO</span>
+        <button onClick={() => setSidebarOpen(o => !o)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#1a1a1a" }}>☰</button>
       </div>
-
-      {/* Mobile overlay */}
       <div className={sidebarOpen ? "overlay overlay-show" : "overlay"} onClick={() => setSidebarOpen(false)} />
 
       <div className="layout">
-        {/* SIDEBAR */}
         <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
-          <div className="sidebar-logo">
-            <span className="sb-lumevo">LUMEVO</span>
-            <span className="sb-studio">Studio</span>
+          <div style={{ padding: "26px 22px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+            <span style={{ fontFamily: "'Fredoka One', cursive", fontSize: 26, color: "#FF2D2D", display: "block" }}>LUMEVO</span>
+            <span style={{ fontSize: 9, fontStyle: "italic", color: "rgba(255,255,255,0.35)", letterSpacing: 3, textTransform: "uppercase" }}>Studio</span>
           </div>
-          <nav className="sidebar-nav">
-            {NAV_ITEMS.map(item => (
-              <button
-                key={item.id}
-                className={`nav-item ${section === item.id ? "nav-item-active" : ""}`}
-                onClick={() => { setSection(item.id); setSidebarOpen(false); }}
-              >
-                <span className="nav-icon">{item.icon}</span>
-                {item.label}
-              </button>
+
+          <nav style={{ flex: 1, padding: "16px 10px", overflowY: "auto" }}>
+            {groups.map(group => (
+              <div key={group}>
+                {group && <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "rgba(255,255,255,0.2)", padding: "12px 14px 6px" }}>{group}</div>}
+                {navByGroup(group).map(item => (
+                  <button key={item.id} className={`nav-item ${section === item.id ? "nav-item-active" : ""}`} onClick={() => navigate(item.id)}>
+                    <span style={{ fontSize: 15, width: 20, textAlign: "center" }}>{item.icon}</span>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             ))}
           </nav>
-          <div className="sidebar-bottom">
-            <div className="user-pill">
-              <div className="user-avatar">{user.name.charAt(0).toUpperCase()}</div>
-              <div className="user-info">
-                <div className="user-name">{user.name}</div>
-                <div className="user-plan">{PLAN_LABELS[user.plan] || "Free Plan"}</div>
+
+          <div style={{ padding: "14px 10px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px" }}>
+              <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>{TIER_LABELS[user.subscription_tier]}</div>
               </div>
             </div>
           </div>
         </aside>
 
-        {/* MAIN CONTENT */}
         <main className="main">
-          {section === "overview" && (
-            <div>
-              <div className="overview-greeting">
-                <div className="greeting-tag">Welcome back</div>
-                <h1 className="greeting-title">Hey, {user.name.split(" ")[0]} 👋</h1>
-                <p className="greeting-sub">Your content system is {projects.length === 0 ? "ready to train. Start your first project below." : `learning. ${projects.length} project${projects.length !== 1 ? "s" : ""}, ${voices.length} voice clone${voices.length !== 1 ? "s" : ""}.`}</p>
-              </div>
-
-              <div className="stats-row">
-                <div className="stat-card"><div className="stat-num stat-num-red">{projects.length}</div><div className="stat-label">Projects</div></div>
-                <div className="stat-card"><div className="stat-num stat-num-red">{readyProjects}</div><div className="stat-label">Ready</div></div>
-                <div className="stat-card"><div className="stat-num stat-num-red">{voices.length}</div><div className="stat-label">Voice Clones</div></div>
-                <div className="stat-card"><div className="stat-num stat-num-red">{uploadCount}</div><div className="stat-label">Files Uploaded</div></div>
-              </div>
-
-              <div className="quick-actions">
-                <button className="qa-btn qa-btn-primary" onClick={handleNew}>+ New Project</button>
-                <button className="qa-btn" onClick={() => setSection("brand")}>✦ Brand Profile</button>
-                <button className="qa-btn" onClick={() => setSection("voice")}>◉ Voice Library</button>
-              </div>
-
-              {projects.length > 0 && (
-                <>
-                  <div className="recent-label">Recent Projects</div>
-                  <div className="cards-grid">
-                    {projects.slice(0, 6).map(p => {
-                      const st = p.status === "ready" ? { bg: "rgba(22,163,74,0.1)", text: "#16a34a", label: "Ready" } :
-                                 p.status === "generating" ? { bg: "rgba(255,45,45,0.1)", text: "#FF2D2D", label: "Generating…" } :
-                                 { bg: "rgba(0,0,0,0.06)", text: "#7c7660", label: "Draft" };
-                      return (
-                        <div key={p.id} className="card" onClick={() => router.push(`/project/${p.id}`)}>
-                          <div className="card-thumb">
-                            {p.thumbnail ? <img src={p.thumbnail} alt="" className="card-thumb-img" /> :
-                              <div className="card-thumb-placeholder"><span>{p.title.slice(0, 2).toUpperCase()}</span></div>}
-                          </div>
-                          <div className="card-body">
-                            <div className="card-top">
-                              <h3 className="card-title">{p.title}</h3>
-                              <span className="status-badge" style={{ background: st.bg, color: st.text }}>{st.label}</span>
-                            </div>
-                            {p.description && <p className="card-desc">{p.description}</p>}
-                            <div className="card-footer">
-                              <span className="card-date">{new Date(p.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
-                              <button className="delete-btn" onClick={e => { e.stopPropagation(); handleDelete(p.id); }}>×</button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-
-              {projects.length === 0 && (
-                <div className="empty-state">
-                  <div className="empty-icon">✦</div>
-                  <h3 className="empty-title">Create your first project</h3>
-                  <p className="empty-sub">Upload content, define your vibe, and let Lumevo start learning your brand.</p>
-                  <button className="btn-red" onClick={handleNew}>+ New Project</button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {section === "projects" && (
-            <div>
-              <div className="projects-header">
-                <div>
-                  <h2 className="section-title">Projects</h2>
-                  <p style={{ fontSize: 14, color: "#7c7660" }}>{projects.length} project{projects.length !== 1 ? "s" : ""} total</p>
-                </div>
-                <button className="btn-red" onClick={handleNew}>+ New Project</button>
-              </div>
-              {projects.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-icon">◻</div>
-                  <h3 className="empty-title">No projects yet</h3>
-                  <p className="empty-sub">Start creating and your projects will appear here.</p>
-                  <button className="btn-red" onClick={handleNew}>New Project</button>
-                </div>
-              ) : (
-                <div className="cards-grid">
-                  {projects.map(p => {
-                    const st = p.status === "ready" ? { bg: "rgba(22,163,74,0.1)", text: "#16a34a", label: "Ready" } :
-                               p.status === "generating" ? { bg: "rgba(255,45,45,0.1)", text: "#FF2D2D", label: "Generating…" } :
-                               { bg: "rgba(0,0,0,0.06)", text: "#7c7660", label: "Draft" };
-                    return (
-                      <div key={p.id} className="card" onClick={() => router.push(`/project/${p.id}`)}>
-                        <div className="card-thumb">
-                          {p.thumbnail ? <img src={p.thumbnail} alt="" className="card-thumb-img" /> :
-                            <div className="card-thumb-placeholder"><span>{p.title.slice(0, 2).toUpperCase()}</span></div>}
-                        </div>
-                        <div className="card-body">
-                          <div className="card-top">
-                            <h3 className="card-title">{p.title}</h3>
-                            <span className="status-badge" style={{ background: st.bg, color: st.text }}>{st.label}</span>
-                          </div>
-                          {p.description && <p className="card-desc">{p.description}</p>}
-                          <div className="card-meta">
-                            {p.vibe && <span className="meta-chip">{VIBE_LABELS[p.vibe as keyof typeof VIBE_LABELS]}</span>}
-                            {p.tone && <span className="meta-chip">{TONE_LABELS[p.tone as keyof typeof TONE_LABELS]}</span>}
-                            {(p.uploadedFiles?.length || 0) > 0 && <span className="meta-chip">📁 {p.uploadedFiles.length}</span>}
-                          </div>
-                          <div className="card-footer">
-                            <span className="card-date">{new Date(p.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-                            <button className="delete-btn" onClick={e => { e.stopPropagation(); handleDelete(p.id); }}>×</button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {section === "brand" && <BrandProfile projects={projects} />}
-          {section === "voice" && <VoiceSection />}
-          {section === "settings" && <SettingsSection user={user} />}
+          {section === "overview" && <Overview user={user} uploads={uploads} projects={projects} brand={brand} onNav={navigate} />}
+          {section === "uploads" && <UploadsSection uploads={uploads} onRefresh={fetchData} />}
+          {section === "create" && <CreateContent brand={brand} />}
+          {section === "video" && <CreateVideo />}
+          {section === "brand" && <BrandSection brand={brand} onRefresh={fetchData} />}
+          {section === "projects" && <ProjectsSection projects={projects} onNav={navigate} />}
+          {section === "analytics" && <Analytics />}
+          {section === "billing" && <Billing user={user} />}
+          {section === "settings" && <Settings user={user} onLogout={handleLogout} />}
         </main>
       </div>
     </>

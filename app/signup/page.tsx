@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signup } from "../../lib/auth";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -15,12 +14,25 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 500));
-    const result = signup(name, email, password);
-    setLoading(false);
-    if ("error" in result) { setError(result.error); return; }
-    router.push("/dashboard");
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Signup failed");
+      } else {
+        router.push("/dashboard");
+      }
+    } catch {
+      setError("Something went wrong. Try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
