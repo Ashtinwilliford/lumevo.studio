@@ -115,8 +115,8 @@ export default function LandingPage() {
         .btn-red:hover { opacity: 0.88; transform: translateY(-2px); }
         .btn-outline { background: transparent; color: #1a1a1a; border: 2px solid rgba(0,0,0,0.15); font-family: inherit; font-size: 16px; font-weight: 600; padding: 13px 32px; border-radius: 999px; cursor: pointer; transition: border-color 0.2s, transform 0.15s; }
         .btn-outline:hover { border-color: rgba(0,0,0,0.3); transform: translateY(-2px); }
-        .hero-chips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-        .hero-chip { background: rgba(255,255,255,0.7); border: 1px solid rgba(0,0,0,0.08); padding: 7px 16px; border-radius: 999px; font-size: 13px; color: #7c7660; font-weight: 500; }
+        .hero-chips { display: none; }
+        .hero-chip { display: none; }
 
         .section { padding: 80px 24px; }
         .section-white { background: #ffffff; }
