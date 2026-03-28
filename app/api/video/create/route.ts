@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { title, uploadIds, platform, duration } = await req.json();
+  const { title, uploadIds, platform, duration, useVoiceClone } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: "Title required" }, { status: 400 });
 
   const userId = session.id;
@@ -124,7 +124,7 @@ Respond with ONLY the caption text including hashtags. Nothing else.`;
   let audioBase64: string | null = null;
   const voiceId = user?.elevenlabs_voice_id;
 
-  if (voiceId && script) {
+  if (voiceId && script && useVoiceClone !== false) {
     try {
       const connectors = new ReplitConnectors();
       const res = await connectors.proxy("elevenlabs", `/v1/text-to-speech/${voiceId}`, {

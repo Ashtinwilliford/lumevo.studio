@@ -9,7 +9,7 @@ export async function GET() {
   }
 
   const result = await query(
-    "SELECT id, name, email, subscription_tier, created_at, elevenlabs_voice_id FROM users WHERE id = $1",
+    "SELECT id, name, email, subscription_tier, created_at, elevenlabs_voice_id, voice_clone_name FROM users WHERE id = $1",
     [session.id]
   );
 

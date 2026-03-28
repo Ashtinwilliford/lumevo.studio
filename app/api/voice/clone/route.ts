@@ -1,20 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ReplitConnectors } from "@replit/connectors-sdk";
+import { getSession } from "@/lib/session";
+import { query } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
-  const form = await req.formData();
-  const name = form.get("name") as string;
-  const files = form.getAll("files") as File[];
+  const session = await getSession();
+  if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!name || files.length === 0) {
-    return NextResponse.json({ error: "Voice name and at least one audio file are required." }, { status: 400 });
-  }
+  const userRes = await query("SELECT subscription_tier FROM users WHERE id = $1", [session.id]);
+  const tier = userRes.rows[0]?.subscription_tier as string | undefined;
+  if (tier !== "elite") return NextResponse.json({ error: "Elite plan required" }, { status: 403 });
+
+  const body = await req.json() as {
+    cloneName: string;
+    samples: { name: string; mimeType: string; base64: string }[];
+  };
+  const { cloneName, samples } = body;
+
+  if (!cloneName?.trim()) return NextResponse.json({ error: "A name for your voice clone is required." }, { status: 400 });
+  if (!samples?.length) return NextResponse.json({ error: "At least one audio or video sample is required." }, { status: 400 });
 
   const elForm = new FormData();
-  elForm.append("name", name);
-  elForm.append("description", `Voice clone for ${name}`);
-  for (const file of files) {
-    elForm.append("files", file, file.name);
+  elForm.append("name", cloneName.trim());
+  elForm.append("description", `Lumevo Studio voice clone — ${cloneName.trim()}`);
+
+  for (const sample of samples) {
+    const binary = Buffer.from(sample.base64, "base64");
+    const blob = new Blob([binary], { type: sample.mimeType || "audio/mpeg" });
+    elForm.append("files", blob, sample.name);
   }
 
   const connectors = new ReplitConnectors();
@@ -24,11 +37,30 @@ export async function POST(req: NextRequest) {
   });
 
   if (!res.ok) {
-    const err = await res.text();
-    console.error("ElevenLabs clone error:", err);
-    return NextResponse.json({ error: "Voice cloning failed. Check your ElevenLabs account." }, { status: res.status });
+    const errText = await res.text();
+    console.error("ElevenLabs clone error:", errText);
+    return NextResponse.json({ error: "Voice cloning failed. Make sure your samples are clear audio recordings (1+ minute total)." }, { status: 500 });
   }
 
   const data = await res.json() as { voice_id: string };
-  return NextResponse.json({ voiceId: data.voice_id });
+  const voiceId = data.voice_id;
+
+  await query(
+    "UPDATE users SET elevenlabs_voice_id = $1, voice_clone_name = $2 WHERE id = $3",
+    [voiceId, cloneName.trim(), session.id]
+  );
+
+  return NextResponse.json({ voiceId, cloneName: cloneName.trim() });
+}
+
+export async function DELETE() {
+  const session = await getSession();
+  if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  await query(
+    "UPDATE users SET elevenlabs_voice_id = NULL, voice_clone_name = NULL WHERE id = $1",
+    [session.id]
+  );
+
+  return NextResponse.json({ ok: true });
 }

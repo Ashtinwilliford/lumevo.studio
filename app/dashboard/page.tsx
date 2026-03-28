@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 type Section = "overview" | "uploads" | "create" | "video" | "brand" | "projects" | "plan" | "aimanager" | "analytics" | "billing" | "settings";
 
-interface User { id: string; name: string; email: string; subscription_tier: string; created_at: string; elevenlabs_voice_id?: string; }
+interface User { id: string; name: string; email: string; subscription_tier: string; created_at: string; elevenlabs_voice_id?: string; voice_clone_name?: string; }
 interface Upload { id: string; file_type: string; file_name: string; mime_type: string; file_size: number; analysis_status: string; created_at: string; }
 interface Project { id: string; title: string; project_type: string; target_platform: string; target_duration?: number; vibe?: string; status: string; created_at: string; updated_at: string; }
 interface FullProject extends Project { generated_content?: { script?: string; caption?: string } | null; }
@@ -492,6 +492,7 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [localUploads, setLocalUploads] = useState<Upload[]>(uploads);
+  const [useVoiceClone, setUseVoiceClone] = useState(!!user.elevenlabs_voice_id);
 
   useEffect(() => { setLocalUploads(uploads); }, [uploads]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isTyping]);
@@ -564,6 +565,7 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
         duration: state.duration || 30,
         vibe: state.vibe,
         mediaType: state.mediaType,
+        useVoiceClone,
       }),
     });
     timers.forEach(clearTimeout);
@@ -713,8 +715,14 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
           <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "16px 20px", display: "flex", gap: 14, alignItems: "center" }}>
             <div style={{ fontSize: 24, flexShrink: 0 }}>🎙</div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>Add your voice clone</div>
-              <div style={{ fontSize: 12, color: "#7c7660" }}>Add your ElevenLabs Voice ID in Settings — Lumevo will narrate every video in your actual voice.</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>
+                {user.subscription_tier === "elite" ? "Set up your Voice Clone" : "Upgrade to hear your voice"}
+              </div>
+              <div style={{ fontSize: 12, color: "#7c7660" }}>
+                {user.subscription_tier === "elite"
+                  ? "Go to Settings → Voice Clone Studio and upload 1–5 clips of yourself talking. Lumevo will clone your voice and narrate every project in your actual voice."
+                  : "Elite plan includes Voice Clone Studio — upload your videos, Lumevo clones your voice, and every script gets narrated in your actual voice."}
+              </div>
             </div>
           </div>
         )}
@@ -784,6 +792,24 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
                   No media yet — upload something below or skip to use your brand voice
                 </div>
               )}
+
+              {/* Voice clone toggle */}
+              {user.elevenlabs_voice_id ? (
+                <div onClick={() => setUseVoiceClone(v => !v)}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, border: `1.5px solid ${useVoiceClone ? "#FF2D2D" : "rgba(0,0,0,0.08)"}`, marginBottom: 10, cursor: "pointer", background: useVoiceClone ? "rgba(255,45,45,0.04)" : "#fafaf4", transition: "all 0.15s" }}>
+                  <div style={{ width: 36, height: 20, background: useVoiceClone ? "#FF2D2D" : "rgba(0,0,0,0.12)", borderRadius: 999, position: "relative", flexShrink: 0, transition: "background 0.2s" }}>
+                    <div style={{ width: 16, height: 16, background: "#fff", borderRadius: "50%", position: "absolute", top: 2, left: useVoiceClone ? 18 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>🎙 Narrate in my voice</div>
+                    <div style={{ fontSize: 11, color: "#7c7660" }}>{user.voice_clone_name || "Your voice clone"} · sounds exactly like you</div>
+                  </div>
+                </div>
+              ) : user.subscription_tier === "elite" ? (
+                <div style={{ background: "#F8F8A6", borderRadius: 12, padding: "12px 14px", marginBottom: 10, fontSize: 12, color: "#7c7660" }}>
+                  🎙 Set up your Voice Clone in Settings to narrate this video in your voice.
+                </div>
+              ) : null}
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button onClick={() => fileRef.current?.click()} disabled={uploadingFile}
@@ -1224,7 +1250,7 @@ function Billing({ user }: { user: User }) {
     { id: "free", name: "Free", price: "$0", features: ["5 uploads/month", "10 AI generations", "Basic brand learning", "Captions & hooks"] },
     { id: "creator", name: "Creator", price: "$29", features: ["50 uploads/month", "100 AI generations", "Full brand learning", "All content types", "Weekly content ideas"] },
     { id: "pro", name: "Pro", price: "$79", features: ["Unlimited uploads", "Unlimited generations", "Full personality profile", "Multi-platform content", "Advanced project history"] },
-    { id: "elite", name: "Elite", price: "$149", features: ["Everything in Pro", "AI Video Creation", "ElevenLabs voiceover", "Advanced creative briefs", "Priority support"] },
+    { id: "elite", name: "Elite", price: "$149", features: ["Everything in Pro", "AI Video Creation", "Voice Clone Studio — sounds exactly like you", "Agentic creative director", "Advanced creative briefs", "Priority support"] },
   ];
 
   return (
@@ -1263,19 +1289,264 @@ function Billing({ user }: { user: User }) {
 }
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
-function Settings({ user, onLogout }: { user: User; onLogout: () => void }) {
+function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated: (voiceId: string, name: string) => void }) {
+  const isElite = user.subscription_tier === "elite";
+  const hasClone = !!user.elevenlabs_voice_id;
+
+  // Manual ID state (non-elite or fallback)
   const [voiceId, setVoiceId] = useState(user.elevenlabs_voice_id || "");
   const [savingVoice, setSavingVoice] = useState(false);
   const [voiceSaved, setVoiceSaved] = useState(false);
+
+  // Elite clone creation state
+  const [cloneName, setCloneName] = useState(user.voice_clone_name || user.name || "");
+  const [samples, setSamples] = useState<{ name: string; mimeType: string; base64: string; sizeMB: number }[]>([]);
+  const [cloning, setCloning] = useState(false);
+  const [cloneError, setCloneError] = useState("");
+  const sampleRef = useRef<HTMLInputElement>(null);
+
+  // Test voice state
+  const [testText, setTestText] = useState("Hey, this is me testing my voice clone on Lumevo. Sounds just like me, right?");
+  const [testing, setTesting] = useState(false);
+  const [testAudioSrc, setTestAudioSrc] = useState("");
+  const [removing, setRemoving] = useState(false);
 
   async function saveVoiceId() {
     setSavingVoice(true);
     await fetch("/api/settings/voice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ voiceId: voiceId.trim() }) });
     setSavingVoice(false);
     setVoiceSaved(true);
+    onCloneCreated(voiceId.trim(), "");
     setTimeout(() => setVoiceSaved(false), 2500);
   }
 
+  async function handleSampleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const loaded = await Promise.all(files.map(f => new Promise<{ name: string; mimeType: string; base64: string; sizeMB: number }>((res) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const b64 = (reader.result as string).split(",")[1] || "";
+        res({ name: f.name, mimeType: f.type, base64: b64, sizeMB: +(f.size / 1024 / 1024).toFixed(1) });
+      };
+      reader.readAsDataURL(f);
+    })));
+    setSamples(prev => [...prev, ...loaded].slice(0, 5));
+    e.target.value = "";
+  }
+
+  async function createClone() {
+    if (!cloneName.trim() || !samples.length) return;
+    setCloning(true);
+    setCloneError("");
+    const res = await fetch("/api/voice/clone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cloneName: cloneName.trim(), samples: samples.map(s => ({ name: s.name, mimeType: s.mimeType, base64: s.base64 })) }),
+    });
+    const data = await res.json() as { voiceId?: string; cloneName?: string; error?: string };
+    setCloning(false);
+    if (!res.ok) { setCloneError(data.error || "Cloning failed. Try again."); return; }
+    onCloneCreated(data.voiceId!, data.cloneName || cloneName);
+    setSamples([]);
+  }
+
+  async function testVoice() {
+    if (!user.elevenlabs_voice_id || !testText.trim()) return;
+    setTesting(true);
+    const res = await fetch("/api/voice/synthesize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voiceId: user.elevenlabs_voice_id, text: testText }),
+    });
+    if (res.ok) {
+      const buf = await res.arrayBuffer();
+      const blob = new Blob([buf], { type: "audio/mpeg" });
+      setTestAudioSrc(URL.createObjectURL(blob));
+    }
+    setTesting(false);
+  }
+
+  async function removeClone() {
+    setRemoving(true);
+    await fetch("/api/voice/clone", { method: "DELETE" });
+    setRemoving(false);
+    setVoiceId("");
+    setSamples([]);
+    setTestAudioSrc("");
+    onCloneCreated("", "");
+  }
+
+  if (!isElite) {
+    return (
+      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>🎙 Voice Clone</div>
+          {user.elevenlabs_voice_id && <span style={{ fontSize: 11, fontWeight: 700, background: "#F8F8A6", padding: "3px 10px", borderRadius: 999, color: "#7c7660" }}>Connected</span>}
+        </div>
+        <p style={{ fontSize: 13, color: "#7c7660", marginBottom: 16, lineHeight: 1.6 }}>
+          Paste your ElevenLabs Voice ID to let Lumevo narrate videos in your voice.
+        </p>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14 }}>
+          <input value={voiceId} onChange={e => setVoiceId(e.target.value)} placeholder="e.g. abc123xyz456..."
+            style={{ flex: 1, padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "monospace", fontSize: 13, outline: "none", background: "#fafaf4" }} />
+          <button onClick={saveVoiceId} disabled={savingVoice || !voiceId.trim()}
+            style={{ background: voiceSaved ? "#2da44e" : "#FF2D2D", color: "#fff", border: "none", borderRadius: 10, padding: "11px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+            {voiceSaved ? "Saved ✓" : savingVoice ? "Saving…" : "Save"}
+          </button>
+        </div>
+        <div style={{ background: "#F8F8A6", borderRadius: 12, padding: "14px 16px", display: "flex", gap: 12, alignItems: "flex-start" }}>
+          <div style={{ fontSize: 18, flexShrink: 0 }}>✦</div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>Upgrade to Elite for Voice Clone Studio</div>
+            <div style={{ fontSize: 12, color: "#7c7660", lineHeight: 1.5 }}>Upload your videos, Lumevo extracts your voice and creates a full clone — no ElevenLabs account needed. Your content sounds exactly like you.</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16, overflow: "hidden" }}>
+      <div style={{ background: "linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)", padding: "22px 28px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>Elite Feature</div>
+            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 2 }}>🎙 Voice Clone Studio</div>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>Upload your videos. Lumevo clones your voice. Every script sounds exactly like you.</div>
+          </div>
+          {hasClone && (
+            <div style={{ background: "#2da44e", color: "#fff", fontSize: 11, fontWeight: 800, letterSpacing: 1, padding: "4px 12px", borderRadius: 999 }}>● Active</div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ padding: 28 }}>
+        {hasClone ? (
+          <>
+            <div style={{ background: "#fafaf4", borderRadius: 14, padding: "18px 20px", marginBottom: 20, display: "flex", gap: 16, alignItems: "center" }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🎙</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>{user.voice_clone_name || "Your Voice Clone"}</div>
+                <div style={{ fontSize: 12, color: "#7c7660", fontFamily: "monospace" }}>ID: {user.elevenlabs_voice_id?.slice(0, 18)}…</div>
+              </div>
+              <button onClick={removeClone} disabled={removing}
+                style={{ background: "none", border: "1px solid rgba(255,45,45,0.2)", color: "#FF2D2D", fontSize: 12, fontWeight: 600, padding: "6px 14px", borderRadius: 999, cursor: "pointer", fontFamily: "inherit" }}>
+                {removing ? "Removing…" : "Remove"}
+              </button>
+            </div>
+
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 10 }}>Test your clone</div>
+              <textarea value={testText} onChange={e => setTestText(e.target.value)} rows={2}
+                style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 13, outline: "none", background: "#fafaf4", resize: "none", boxSizing: "border-box", marginBottom: 10 }} />
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button onClick={testVoice} disabled={testing || !testText.trim()}
+                  style={{ background: "#1a1a1a", color: "#fff", border: "none", borderRadius: 999, padding: "10px 22px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                  {testing ? "Generating…" : "▶ Play my voice"}
+                </button>
+                {testAudioSrc && (
+                  <audio controls autoPlay src={testAudioSrc} style={{ height: 36, flex: 1, accentColor: "#FF2D2D" }} />
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#7c7660", marginBottom: 10 }}>Recalibrate your clone</div>
+              <p style={{ fontSize: 12, color: "#7c7660", marginBottom: 12, lineHeight: 1.6 }}>Upload new samples to replace your current voice clone with an updated version.</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", marginBottom: 12 }}>
+                <input value={cloneName} onChange={e => setCloneName(e.target.value)} placeholder="Clone name…"
+                  style={{ padding: "10px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 13, outline: "none", background: "#fafaf4" }} />
+                <button onClick={() => sampleRef.current?.click()}
+                  style={{ background: "#F8F8A6", color: "#1a1a1a", border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                  + Add samples
+                </button>
+              </div>
+              <input ref={sampleRef} type="file" multiple style={{ display: "none" }} onChange={handleSampleUpload} accept="video/*,audio/*" />
+              {samples.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                  {samples.map((s, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, background: "#fafaf4", fontSize: 12 }}>
+                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
+                      <span style={{ color: "#7c7660" }}>{s.sizeMB} MB</span>
+                      <button onClick={() => setSamples(p => p.filter((_, j) => j !== i))} style={{ color: "#FF2D2D", background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 0 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {cloneError && <div style={{ fontSize: 12, color: "#FF2D2D", marginBottom: 10 }}>{cloneError}</div>}
+              {samples.length > 0 && (
+                <button onClick={createClone} disabled={cloning || !cloneName.trim()}
+                  style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "10px 22px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                  {cloning ? "Cloning…" : "Recalibrate clone →"}
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 13, color: "#7c7660", lineHeight: 1.7, marginBottom: 18 }}>
+                Upload 1–5 videos or voice recordings of yourself talking naturally. The more natural and varied the better — aim for at least 1 minute of total audio.
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", marginBottom: 14 }}>
+                <input value={cloneName} onChange={e => setCloneName(e.target.value)} placeholder="Name your clone (e.g. Taylor's Voice)"
+                  style={{ padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 13, outline: "none", background: "#fafaf4" }} />
+                <button onClick={() => sampleRef.current?.click()}
+                  style={{ background: "#F8F8A6", color: "#1a1a1a", border: "none", borderRadius: 10, padding: "11px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                  ↑ Upload samples
+                </button>
+              </div>
+              <input ref={sampleRef} type="file" multiple style={{ display: "none" }} onChange={handleSampleUpload} accept="video/*,audio/*" />
+
+              {samples.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+                  {samples.map((s, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, background: "#fafaf4", border: "1.5px solid rgba(0,0,0,0.06)" }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#fff", flexShrink: 0, fontWeight: 700 }}>▶</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
+                        <div style={{ fontSize: 11, color: "#7c7660" }}>{s.sizeMB} MB</div>
+                      </div>
+                      <button onClick={() => setSamples(p => p.filter((_, j) => j !== i))} style={{ color: "#7c7660", background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ background: "#fafaf4", borderRadius: 12, padding: "22px", textAlign: "center", marginBottom: 16, border: "1.5px dashed rgba(0,0,0,0.1)" }}>
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>🎙</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No samples yet</div>
+                  <div style={{ fontSize: 12, color: "#7c7660" }}>Upload videos or audio clips of yourself talking naturally</div>
+                </div>
+              )}
+
+              {cloneError && <div style={{ fontSize: 13, color: "#FF2D2D", marginBottom: 12, fontWeight: 500 }}>{cloneError}</div>}
+
+              <button onClick={createClone} disabled={cloning || !cloneName.trim() || !samples.length}
+                style={{ width: "100%", background: samples.length && cloneName.trim() ? "#FF2D2D" : "rgba(0,0,0,0.08)", color: samples.length && cloneName.trim() ? "#fff" : "#7c7660", border: "none", borderRadius: 12, padding: "14px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: samples.length && cloneName.trim() ? "pointer" : "default", transition: "all 0.2s" }}>
+                {cloning ? "Cloning your voice… this may take 30s" : "🎙 Clone my voice →"}
+              </button>
+            </div>
+
+            <div style={{ borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 18 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 10 }}>Or paste an existing Voice ID</div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <input value={voiceId} onChange={e => setVoiceId(e.target.value)} placeholder="ElevenLabs Voice ID…"
+                  style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "monospace", fontSize: 13, outline: "none", background: "#fafaf4" }} />
+                <button onClick={saveVoiceId} disabled={savingVoice || !voiceId.trim()}
+                  style={{ background: voiceSaved ? "#2da44e" : "#1a1a1a", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                  {voiceSaved ? "Saved ✓" : "Save"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Settings({ user, onLogout, onUserUpdate }: { user: User; onLogout: () => void; onUserUpdate: (patch: Partial<User>) => void }) {
   return (
     <div>
       <div style={{ marginBottom: 36 }}>
@@ -1293,27 +1564,7 @@ function Settings({ user, onLogout }: { user: User; onLogout: () => void }) {
         ))}
       </div>
 
-      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>🎙 Voice Clone</div>
-          {user.elevenlabs_voice_id && <span style={{ fontSize: 11, fontWeight: 700, background: "#F8F8A6", padding: "3px 10px", borderRadius: 999, color: "#7c7660" }}>Connected</span>}
-        </div>
-        <p style={{ fontSize: 13, color: "#7c7660", marginBottom: 16, lineHeight: 1.6 }}>
-          Paste your ElevenLabs Voice ID to let Lumevo narrate every video in your actual voice. Find it in your ElevenLabs dashboard under Voice Lab.
-        </p>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <input
-            value={voiceId}
-            onChange={e => setVoiceId(e.target.value)}
-            placeholder="e.g. abc123xyz456..."
-            style={{ flex: 1, padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "monospace", fontSize: 13, outline: "none", background: "#fafaf4" }}
-          />
-          <button onClick={saveVoiceId} disabled={savingVoice || !voiceId.trim()}
-            style={{ background: voiceSaved ? "#2da44e" : "#FF2D2D", color: "#fff", border: "none", borderRadius: 10, padding: "11px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", transition: "background 0.2s" }}>
-            {voiceSaved ? "Saved ✓" : savingVoice ? "Saving…" : "Save"}
-          </button>
-        </div>
-      </div>
+      <VoiceCloneStudio user={user} onCloneCreated={(vid, name) => onUserUpdate({ elevenlabs_voice_id: vid || undefined, voice_clone_name: name || undefined })} />
 
       <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 24 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 18 }}>Notifications</div>
@@ -1718,7 +1969,7 @@ export default function DashboardPage() {
             {section === "aimanager" && <AIManagerSection user={user} brand={brand} onNav={navigate} />}
             {section === "analytics" && <Analytics />}
             {section === "billing" && <Billing user={user} />}
-            {section === "settings" && <Settings user={user} onLogout={handleLogout} />}
+            {section === "settings" && <Settings user={user} onLogout={handleLogout} onUserUpdate={(patch) => setUser(prev => prev ? { ...prev, ...patch } : prev)} />}
           </div>
         </main>
       </div>
