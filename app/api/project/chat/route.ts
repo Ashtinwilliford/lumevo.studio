@@ -6,6 +6,7 @@ import OpenAI from "openai";
 const client = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY!,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  timeout: 25000,
 });
 
 interface ProjectState {
@@ -15,7 +16,7 @@ interface ProjectState {
   duration: number | null;
 }
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -27,12 +28,15 @@ export async function POST(req: NextRequest) {
     userName: string;
   };
 
-  const brandRows = await query("SELECT * FROM brand_profiles WHERE user_id = $1", [session.id]);
+  const brandRows = await query(
+    "SELECT tone_summary, personality_summary, platform_focus FROM brand_profiles WHERE user_id = $1",
+    [session.id]
+  );
   const brand = brandRows.rows[0];
   const brandContext = brand?.tone_summary
-    ? `Their brand voice: ${brand.tone_summary}.`
-    : brand?.voice_style
-    ? `Their content style: ${brand.voice_style}, niche: ${brand.niche || "lifestyle"}.`
+    ? `Brand voice: ${brand.tone_summary}.`
+    : brand?.personality_summary
+    ? `Style: ${brand.personality_summary}.`
     : "";
 
   const hasTitle = !!projectState.title;
@@ -41,72 +45,33 @@ export async function POST(req: NextRequest) {
   const hasDuration = !!projectState.duration;
   const allCollected = hasTitle && hasPlatform && hasVibe && hasDuration;
 
-  const knownSoFar = [
-    projectState.title ? `Topic: "${projectState.title}"` : null,
-    projectState.platforms?.length ? `Platform: ${projectState.platforms.join(" + ")}` : null,
-    projectState.vibe ? `Vibe: "${projectState.vibe}"` : null,
-    projectState.duration ? `Duration: ${projectState.duration}s` : null,
-  ].filter(Boolean).join(" | ");
+  const nextStep = !hasTitle ? "Get the TOPIC. currentStep: title" :
+    !hasPlatform ? "Get the PLATFORM (Instagram/TikTok/both). currentStep: platform" :
+    !hasVibe ? "Get the VIBE — must be a phrase, not one word. currentStep: vibe" :
+    !hasDuration ? "Get the DURATION (15/30/60s). currentStep: duration" :
+    "All done — tell them you're ready to build. currentStep: upload, needsUpload: true";
 
-  const systemPrompt = `You are Lumevo — a sharp, creative AI director having a real conversation with ${userName} to plan their next video. You are direct, warm, and genuinely excited about their content. You speak like a great creative collaborator, not a bot filling out a form.
+  const systemPrompt = `You are Lumevo, a sharp creative director helping ${userName} plan a video. Be direct and warm. 1-2 sentences max per reply.
+${brandContext}
 
-${brandContext ? `What you know about ${userName}'s brand:\n${brandContext}\n` : ""}
+Collect in order: TOPIC (specific moment/story, not vague) → PLATFORM → VIBE (phrase not single word) → DURATION.
+Status: title=${projectState.title ?? "needed"} | platforms=${projectState.platforms?.join(",") ?? "needed"} | vibe=${projectState.vibe ?? "needed"} | duration=${projectState.duration ?? "needed"}
 
-YOUR MISSION: Collect exactly 4 things, in this order. Once you have all 4, say you're ready.
+Next: ${nextStep}
 
-1. TOPIC — the specific story, moment, or message. "Japan trip" is too vague. "The moment I almost missed my flight to Tokyo" is perfect.
-2. PLATFORM — Instagram, TikTok, or both
-3. VIBE — the emotional direction. Must be a phrase, not one word. "Funny" is rejected. "Chaotic and self-deprecating" is gold.
-4. DURATION — 15, 30, or 60 seconds
-
-NON-NEGOTIABLE RULES:
-- ONE question per message. Never two.
-- Keep replies to 1-2 sentences. Creative directors are punchy.
-- For TOPIC: If they give you a platform name, a one-word answer, or anything generic — do NOT accept it. Push them to get specific. Example: "What actually happened? Give me the real moment."
-- For VIBE: Single words (funny, chill, hype) are NOT valid. Push: "Say more — is it dry and self-aware? Vulnerable and honest? Chaotic and loud?"
-- For PLATFORM: "Both", "Instagram", "TikTok" all count. These show quick-reply buttons — don't ask differently.
-- For DURATION: "15", "30", "60" all count. These also show quick-reply buttons.
-- Never ask about music or voiceover — that's automatic.
-- Use ${userName}'s first name occasionally to keep it personal.
-- When reacting to what they share, make it specific to THEIR answer — not generic encouragement.
-
-CURRENT STATUS:
-- Topic: ${projectState.title ? `"${projectState.title}" ✓` : "still needed"}
-- Platform: ${projectState.platforms?.length ? `${projectState.platforms.join(" + ")} ✓` : "still needed"}
-- Vibe: ${projectState.vibe ? `"${projectState.vibe}" ✓` : "still needed"}
-- Duration: ${projectState.duration ? `${projectState.duration}s ✓` : "still needed"}
-${knownSoFar ? `\nLocked in so far: ${knownSoFar}` : ""}
-
-NEXT STEP:
-${!hasTitle ? "→ Get the TOPIC. Set currentStep: \"title\"." :
-  !hasPlatform ? "→ Get the PLATFORM. Set currentStep: \"platform\"." :
-  !hasVibe ? "→ Get the VIBE. Set currentStep: \"vibe\"." :
-  !hasDuration ? "→ Get the DURATION. Set currentStep: \"duration\"." :
-  "→ You have everything! Tell them you're dialed in and ready to build. Set currentStep: \"upload\", needsUpload: true."}
-
-RESPOND WITH ONLY THIS JSON (no markdown, no code fences):
-{
-  "message": "your 1-2 sentence reply",
-  "extracted": {
-    "title": null or "the specific topic they gave (only if genuinely descriptive, not vague)",
-    "platforms": null or ["instagram"] or ["tiktok"] or ["instagram","tiktok"],
-    "vibe": null or "the vibe phrase they gave (only if it's more than one word)",
-    "duration": null or 15 or 30 or 60
-  },
-  "currentStep": "title" or "platform" or "vibe" or "duration" or "upload",
-  "needsUpload": false or true
-}`;
+Reply ONLY with JSON (no markdown):
+{"message":"...","extracted":{"title":null,"platforms":null,"vibe":null,"duration":null},"currentStep":"title|platform|vibe|duration|upload","needsUpload":false}`;
 
   let completion;
   try {
     completion = await client.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
         ...messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
       ],
-      max_tokens: 250,
-      temperature: 0.85,
+      max_tokens: 200,
+      temperature: 0.8,
       response_format: { type: "json_object" },
     });
   } catch (err) {
@@ -129,7 +94,7 @@ RESPOND WITH ONLY THIS JSON (no markdown, no code fences):
     parsed = JSON.parse(raw);
   } catch {
     parsed = {
-      message: "Sorry, got a bit lost there — what were we saying?",
+      message: "Got a bit lost — what were we saying?",
       extracted: {},
       currentStep: "title",
       needsUpload: false,
@@ -137,10 +102,9 @@ RESPOND WITH ONLY THIS JSON (no markdown, no code fences):
   }
 
   if (!parsed.message) {
-    parsed.message = "Sorry, got a bit lost — try again?";
+    parsed.message = "Got a bit lost — try again?";
   }
 
-  // Safety: if all collected and not yet upload, force upload step
   if (allCollected && !parsed.needsUpload) {
     parsed.needsUpload = true;
     parsed.currentStep = "upload";

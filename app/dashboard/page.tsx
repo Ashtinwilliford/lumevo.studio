@@ -731,9 +731,10 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
           } catch (e) { console.warn("Draft save failed:", e); }
         }, 600);
       }
-    } catch {
+    } catch (err) {
+      console.error("Chat fetch error:", err);
       setIsTyping(false);
-      setMessages(prev => [...prev, { role: "ai", content: "Sorry, I hit a snag. Try saying that again.", id: msgCounter + 1 }]);
+      setMessages(prev => [...prev, { role: "ai", content: "Network hiccup — hit send again and it'll go through.", id: msgCounter + 1 }]);
     }
   }
 
