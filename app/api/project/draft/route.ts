@@ -20,12 +20,12 @@ export async function POST(req: NextRequest) {
   const { projectId, title, chat_history, draft_state, status } = body;
 
   if (projectId) {
-    // Update existing draft
+    // Update existing draft — pass arrays/objects directly (postgres driver handles JSONB)
     await query(
       `UPDATE projects
        SET title = COALESCE($1, title),
-           chat_history = COALESCE($2, chat_history),
-           draft_state  = COALESCE($3, draft_state),
+           chat_history = COALESCE($2::jsonb, chat_history),
+           draft_state  = COALESCE($3::jsonb, draft_state),
            status       = COALESCE($4, status),
            updated_at   = now()
        WHERE id = $5 AND user_id = $6`,
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const result = await query(
     `INSERT INTO projects
        (user_id, title, status, chat_history, draft_state)
-     VALUES ($1, $2, 'chatting', $3, $4)
+     VALUES ($1, $2, 'chatting', $3::jsonb, $4::jsonb)
      RETURNING id`,
     [
       session.id,
@@ -81,5 +81,27 @@ export async function GET(req: NextRequest) {
 
   if (!result.rows.length) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return NextResponse.json({ project: result.rows[0] });
+  const row = result.rows[0] as {
+    id: string; title: string; status: string;
+    chat_history: unknown; draft_state: unknown; created_at: string;
+  };
+
+  // Safely parse chat_history — it may be stored as a JSON string or a native array
+  let chatHistory: Array<{ role: string; content: string }> = [];
+  if (Array.isArray(row.chat_history)) {
+    chatHistory = row.chat_history;
+  } else if (typeof row.chat_history === "string" && row.chat_history.startsWith("[")) {
+    try { chatHistory = JSON.parse(row.chat_history); } catch { chatHistory = []; }
+  }
+
+  let draftState: Record<string, unknown> = {};
+  if (row.draft_state && typeof row.draft_state === "object" && !Array.isArray(row.draft_state)) {
+    draftState = row.draft_state as Record<string, unknown>;
+  } else if (typeof row.draft_state === "string") {
+    try { draftState = JSON.parse(row.draft_state); } catch { draftState = {}; }
+  }
+
+  return NextResponse.json({
+    project: { ...row, chat_history: chatHistory, draft_state: draftState },
+  });
 }

@@ -572,8 +572,9 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
         if (p.draft_state) {
           setProjectState(p.draft_state as unknown as ProjectState);
         }
-        if (p.chat_history?.length) {
-          const restored = p.chat_history.map((m, i) => ({
+        const hist = Array.isArray(p.chat_history) ? p.chat_history : [];
+        if (hist.length) {
+          const restored = hist.map((m, i) => ({
             role: m.role === "assistant" ? "ai" as const : "user" as const,
             content: m.content,
             id: i,
