@@ -62,7 +62,7 @@ export default function ScriptPage() {
     finally { setIsGenerating(false); }
   }
 
-  if (!project) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#FFF9E6"}}><div style={{width:8,height:8,background:"#C62828",borderRadius:"50%"}} /></div>;
+  if (!project) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8F8A6"}}><div style={{width:8,height:8,background:"#FF2D2D",borderRadius:"50%"}} /></div>;
 
   const vibeOptions = Object.keys(VIBE_LABELS) as Vibe[];
   const toneOptions = Object.keys(TONE_LABELS) as Tone[];
@@ -72,7 +72,7 @@ export default function ScriptPage() {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap');
-        :root { --bg:#FFF9E6; --surface:#ffffff; --surface2:#FFF3CC; --border:rgba(0,0,0,0.08); --accent:#C62828; --accent2:#C62828; --text:#1a1a1a; --muted:#78716c; --radius:14px; }
+        :root { --bg:#F8F8A6; --surface:#ffffff; --surface2:#F2F29A; --border:rgba(0,0,0,0.08); --accent:#FF2D2D; --accent2:#FF2D2D; --text:#1a1a1a; --muted:#78716c; --radius:14px; }
         * { box-sizing:border-box; margin:0; padding:0; }
         body { background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,sans-serif; min-height:100vh; }
         .page-wrap { max-width:860px; margin:0 auto; padding:48px 24px 120px; }
@@ -84,7 +84,7 @@ export default function ScriptPage() {
         .section-label { font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
         .input-field { width:100%; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-family:inherit; font-size:15px; padding:14px 16px; outline:none; transition:border-color 0.2s; resize:none; }
         .input-field::placeholder { color:var(--muted); }
-        .input-field:focus { border-color:rgba(198,40,40,0.4); }
+        .input-field:focus { border-color:rgba(255,45,45,0.4); }
         textarea.input-field { min-height:110px; line-height:1.6; }
         .flex { display:flex; } .flex-wrap { flex-wrap:wrap; } .gap-2 { gap:8px; }
         .chip { border-radius:999px; border:1px solid; font-family:inherit; font-size:13px; font-weight:500; padding:6px 14px; cursor:pointer; transition:all 0.15s; white-space:nowrap; }

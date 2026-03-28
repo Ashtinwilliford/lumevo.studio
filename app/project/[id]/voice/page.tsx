@@ -20,7 +20,7 @@ const PERSONALITY_TAGS = [
 
 const S = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap');
-  :root { --bg:#FFF9E6; --surface:#ffffff; --surface2:#FFF3CC; --border:rgba(0,0,0,0.08); --accent:#C62828; --text:#1a1a1a; --muted:#78716c; --radius:14px; }
+  :root { --bg:#F8F8A6; --surface:#ffffff; --surface2:#F2F29A; --border:rgba(0,0,0,0.08); --accent:#FF2D2D; --text:#1a1a1a; --muted:#78716c; --radius:14px; }
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans-serif;min-height:100vh;}
   .wrap{max-width:820px;margin:0 auto;padding:48px 24px 120px;}
@@ -33,7 +33,7 @@ const S = `
   .divider{border:none;border-top:1px solid var(--border);margin:44px 0;}
   .voice-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-bottom:8px;}
   .voice-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:border-color 0.2s,box-shadow 0.2s;position:relative;}
-  .voice-card-active{border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(198,40,40,0.08);}
+  .voice-card-active{border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(255,45,45,0.08);}
   .vc-name{font-size:15px;font-weight:600;margin-bottom:4px;}
   .vc-personality{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;}
   .vc-meta{font-size:11px;color:var(--muted);margin-bottom:14px;}
@@ -45,18 +45,18 @@ const S = `
   .btn-xs-outline:hover{color:var(--text);border-color:rgba(0,0,0,0.2);}
   .btn-xs-ghost{background:transparent;color:var(--accent);border-color:transparent;padding-left:0;}
   .btn-xs-ghost:hover{opacity:0.7;}
-  .active-badge{position:absolute;top:12px;right:12px;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--accent);background:rgba(198,40,40,0.08);padding:3px 8px;border-radius:999px;}
+  .active-badge{position:absolute;top:12px;right:12px;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;color:var(--accent);background:rgba(255,45,45,0.08);padding:3px 8px;border-radius:999px;}
   .clone-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;}
   .label{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
   .input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;font-size:15px;padding:12px 14px;outline:none;transition:border-color 0.2s;margin-bottom:20px;}
-  .input:focus{border-color:rgba(198,40,40,0.4);}
+  .input:focus{border-color:rgba(255,45,45,0.4);}
   .input::placeholder{color:var(--muted);}
   .tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;}
   .tag{border-radius:999px;border:1px solid var(--border);font-family:inherit;font-size:12px;font-weight:500;padding:5px 13px;cursor:pointer;background:var(--surface);color:var(--muted);transition:all 0.15s;}
   .tag:hover{border-color:rgba(0,0,0,0.2);color:var(--text);}
   .tag-on{background:var(--accent);border-color:var(--accent);color:#fff;}
   .drop{border:2px dashed var(--border);border-radius:12px;padding:40px 20px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s;}
-  .drop:hover,.drop-on{border-color:rgba(198,40,40,0.45);background:rgba(198,40,40,0.02);}
+  .drop:hover,.drop-on{border-color:rgba(255,45,45,0.45);background:rgba(255,45,45,0.02);}
   .drop-icon{width:44px;height:44px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:20px;}
   .drop-title{font-size:14px;font-weight:600;}
   .drop-sub{font-size:12px;color:var(--muted);}
@@ -64,7 +64,7 @@ const S = `
   .file-row{display:flex;align-items:center;gap:10px;background:var(--surface2);border-radius:8px;padding:10px 14px;}
   .file-row-name{font-size:13px;font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .file-type{font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;padding:2px 7px;border-radius:4px;background:rgba(0,0,0,0.06);color:var(--muted);}
-  .file-type-video{background:rgba(198,40,40,0.1);color:var(--accent);}
+  .file-type-video{background:rgba(255,45,45,0.1);color:var(--accent);}
   .file-remove{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0;line-height:1;transition:color 0.15s;}
   .file-remove:hover{color:var(--accent);}
   .progress-bar{height:4px;background:var(--surface2);border-radius:999px;overflow:hidden;margin-top:8px;}
@@ -79,11 +79,11 @@ const S = `
   .audio-wrap{margin-top:12px;}
   audio{width:100%;border-radius:8px;}
   .preview-text{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;font-size:14px;padding:12px 14px;outline:none;resize:none;min-height:80px;transition:border-color 0.2s;line-height:1.6;}
-  .preview-text:focus{border-color:rgba(198,40,40,0.4);}
+  .preview-text:focus{border-color:rgba(255,45,45,0.4);}
   .preview-text::placeholder{color:var(--muted);}
   .caption-options{display:flex;flex-direction:column;gap:6px;margin:8px 0 16px;}
   .caption-btn{text-align:left;background:var(--surface2);border:1px solid transparent;border-radius:8px;padding:9px 13px;cursor:pointer;font-size:13px;color:var(--text);font-family:inherit;line-height:1.5;transition:all 0.15s;}
-  .caption-btn:hover,.caption-btn-on{background:rgba(198,40,40,0.06);border-color:rgba(198,40,40,0.25);}
+  .caption-btn:hover,.caption-btn-on{background:rgba(255,45,45,0.06);border-color:rgba(255,45,45,0.25);}
   .empty-voices{text-align:center;padding:32px;color:var(--muted);font-size:14px;background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);}
 `;
 
@@ -249,8 +249,8 @@ export default function VoicePage() {
   }
 
   if (!project) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#FFF9E6" }}>
-      <div style={{ width: 8, height: 8, background: "#C62828", borderRadius: "50%" }} />
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F8F8A6" }}>
+      <div style={{ width: 8, height: 8, background: "#FF2D2D", borderRadius: "50%" }} />
     </div>
   );
 

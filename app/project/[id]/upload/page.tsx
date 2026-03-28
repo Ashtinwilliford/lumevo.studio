@@ -7,7 +7,7 @@ import type { Project, UploadedFile } from "../../../../lib/types";
 
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap');
-  :root { --bg:#FFF9E6; --surface:#ffffff; --surface2:#FFF3CC; --border:rgba(0,0,0,0.08); --accent:#C62828; --text:#1a1a1a; --muted:#78716c; --radius:14px; }
+  :root { --bg:#F8F8A6; --surface:#ffffff; --surface2:#F2F29A; --border:rgba(0,0,0,0.08); --accent:#FF2D2D; --text:#1a1a1a; --muted:#78716c; --radius:14px; }
   * { box-sizing:border-box; margin:0; padding:0; }
   body { background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,sans-serif; min-height:100vh; }
   .page-wrap { max-width:860px; margin:0 auto; padding:48px 24px 120px; }
@@ -16,7 +16,7 @@ const STYLES = `
   .page-title { font-family:'Syne',sans-serif; font-size:32px; font-weight:800; letter-spacing:-0.5px; }
   .page-subtitle { color:var(--muted); font-size:15px; margin-top:6px; margin-bottom:40px; }
   .drop-zone { border:2px dashed var(--border); border-radius:var(--radius); padding:60px 24px; display:flex; flex-direction:column; align-items:center; gap:14px; text-align:center; cursor:pointer; transition:border-color 0.2s,background 0.2s; }
-  .drop-zone:hover, .drop-zone-active { border-color:rgba(198,40,40,0.4); background:rgba(198,40,40,0.02); }
+  .drop-zone:hover, .drop-zone-active { border-color:rgba(255,45,45,0.4); background:rgba(255,45,45,0.02); }
   .drop-icon { width:52px; height:52px; border-radius:50%; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:22px; }
   .drop-title { font-size:16px; font-weight:600; color:var(--text); }
   .drop-sub { font-size:13px; color:var(--muted); }
@@ -97,7 +97,7 @@ export default function UploadPage() {
     setTimeout(() => setSaved(false), 2000);
   }
 
-  if (!project) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#FFF9E6" }}><div style={{ width: 8, height: 8, background: "#C62828", borderRadius: "50%" }} /></div>;
+  if (!project) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F8F8A6" }}><div style={{ width: 8, height: 8, background: "#FF2D2D", borderRadius: "50%" }} /></div>;
 
   return (
     <>
