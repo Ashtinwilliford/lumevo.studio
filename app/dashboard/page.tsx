@@ -3,20 +3,22 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
-type Section = "overview" | "uploads" | "create" | "video" | "brand" | "projects" | "analytics" | "billing" | "settings";
+type Section = "overview" | "uploads" | "create" | "video" | "brand" | "projects" | "plan" | "aimanager" | "analytics" | "billing" | "settings";
 
 interface User { id: string; name: string; email: string; subscription_tier: string; created_at: string; }
 interface Upload { id: string; file_type: string; file_name: string; mime_type: string; file_size: number; analysis_status: string; created_at: string; }
 interface Project { id: string; title: string; project_type: string; target_platform: string; status: string; created_at: string; updated_at: string; }
 interface BrandProfile { user_id: string; tone_summary: string; personality_summary: string; audience_summary: string; pacing_style: string; cta_style: string; confidence_score: number; learning_progress_percent: number; upload_count: number; generation_count: number; }
 
-const NAV: { id: Section; icon: string; label: string; group?: string }[] = [
+const NAV: { id: Section; icon: string; label: string; group?: string; elite?: boolean }[] = [
   { id: "overview", icon: "⌂", label: "Overview" },
   { id: "uploads", icon: "↑", label: "Uploads", group: "Create" },
   { id: "create", icon: "✦", label: "Create Content", group: "Create" },
   { id: "video", icon: "▶", label: "Create Video", group: "Create" },
   { id: "brand", icon: "◉", label: "Brand Profile", group: "Learn" },
   { id: "projects", icon: "◻", label: "Projects", group: "Learn" },
+  { id: "plan", icon: "◆", label: "Content Plan", group: "Learn" },
+  { id: "aimanager", icon: "✧", label: "AI Manager", group: "Learn", elite: true },
   { id: "analytics", icon: "▲", label: "Analytics", group: "Learn" },
   { id: "billing", icon: "◈", label: "Billing", group: "Account" },
   { id: "settings", icon: "⚙", label: "Settings", group: "Account" },
@@ -722,6 +724,250 @@ function Settings({ user, onLogout }: { user: User; onLogout: () => void }) {
   );
 }
 
+// ── CONTENT PLAN ─────────────────────────────────────────────────────────────
+interface ContentIdea { type: string; title: string; why: string; platform: string; duration: string; }
+
+function ContentPlan({ user, onNav }: { user: User; onNav: (s: Section) => void }) {
+  const [plan, setPlan] = useState<ContentIdea[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [generated, setGenerated] = useState(false);
+  const isLocked = user.subscription_tier === "free";
+
+  const PLATFORM_ICON: Record<string, string> = { instagram: "◉", tiktok: "▶", youtube: "▲", general: "✦" };
+
+  async function generatePlan() {
+    setLoading(true);
+    const res = await fetch("/api/content-plan");
+    if (res.ok) { const d = await res.json(); setPlan(d.plan); setGenerated(true); }
+    setLoading(false);
+  }
+
+  if (isLocked) {
+    return (
+      <div>
+        <div style={{ marginBottom: 36 }}>
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Content Plan</h2>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Your AI-generated posting strategy based on your brand and recent work.</p>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 20, padding: "48px 40px", border: "1px solid rgba(0,0,0,0.07)", textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 16 }}>◆</div>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 10 }}>Upgrade to unlock Content Plan</div>
+          <div style={{ fontSize: 15, color: "#7c7660", marginBottom: 28, maxWidth: 400, margin: "0 auto 28px" }}>Your AI content strategist recommends exactly what to post next, and why — based on what works for your style and audience.</div>
+          <button onClick={() => onNav("billing")} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 32px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+            See Plans →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 36 }}>
+        <div>
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Content Plan</h2>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Your AI strategist recommends what to create next — based on your brand and what performs.</p>
+        </div>
+        <button onClick={generatePlan} disabled={loading}
+          style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 22px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
+          {loading ? "Generating…" : generated ? "Refresh Plan" : "Generate Plan"}
+        </button>
+      </div>
+
+      {!generated && !loading && (
+        <div style={{ background: "#fff", borderRadius: 20, padding: "56px 40px", border: "1px solid rgba(0,0,0,0.07)", textAlign: "center" }}>
+          <div style={{ fontSize: 36, marginBottom: 16 }}>◆</div>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, marginBottom: 10 }}>Ready to plan your next week</div>
+          <div style={{ fontSize: 15, color: "#7c7660", marginBottom: 28 }}>Click &ldquo;Generate Plan&rdquo; and Lumevo will analyze your brand and create personalized content recommendations.</div>
+        </div>
+      )}
+
+      {loading && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {[1,2,3,4].map(i => (
+            <div key={i} style={{ background: "#fff", borderRadius: 16, padding: 24, border: "1px solid rgba(0,0,0,0.07)", opacity: 0.5 + i * 0.1, animation: "pulse 1.5s ease-in-out infinite" }}>
+              <div style={{ height: 14, background: "#F8F8A6", borderRadius: 8, width: "40%", marginBottom: 10 }} />
+              <div style={{ height: 20, background: "#F2F29A", borderRadius: 8, width: "70%", marginBottom: 10 }} />
+              <div style={{ height: 12, background: "#F8F8A6", borderRadius: 8, width: "90%" }} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {generated && plan.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {plan.map((idea, i) => (
+            <div key={i} style={{ background: "#fff", borderRadius: 18, padding: "24px 26px", border: "1px solid rgba(0,0,0,0.07)", display: "flex", gap: 20, alignItems: "flex-start" }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#FF2D2D", flexShrink: 0, fontWeight: 700 }}>
+                {i + 1}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#7c7660" }}>{idea.type}</span>
+                  <span style={{ fontSize: 11, background: "#F8F8A6", padding: "2px 10px", borderRadius: 999, color: "#7c7660" }}>{PLATFORM_ICON[idea.platform]} {PLATFORM_LABELS[idea.platform] || idea.platform}</span>
+                  <span style={{ fontSize: 11, background: "#F8F8A6", padding: "2px 10px", borderRadius: 999, color: "#7c7660" }}>{idea.duration}</span>
+                </div>
+                <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 17, fontWeight: 700, marginBottom: 8, lineHeight: 1.3 }}>{idea.title}</div>
+                <div style={{ fontSize: 13, color: "#7c7660", lineHeight: 1.6 }}>{idea.why}</div>
+              </div>
+              <button onClick={() => onNav("create")}
+                style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "9px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+                Create →
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── AI MANAGER ────────────────────────────────────────────────────────────────
+interface ChatMessage { role: "user" | "assistant"; content: string; }
+
+const QUICK_COMMANDS = [
+  "Make this feel more expensive",
+  "Turn my uploads into a launch reel",
+  "Write a voiceover for my latest project",
+  "Create 3 directions for different audiences",
+  "Plan next week's content from my uploads",
+  "What should I post this week?",
+];
+
+function AIManagerSection({ user, brand, onNav }: { user: User; brand: BrandProfile | null; onNav: (s: Section) => void }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [thinking, setThinking] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const isElite = user.subscription_tier === "elite";
+
+  async function send(text?: string) {
+    const msg = text || input.trim();
+    if (!msg || thinking) return;
+    setInput("");
+    const newMessages: ChatMessage[] = [...messages, { role: "user", content: msg }];
+    setMessages(newMessages);
+    setThinking(true);
+
+    try {
+      const res = await fetch("/api/ai-manager", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg, history: messages }),
+      });
+      const data = await res.json();
+      if (data.reply) {
+        setMessages([...newMessages, { role: "assistant", content: data.reply }]);
+      }
+    } catch { /* silent */ }
+    finally { setThinking(false); }
+  }
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, thinking]);
+
+  if (!isElite) {
+    return (
+      <div>
+        <div style={{ marginBottom: 36 }}>
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>AI Manager</h2>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Your personal creative director. Available on Elite.</p>
+        </div>
+        <div style={{ background: "#1a1a1a", borderRadius: 24, padding: "56px 40px", textAlign: "center" }}>
+          <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 20, color: "#FF2D2D", marginBottom: 20 }}>✧ AI Manager</div>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 12 }}>Your creative director, on demand</div>
+          <div style={{ fontSize: 15, color: "rgba(255,255,255,0.55)", marginBottom: 32, maxWidth: 440, margin: "0 auto 32px", lineHeight: 1.7 }}>
+            Tell Lumevo what you want to make. It thinks like a creative director — strategy, scripting, voiceover direction, multi-version creation, and more.
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32, maxWidth: 360, margin: "0 auto 32px" }}>
+            {QUICK_COMMANDS.slice(0, 3).map(c => (
+              <div key={c} style={{ background: "rgba(255,255,255,0.07)", borderRadius: 10, padding: "12px 16px", fontSize: 14, color: "rgba(255,255,255,0.6)", textAlign: "left" }}>
+                &ldquo;{c}&rdquo;
+              </div>
+            ))}
+          </div>
+          <button onClick={() => onNav("billing")} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "14px 36px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+            Upgrade to Elite →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 180px)", minHeight: 500 }}>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px" }}>AI Manager</h2>
+          <span style={{ background: "#FF2D2D", color: "#fff", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, letterSpacing: 1 }}>ELITE</span>
+        </div>
+        <p style={{ fontSize: 15, color: "#7c7660" }}>
+          {brand?.tone_summary ? `Your brand profile is active. Tone: ${brand.tone_summary}.` : "Your creative director. Tell it what you want to make."}
+        </p>
+      </div>
+
+      <div style={{ flex: 1, background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
+          {messages.length === 0 && (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", textAlign: "center" }}>
+              <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: "#FF2D2D", marginBottom: 8 }}>✧ AI Manager</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Ready to create</div>
+              <div style={{ fontSize: 14, color: "#7c7660", marginBottom: 28 }}>Tell your creative director what you want.</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 520 }}>
+                {QUICK_COMMANDS.map(cmd => (
+                  <button key={cmd} onClick={() => send(cmd)}
+                    style={{ background: "#F8F8A6", border: "none", borderRadius: 999, padding: "9px 16px", fontFamily: "inherit", fontSize: 13, cursor: "pointer", color: "#1a1a1a", fontWeight: 500, transition: "all 0.15s" }}>
+                    {cmd}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {messages.map((m, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+              <div style={{
+                maxWidth: "78%",
+                padding: "14px 18px",
+                borderRadius: m.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+                background: m.role === "user" ? "#FF2D2D" : "#F8F8A6",
+                color: m.role === "user" ? "#fff" : "#1a1a1a",
+                fontSize: 15,
+                lineHeight: 1.65,
+                whiteSpace: "pre-wrap",
+              }}>
+                {m.content}
+              </div>
+            </div>
+          ))}
+
+          {thinking && (
+            <div style={{ display: "flex", justifyContent: "flex-start" }}>
+              <div style={{ background: "#F8F8A6", borderRadius: "18px 18px 18px 4px", padding: "14px 18px", fontSize: 18, letterSpacing: 4 }}>
+                ···
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        <div style={{ padding: "16px 20px", borderTop: "1px solid rgba(0,0,0,0.06)", display: "flex", gap: 10 }}>
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+            placeholder="Tell your AI Manager what you want to create…"
+            style={{ flex: 1, padding: "13px 18px", borderRadius: 999, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, background: "#fafaf4", outline: "none", boxSizing: "border-box" }}
+          />
+          <button onClick={() => send()} disabled={!input.trim() || thinking}
+            style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 22px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: !input.trim() || thinking ? "not-allowed" : "pointer", opacity: !input.trim() ? 0.5 : 1 }}>
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── ROOT ──────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const router = useRouter();
@@ -813,7 +1059,8 @@ export default function DashboardPage() {
                 {navByGroup(group).map(item => (
                   <button key={item.id} className={`nav-item ${section === item.id ? "nav-item-active" : ""}`} onClick={() => navigate(item.id)}>
                     <span style={{ fontSize: 15, width: 20, textAlign: "center" }}>{item.icon}</span>
-                    {item.label}
+                    <span style={{ flex: 1 }}>{item.label}</span>
+                    {item.elite && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, background: "#FF2D2D", color: "#fff", padding: "2px 6px", borderRadius: 4 }}>ELITE</span>}
                   </button>
                 ))}
               </div>
@@ -840,6 +1087,8 @@ export default function DashboardPage() {
           {section === "video" && <CreateVideo />}
           {section === "brand" && <BrandSection brand={brand} onRefresh={fetchData} />}
           {section === "projects" && <ProjectsSection projects={projects} onNav={navigate} />}
+          {section === "plan" && <ContentPlan user={user} onNav={navigate} />}
+          {section === "aimanager" && <AIManagerSection user={user} brand={brand} onNav={navigate} />}
           {section === "analytics" && <Analytics />}
           {section === "billing" && <Billing user={user} />}
           {section === "settings" && <Settings user={user} onLogout={handleLogout} />}

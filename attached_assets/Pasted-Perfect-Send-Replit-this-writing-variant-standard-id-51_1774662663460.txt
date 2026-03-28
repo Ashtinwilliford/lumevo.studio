@@ -1,0 +1,423 @@
+Perfect. Send Replit this:
+
+:::writing{variant=“standard” id=“51284”}
+Build me a clean, premium web app called Lumevo Studio.
+
+This is an AI-powered content creation platform for creators, influencers, and brands.
+
+Core idea:
+You upload. We create. It only gets better the more you use it.
+
+The app should not feel cluttered or overly technical. It should feel simple, modern, dynamic, premium, feminine-leaning, and intelligent. Soft luxury energy. Easy to understand in seconds.
+
+1. Fix current issue first
+
+The app is failing because PostgreSQL package is missing.
+
+Please fix:
+	•	install pg
+	•	install @types/pg if needed
+	•	confirm database connection works
+	•	confirm signup and login flow works end to end
+
+The error is from:
+	•	./lib/db.ts
+	•	import { Pool } from "pg"
+
+Make sure login, signup, and session flow work before continuing UI polish.
+
+2. Overall product structure
+
+I want 4 pricing tiers:
+
+Free
+
+For trying the platform
+
+Features:
+	•	limited uploads
+	•	limited video generations per month
+	•	basic captions
+	•	simple editing
+	•	30 second export max
+	•	watermark or limited export quality
+
+Creator
+
+For solo creators
+
+Features:
+	•	more uploads
+	•	more monthly generations
+	•	30 sec and 1 min exports
+	•	AI captions
+	•	basic voiceover
+	•	saved style preferences
+	•	remove watermark
+
+Pro
+
+For serious creators and growing brands
+
+Features:
+	•	more advanced editing
+	•	stronger brand memory
+	•	longer exports
+	•	content suggestions
+	•	deeper personalization
+	•	more generation volume
+
+AI Manager
+
+This is the highest tier and should be the hero tier
+
+Features:
+	•	everything in Pro
+	•	full brand brain
+	•	AI content strategy
+	•	dynamic learning from uploads and created videos
+	•	multi-version generation
+	•	advanced voiceover tools
+	•	better music/audio decisions
+	•	creative direction assistant
+	•	premium export quality
+	•	priority processing
+
+3. Public pages needed
+
+Build these pages:
+
+Home page
+
+Very clean and premium.
+Main message:
+You upload. We create.
+Sub-message:
+An AI content studio that learns your style, builds your brand brain, and creates better content the more you use it.
+
+Sections:
+	•	hero
+	•	how it works
+	•	feature showcase
+	•	tier comparison
+	•	testimonials placeholder
+	•	CTA to sign up
+
+Pricing page
+
+Simple clean pricing cards for:
+	•	Free
+	•	Creator
+	•	Pro
+	•	AI Manager
+
+Make AI Manager visually stand out as the premium option.
+
+Login page
+
+Very simple.
+	•	email
+	•	password
+	•	login button
+	•	link to sign up
+	•	forgot password placeholder if needed
+
+Signup page
+
+Clean and minimal.
+Allow:
+	•	name
+	•	email
+	•	password
+	•	select plan or start free
+
+4. Post-login experience
+
+Start by designing the AI Manager dashboard first, then scale backward for lower tiers.
+
+The dashboard should feel like a creative control room, not a complicated editing tool.
+
+It should feel like:
+	•	intelligent
+	•	calm
+	•	premium
+	•	personalized
+	•	dynamic without being busy
+
+5. AI Manager dashboard layout
+
+Top section:
+A clean greeting area like:
+	•	“Good evening, Ashtin”
+	•	“Your brand brain is warming up.”
+
+Under that, 3 main action cards:
+	•	Create from Uploads
+	•	AI Content Plan
+	•	Your Brand Profile
+
+Then build these sections:
+
+A. Brand Brain
+
+This is one of the most important parts.
+
+Show what the AI has learned about the user over time:
+	•	tone
+	•	vibe
+	•	visual style
+	•	font personality
+	•	audience preference
+	•	preferred pacing
+	•	voiceover style
+	•	best-performing video length
+	•	color/style direction
+
+Example labels:
+	•	Tone: warm, confident, feminine
+	•	Style: polished lifestyle with soft luxury
+	•	Best length: 30 to 60 sec
+	•	Audience likes: storytelling, aesthetic edits, personal voice
+	•	Visual identity: pastel, red accents, soft modern design
+
+This section should feel alive and update over time.
+
+B. Create Box
+
+A simple creation area with prompt:
+What do you want to make today?
+
+Options:
+	•	Reel
+	•	TikTok
+	•	Story sequence
+	•	YouTube Short
+	•	30 sec video
+	•	1 min video
+	•	2 min video
+	•	3 min video
+	•	Voiceover video
+	•	Faceless montage
+	•	Product video
+	•	Launch video
+
+Also include:
+	•	button for Use recent uploads
+	•	button for Generate 3 creative directions
+
+C. Upload Intelligence
+
+When a user uploads photos or clips, the AI should automatically suggest next steps.
+
+Examples:
+	•	remove bad audio
+	•	keep original audio if useful
+	•	add music
+	•	create a voiceover
+	•	build 30 sec / 1 min / 2 min / 3 min versions
+	•	select best moments
+	•	reorder clips in a compelling way
+	•	match user’s brand style automatically
+
+This section should clearly show uploaded assets and suggested outputs.
+
+D. AI Content Strategy
+
+Show recommended content to make next.
+
+Example:
+	•	Post 1: personal story reel
+	•	Post 2: lifestyle montage
+	•	Post 3: product-focused edit
+	•	Post 4: voiceover authority video
+
+Each recommendation should have:
+	•	why it is being suggested
+	•	quick CTA button: Generate now
+
+E. Learning / Performance Insights
+
+Keep this simple, not a huge analytics dashboard.
+
+Show:
+	•	what is working
+	•	what the AI learned this week
+	•	audience preference signals
+
+Examples:
+	•	shorter intros are performing better
+	•	narration is outperforming music-only edits
+	•	product close-ups are increasing watch time
+	•	warm hooks are doing better than direct intros
+
+F. AI Manager Chat
+
+This is the premium assistant area.
+
+A clean assistant panel where the user can type commands like:
+	•	make this look more expensive
+	•	turn these clips into a launch reel
+	•	write a voiceover for this
+	•	create 3 versions for different audiences
+	•	use my normal style but bolder
+	•	make this feel more personal
+	•	create next week’s content from my uploads
+
+This should feel like a creative director, not just a chatbot.
+
+6. Lower-tier dashboard logic
+
+Use the AI Manager dashboard as the full version, then simplify for the lower tiers.
+
+Pro dashboard
+
+Include:
+	•	upload area
+	•	video generation
+	•	saved brand style
+	•	content ideas
+	•	some audience/style learning
+
+Do not include full AI Manager experience.
+
+Creator dashboard
+
+Include:
+	•	upload
+	•	create video
+	•	recent projects
+	•	captions
+	•	simple voiceover
+	•	saved preferences
+
+Keep it faster and simpler.
+
+Free dashboard
+
+Include:
+	•	limited uploads
+	•	limited generations
+	•	very basic creation flow
+	•	teaser of premium features locked behind upgrade
+
+Use upgrade prompts tastefully, not aggressively.
+
+7. Main feature pages after login
+
+Build these app pages:
+
+Dashboard
+
+Main home for each user based on plan
+
+Uploads
+
+User can upload:
+	•	videos
+	•	photos
+	•	audio
+Show recent uploads and status
+
+Projects
+
+Saved and generated content lives here
+
+Brand Profile
+
+Show learned style, tone, audience, vibe, and preferences
+
+Content Plan
+
+Show AI recommendations for what to post next
+
+AI Manager
+
+Premium assistant chat and creative direction page
+
+Account / Billing
+
+Manage plan, usage, and subscription
+
+8. Back-end logic I want planned
+
+I need the product built so that the AI improves with use.
+
+At a high level, structure it so the platform can store and learn:
+	•	uploaded assets
+	•	generated videos
+	•	user prompts
+	•	chosen outputs
+	•	preferred styles
+	•	voice preferences
+	•	pacing preferences
+	•	hooks/caption preferences
+	•	engagement/performance signals if connected later
+
+The goal is that over time the user gets a smarter and more personalized creation experience.
+
+9. Future workflow direction
+
+Please architect it so these future features can be plugged in:
+	•	ElevenLabs voice generation
+	•	automatic voiceover creation
+	•	music suggestion/replacement
+	•	scene selection from uploads
+	•	automatic caption generation
+	•	multi-version export
+	•	content repurposing across formats
+	•	audience/personality memory
+	•	social account connection later
+	•	performance-based learning later
+
+10. Design direction
+
+Visual direction:
+	•	clean
+	•	premium
+	•	soft luxury
+	•	feminine modern
+	•	simple but smart
+	•	dynamic without clutter
+	•	slightly editorial feel
+
+Avoid:
+	•	overly corporate design
+	•	generic SaaS look
+	•	too many colors
+	•	busy dashboards
+	•	heavy technical UI
+
+I want:
+	•	soft backgrounds
+	•	elegant spacing
+	•	rounded cards
+	•	strong typography
+	•	premium, calming layout
+	•	visually simple but clearly powerful
+
+11. Build priority order
+
+Please build in this order:
+	1.	Fix database/login/signup issue
+	2.	Make authentication fully functional
+	3.	Build public pages: home, pricing, login, signup
+	4.	Build AI Manager dashboard first
+	5.	Build Pro, Creator, and Free dashboard variations
+	6.	Build uploads/projects/brand profile/content plan/account pages
+	7.	Prepare back-end structure for learning, personalization, and future AI workflows
+
+12. Final goal
+
+This product should feel like:
+an AI content studio that learns your brand and starts creating like it knows you.
+
+Not just an editor.
+Not just a scheduler.
+Not just a template app.
+
+It should feel like a creative partner that gets smarter every time the user uploads content and creates videos.
+:::
+
+And here’s the cleaner line I’d put at the top if you want it even stronger:
+
+Lumevo Studio is your AI content manager. You upload the raw moments. It turns them into branded, polished content that gets smarter with every use.
