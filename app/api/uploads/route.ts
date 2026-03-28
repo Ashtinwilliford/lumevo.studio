@@ -14,7 +14,7 @@ const ai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-export const config = { api: { bodyParser: false } };
+export const maxDuration = 60;
 
 export async function GET() {
   const session = await getSession();

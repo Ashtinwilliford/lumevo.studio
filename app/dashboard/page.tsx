@@ -10,7 +10,7 @@ interface Upload { id: string; file_type: string; file_name: string; mime_type: 
 interface Project { id: string; title: string; project_type: string; target_platform: string; target_duration?: number; vibe?: string; status: string; created_at: string; updated_at: string; }
 interface FullProject extends Project { generated_content?: { script?: string; caption?: string } | null; }
 interface Voiceover { id: string; script_content: string; provider_voice_id?: string; status: string; created_at: string; }
-interface BrandProfile { user_id: string; tone_summary: string; personality_summary: string; audience_summary: string; pacing_style: string; cta_style: string; confidence_score: number; learning_progress_percent: number; upload_count: number; generation_count: number; }
+interface BrandProfile { user_id: string; tone_summary: string; personality_summary: string; audience_summary: string; pacing_style: string; cta_style: string; visual_style_summary?: string; voice_preferences?: string; hook_style?: string; pattern_interrupt_style?: string; emotional_arc_preference?: string; music_genre_preference?: string; creator_archetype?: string; confidence_score: number; learning_progress_percent: number; upload_count: number; generation_count: number; last_learned_at?: string; }
 
 const NAV: { id: Section; icon: string; label: string; group?: string; elite?: boolean }[] = [
   { id: "overview", icon: "⌂", label: "Overview" },
@@ -527,6 +527,20 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
   const [trialBlocked, setTrialBlocked] = useState(user.subscription_tier === "trial" && projects.length >= TRIAL_LIMIT);
   const [composing, setComposing] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
+  const [includeMusic, setIncludeMusic] = useState(true);
+  const [feedbackSent, setFeedbackSent] = useState<string | null>(null);
+  const [composeResult, setComposeResult] = useState<{ editorialNote?: string; emotionalArc?: string } | null>(null);
+
+  async function logFeedback(action: string, projectId?: string) {
+    setFeedbackSent(action);
+    try {
+      await fetch("/api/project/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, action }),
+      });
+    } catch { /* non-blocking */ }
+  }
 
   async function composeVideo(projectId: string, script: string, audioBase64: string | null) {
     if (!selectedIds.length) return null;
@@ -546,10 +560,14 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
           duration: projectState.duration || 30,
           useVoiceClone,
           audioBase64,
+          includeMusic,
         }),
       });
-      const data = await res.json() as { videoUrl?: string; error?: string; timeline?: unknown };
-      if (data.videoUrl) return data.videoUrl as string;
+      const data = await res.json() as { videoUrl?: string; error?: string; timeline?: unknown; editorialNote?: string; emotionalArc?: string };
+      if (data.videoUrl) {
+        setComposeResult({ editorialNote: data.editorialNote, emotionalArc: data.emotionalArc });
+        return data.videoUrl as string;
+      }
       setComposeError(data.error || "Compose failed");
       return null;
     } catch {
@@ -565,6 +583,7 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
     link.href = videoUrl;
     link.download = `${(projectState.title || "lumevo-video").replace(/\s+/g, "-").toLowerCase()}.mp4`;
     link.click();
+    if (result?.projectId) logFeedback("download", result.projectId);
   }
 
   useEffect(() => { setLocalUploads(uploads); }, [uploads]);
@@ -874,7 +893,7 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
 
         {/* Voice upsell */}
         {!result.hasVoice && (
-          <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "16px 20px", display: "flex", gap: 14, alignItems: "center" }}>
+          <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "16px 20px", display: "flex", gap: 14, alignItems: "center", marginBottom: 14 }}>
             <div style={{ fontSize: 24, flexShrink: 0 }}>🎙</div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>
@@ -888,6 +907,67 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
             </div>
           </div>
         )}
+
+        {/* AI Creative Director Insights */}
+        {composeResult && (composeResult.editorialNote || composeResult.emotionalArc) && (
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid rgba(0,0,0,0.07)", padding: "16px 20px", marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 10 }}>Lumevo&apos;s Edit</div>
+            {composeResult.editorialNote && (
+              <div style={{ display: "flex", gap: 10, marginBottom: 8, alignItems: "flex-start" }}>
+                <div style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>◈</div>
+                <div style={{ fontSize: 13, color: "#1a1a1a", lineHeight: 1.6 }}>
+                  <span style={{ fontWeight: 700, color: "#FF2D2D" }}>Edit strategy: </span>
+                  {composeResult.editorialNote}
+                </div>
+              </div>
+            )}
+            {composeResult.emotionalArc && (
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <div style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>◉</div>
+                <div style={{ fontSize: 13, color: "#1a1a1a", lineHeight: 1.6 }}>
+                  <span style={{ fontWeight: 700, color: "#FF2D2D" }}>Emotional arc: </span>
+                  {composeResult.emotionalArc}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Feedback system */}
+        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid rgba(0,0,0,0.07)", padding: "16px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 12 }}>How did this land?</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              { action: "thumbs_up", label: "✓ Loved it", bg: feedbackSent === "thumbs_up" ? "#FF2D2D" : "#fafaf4", color: feedbackSent === "thumbs_up" ? "#fff" : "#1a1a1a", border: feedbackSent === "thumbs_up" ? "#FF2D2D" : "rgba(0,0,0,0.1)" },
+              { action: "thumbs_down", label: "✕ Not quite", bg: feedbackSent === "thumbs_down" ? "#1a1a1a" : "#fafaf4", color: feedbackSent === "thumbs_down" ? "#fff" : "#1a1a1a", border: feedbackSent === "thumbs_down" ? "#1a1a1a" : "rgba(0,0,0,0.1)" },
+              { action: "regenerate", label: "↻ Regenerate", bg: "#fafaf4", color: "#1a1a1a", border: "rgba(0,0,0,0.1)" },
+            ].map(btn => (
+              <button
+                key={btn.action}
+                onClick={() => {
+                  if (btn.action === "regenerate") {
+                    logFeedback("regenerate", result.projectId);
+                    handleReset();
+                  } else {
+                    logFeedback(btn.action, result.projectId);
+                  }
+                }}
+                style={{ padding: "9px 18px", borderRadius: 999, border: `1.5px solid ${btn.border}`, background: btn.bg, color: btn.color, fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all 0.15s" }}>
+                {btn.label}
+              </button>
+            ))}
+          </div>
+          {feedbackSent && feedbackSent !== "regenerate" && (
+            <div style={{ marginTop: 10, padding: "10px 14px", background: "#fafaf4", borderRadius: 10, display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ width: 6, height: 6, background: "#FF2D2D", borderRadius: "50%", flexShrink: 0 }} />
+              <div style={{ fontSize: 12, color: "#7c7660" }}>
+                {feedbackSent === "thumbs_up"
+                  ? "Got it — Lumevo will make more content like this."
+                  : "Noted — Lumevo is adjusting your style profile to create better content next time."}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -1048,6 +1128,18 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
                 </div>
               ) : null}
 
+              {/* Music toggle */}
+              <div onClick={() => setIncludeMusic(v => !v)}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 12, border: `1.5px solid ${includeMusic ? "#FF2D2D" : "rgba(0,0,0,0.08)"}`, marginBottom: 10, cursor: "pointer", background: includeMusic ? "rgba(255,45,45,0.04)" : "#fafaf4", transition: "all 0.15s" }}>
+                <div style={{ width: 36, height: 20, background: includeMusic ? "#FF2D2D" : "rgba(0,0,0,0.12)", borderRadius: 999, position: "relative", flexShrink: 0, transition: "background 0.2s" }}>
+                  <div style={{ width: 16, height: 16, background: "#fff", borderRadius: "50%", position: "absolute", top: 2, left: includeMusic ? 18 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>♪ AI music selection</div>
+                  <div style={{ fontSize: 11, color: "#7c7660" }}>Lumevo picks background music that matches your vibe · smart ducking under voice</div>
+                </div>
+              </div>
+
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={handleConfirmUploads}
                   style={{ flex: 1, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 18px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
@@ -1106,81 +1198,162 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
 
 // ── BRAND PROFILE ─────────────────────────────────────────────────────────────
 function BrandSection({ brand, onRefresh }: { brand: BrandProfile | null; onRefresh: () => void }) {
-  const [refreshing, setRefreshing] = useState(false);
+  const [learning, setLearning] = useState(false);
+  const [learnResult, setLearnResult] = useState<{ keyInsight?: string; archetype?: string } | null>(null);
   const prog = brand?.learning_progress_percent ?? 0;
 
-  async function handleRefresh() {
-    setRefreshing(true);
-    await fetch("/api/brand-profile/refresh", { method: "POST" });
-    onRefresh();
-    setRefreshing(false);
+  async function runDeepLearning() {
+    setLearning(true);
+    setLearnResult(null);
+    try {
+      const res = await fetch("/api/brand/learn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trigger: "manual" }),
+      });
+      const data = await res.json() as { keyInsight?: string; archetype?: string; updated?: boolean };
+      if (data.updated) {
+        setLearnResult({ keyInsight: data.keyInsight, archetype: data.archetype });
+        onRefresh();
+      }
+    } catch { /* silent */ }
+    finally { setLearning(false); }
   }
+
+  const archetypeLabel: Record<string, string> = {
+    educator: "Educator", entertainer: "Entertainer", inspirational: "Inspirational",
+    storyteller: "Storyteller", documenter: "Documenter", provocateur: "Provocateur",
+  };
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 36 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
         <div>
-          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Brand Profile</h2>
-          <p style={{ fontSize: 15, color: "#7c7660" }}>Your AI manager is learning you. Every upload sharpens this profile.</p>
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Creator DNA</h2>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Lumevo builds a living model of your style — it sharpens with every upload, project, and piece of feedback.</p>
         </div>
-        <button onClick={handleRefresh} disabled={refreshing}
-          style={{ background: "transparent", border: "1.5px solid rgba(255,45,45,0.3)", color: "#FF2D2D", borderRadius: 999, padding: "9px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-          {refreshing ? "Refreshing…" : "Refresh Profile"}
+        <button onClick={runDeepLearning} disabled={learning}
+          style={{ background: learning ? "rgba(255,45,45,0.08)" : "#FF2D2D", border: "none", color: learning ? "#FF2D2D" : "#fff", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: learning ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}>
+          {learning ? (
+            <>
+              <span style={{ display: "inline-block", width: 13, height: 13, border: "2px solid rgba(255,45,45,0.2)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              Learning…
+            </>
+          ) : "◈ Run Deep Learning"}
         </button>
       </div>
 
-      <div style={{ background: "#fff", borderRadius: 16, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20 }}>
-        <div style={{ display: "flex", gap: 28, alignItems: "flex-start", marginBottom: 20 }}>
+      {learnResult?.keyInsight && (
+        <div style={{ background: "#1a1a1a", borderRadius: 14, padding: "16px 20px", marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-start" }}>
+          <div style={{ fontSize: 18, flexShrink: 0, marginTop: 2 }}>✦</div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 8 }}>Learning Progress</div>
-            <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 52, color: "#FF2D2D", lineHeight: 1 }}>{prog}%</div>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>What Lumevo just learned</div>
+            <div style={{ fontSize: 14, color: "#fff", lineHeight: 1.7 }}>{learnResult.keyInsight}</div>
           </div>
-          <div style={{ flex: 1, paddingTop: 8 }}>
-            <div style={{ fontSize: 15, color: "#7c7660", lineHeight: 1.7, marginBottom: 12 }}>
-              {prog < 20 ? "Just getting started — upload videos, captions, and scripts to begin training." :
-               prog < 50 ? "Good foundation — keep uploading and generating to sharpen your voice." :
-               prog < 80 ? "Strong profile — your style signals are becoming clear." :
-               "Well-trained — Lumevo knows your brand deeply."}
+        </div>
+      )}
+
+      {/* Progress + archetype */}
+      <div style={{ background: "#fff", borderRadius: 16, padding: 24, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 20, alignItems: "flex-start", marginBottom: 20 }}>
+          <div style={{ textAlign: "center", flexShrink: 0 }}>
+            <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 48, color: "#FF2D2D", lineHeight: 1 }}>{prog}%</div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "#b5b09a", marginTop: 2 }}>Trained</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            {brand?.creator_archetype && (
+              <div style={{ display: "inline-block", background: "#F8F8A6", borderRadius: 999, padding: "4px 12px", fontSize: 12, fontWeight: 700, color: "#1a1a1a", marginBottom: 10 }}>
+                {archetypeLabel[brand.creator_archetype] || brand.creator_archetype}
+              </div>
+            )}
+            <div style={{ fontSize: 14, color: "#7c7660", lineHeight: 1.7, marginBottom: 10 }}>
+              {prog < 20 ? "Just getting started — upload 3+ videos and generate your first project to begin training." :
+               prog < 50 ? "Good foundation. Keep uploading and generating — your patterns are becoming clear." :
+               prog < 80 ? "Strong profile. Lumevo understands your style. Feedback sharpens it further." :
+               "Deeply trained. Every generation is personalized to your exact voice."}
             </div>
-            <div style={{ height: 8, background: "#F8F8A6", borderRadius: 999 }}>
-              <div style={{ height: "100%", width: `${prog}%`, background: "#FF2D2D", borderRadius: 999, transition: "width 0.6s ease" }} />
+            <div style={{ height: 6, background: "#F8F8A6", borderRadius: 999 }}>
+              <div style={{ height: "100%", width: `${prog}%`, background: "#FF2D2D", borderRadius: 999, transition: "width 0.8s ease" }} />
             </div>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div style={{ background: "#fafaf4", borderRadius: 12, padding: "14px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#7c7660", marginBottom: 6 }}>Uploads</div>
-            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 24, fontWeight: 800 }}>{brand?.upload_count ?? 0}</div>
-          </div>
-          <div style={{ background: "#fafaf4", borderRadius: 12, padding: "14px 16px" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#7c7660", marginBottom: 6 }}>Generations</div>
-            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 24, fontWeight: 800 }}>{brand?.generation_count ?? 0}</div>
-          </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+          {[
+            { label: "Uploads", value: brand?.upload_count ?? 0 },
+            { label: "Projects", value: brand?.generation_count ?? 0 },
+            { label: "Confidence", value: brand?.confidence_score != null ? `${brand.confidence_score}%` : "0%" },
+          ].map(s => (
+            <div key={s.label} style={{ background: "#fafaf4", borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
+              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#1a1a1a" }}>{s.value}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "#7c7660", marginTop: 2 }}>{s.label}</div>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 12, marginBottom: 20 }}>
-        {[
-          { label: "Brand Tone", value: brand?.tone_summary, empty: "Not analyzed yet" },
-          { label: "Personality", value: brand?.personality_summary, empty: "Not analyzed yet" },
-          { label: "Target Audience", value: brand?.audience_summary, empty: "Not analyzed yet" },
-          { label: "Pacing Style", value: brand?.pacing_style, empty: "Not analyzed yet" },
-          { label: "Signature CTA", value: brand?.cta_style, empty: "Not analyzed yet" },
-          { label: "Confidence Score", value: brand?.confidence_score != null ? `${brand.confidence_score}%` : null, empty: "0%" },
-        ].map(item => (
-          <div key={item.label} style={{ background: "#fff", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(0,0,0,0.07)" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#7c7660", marginBottom: 8 }}>{item.label}</div>
-            <div style={{ fontFamily: item.value ? "'Syne', sans-serif" : undefined, fontSize: item.value ? 16 : 14, fontWeight: item.value ? 700 : 400, color: item.value ? "#1a1a1a" : "#b5b09a" }}>
-              {item.value || item.empty}
+      {/* Core voice profile */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 12 }}>Voice Profile</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+          {[
+            { label: "Brand Tone", value: brand?.tone_summary },
+            { label: "Personality", value: brand?.personality_summary },
+            { label: "Audience", value: brand?.audience_summary },
+            { label: "Voice Style", value: brand?.voice_preferences },
+          ].filter(i => i.value).map(item => (
+            <div key={item.label} style={{ background: "#fff", borderRadius: 12, padding: "16px 18px", border: "1px solid rgba(0,0,0,0.07)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>{item.label}</div>
+              <div style={{ fontSize: 14, color: "#1a1a1a", lineHeight: 1.65 }}>{item.value}</div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
+
+      {/* Creative intelligence */}
+      {(brand?.hook_style || brand?.pattern_interrupt_style || brand?.emotional_arc_preference) && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 12 }}>Creative Intelligence</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+            {[
+              { label: "Hook Style", value: brand?.hook_style, icon: "◀" },
+              { label: "Emotional Arc", value: brand?.emotional_arc_preference, icon: "◉" },
+              { label: "Pattern Interrupt", value: brand?.pattern_interrupt_style, icon: "◈" },
+            ].filter(i => i.value).map(item => (
+              <div key={item.label} style={{ background: "#1a1a1a", borderRadius: 12, padding: "16px 18px", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <div style={{ fontSize: 16, color: "#FF2D2D", flexShrink: 0, marginTop: 2 }}>{item.icon}</div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "rgba(255,255,255,0.4)", marginBottom: 5 }}>{item.label}</div>
+                  <div style={{ fontSize: 13, color: "#fff", lineHeight: 1.65 }}>{item.value}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Music + visual */}
+      {(brand?.pacing_style || brand?.music_genre_preference || brand?.visual_style_summary) && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 12 }}>Audio &amp; Visual</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[
+              { label: "Pacing Style", value: brand?.pacing_style },
+              { label: "Music Direction", value: brand?.music_genre_preference },
+              { label: "Visual Style", value: brand?.visual_style_summary },
+            ].filter(i => i.value).map(item => (
+              <div key={item.label} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", border: "1px solid rgba(0,0,0,0.07)" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#7c7660", marginBottom: 6 }}>{item.label}</div>
+                <div style={{ fontSize: 13, color: "#1a1a1a", lineHeight: 1.6 }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {!brand?.tone_summary && (
-        <div style={{ background: "#F8F8A6", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(0,0,0,0.06)" }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Lumevo is waiting to learn you.</div>
-          <div style={{ fontSize: 13, color: "#7c7660" }}>Upload a video, paste a caption, or generate your first piece of content to start building your brand profile.</div>
+        <div style={{ background: "#F8F8A6", borderRadius: 14, padding: "20px 22px", border: "1px solid rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Lumevo is waiting to learn you.</div>
+          <div style={{ fontSize: 13, color: "#7c7660", lineHeight: 1.65 }}>Upload 3+ videos of yourself, generate your first project, then click "Run Deep Learning" to build your creator DNA profile.</div>
         </div>
       )}
     </div>

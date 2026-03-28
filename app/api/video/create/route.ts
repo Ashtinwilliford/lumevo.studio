@@ -65,17 +65,24 @@ export async function POST(req: NextRequest) {
     .map((u, i) => `Example ${i + 1} (${u.file_type}): "${(u.transcript_text as string).slice(0, 300).trim()}"`)
     .join("\n");
 
-  // === 3. BRAND CONTEXT using real column names ===
-  const hasBrand = !!(brand?.tone_summary || brand?.personality_summary || brand?.voice_preferences);
+  // === 3. BRAND CONTEXT — full personality injection ===
+  const brand2 = brand as Record<string, unknown> | undefined;
+  const hasBrand = !!(brand2?.tone_summary || brand2?.personality_summary || brand2?.voice_preferences);
 
   const brandLines: string[] = [];
-  if (brand?.tone_summary) brandLines.push(`Tone: ${brand.tone_summary}`);
-  if (brand?.personality_summary) brandLines.push(`Personality: ${brand.personality_summary}`);
-  if (brand?.audience_summary) brandLines.push(`Audience: ${brand.audience_summary}`);
-  if (brand?.voice_preferences) brandLines.push(`Voice style: ${brand.voice_preferences}`);
-  if (brand?.pacing_style) brandLines.push(`Pacing: ${brand.pacing_style}`);
-  if (brand?.cta_style) brandLines.push(`CTA style: ${brand.cta_style}`);
-  if (brand?.visual_style_summary) brandLines.push(`Visual style: ${brand.visual_style_summary}`);
+  if (brand2?.tone_summary) brandLines.push(`Tone: ${brand2.tone_summary}`);
+  if (brand2?.personality_summary) brandLines.push(`Personality: ${brand2.personality_summary}`);
+  if (brand2?.audience_summary) brandLines.push(`Audience: ${brand2.audience_summary}`);
+  if (brand2?.voice_preferences) brandLines.push(`Voice style: ${brand2.voice_preferences}`);
+  if (brand2?.pacing_style) brandLines.push(`Pacing: ${brand2.pacing_style}`);
+  if (brand2?.cta_style) brandLines.push(`CTA style: ${brand2.cta_style}`);
+  if (brand2?.visual_style_summary) brandLines.push(`Visual style: ${brand2.visual_style_summary}`);
+
+  // Personality system additions
+  const hookStyle = (brand2?.hook_style as string) || null;
+  const patternInterrupt = (brand2?.pattern_interrupt_style as string) || null;
+  const emotionalArc = (brand2?.emotional_arc_preference as string) || null;
+  const creatorArchetype = (brand2?.creator_archetype as string) || null;
 
   const brandContext = hasBrand
     ? brandLines.join("\n")
@@ -83,37 +90,62 @@ export async function POST(req: NextRequest) {
 
   const creatorName = (user?.name as string) || "a creator";
 
-  // === 4. SCRIPT PROMPT ===
+  // Fetch recent positive feedback signals for this creator
+  const feedbackRows = await query(
+    `SELECT insight_data FROM learning_insights WHERE user_id = $1
+     AND insight_type = 'positive_style_signal'
+     ORDER BY created_at DESC LIMIT 3`,
+    [userId]
+  );
+  const positiveFeedback = (feedbackRows.rows as { insight_data: Record<string, unknown> }[])
+    .map(r => r.insight_data?.meaning as string)
+    .filter(Boolean)
+    .join("; ");
+
+  // === 4. SCRIPT PROMPT — personality-driven ===
   const vibeInstruction = vibe
-    ? `\nVibe / Mood for this video: "${vibe}" — let this define the tone and energy of every sentence.`
+    ? `\nVibe: "${vibe}" — this defines the emotional temperature of every line.`
     : "";
 
   const examplesSection = voiceExamples
-    ? `\nHere are real samples of how ${creatorName} actually speaks and writes (study the rhythm, word choice, and personality closely):\n${voiceExamples}\n`
+    ? `\nReal samples of how ${creatorName} actually speaks:\n${voiceExamples}\n`
     : "";
 
   const mediaSection = mediaContext
-    ? `\nMedia attached to this video:\n${mediaContext}\n`
+    ? `\nMedia context:\n${mediaContext}\n`
     : "";
 
-  const scriptPrompt = `You are writing a voiceover script for ${creatorName}. Your goal is to sound exactly like them — not like a generic creator.
+  const personalityAdditions = [
+    hookStyle && `HOOK STYLE (use this exact approach for the opener): ${hookStyle}`,
+    emotionalArc && `EMOTIONAL ARC (script should follow this journey): ${emotionalArc}`,
+    patternInterrupt && `PATTERN INTERRUPT (include this technique mid-script): ${patternInterrupt}`,
+    creatorArchetype && `CREATOR ARCHETYPE (write from this perspective): ${creatorArchetype}`,
+    positiveFeedback && `WHAT WORKED BEFORE (lean into this): ${positiveFeedback}`,
+  ].filter(Boolean).join("\n");
 
+  const scriptPrompt = `You are writing a voiceover script for ${creatorName}. Sound EXACTLY like them — not generic.
+
+BRAND VOICE:
 ${brandContext}
 ${vibeInstruction}
+
+PERSONALITY SYSTEM (this is what makes them unique — apply all of it):
+${personalityAdditions || "Build from the brand voice and vibe above."}
+
 ${examplesSection}${mediaSection}
 Write a ${durationWords}-word spoken script for a ${duration}-second ${platformContext} video.
 Topic: "${title}"
 
-Rules:
-- Write in first person, as ${creatorName} speaking
-- Open with a hook in the first 3 seconds that makes scrolling impossible
-- Match the vibe perfectly — if it says "raw and emotional", write raw and emotional. If it says "fun and fast", be punchy and quick
-- Use their natural speech patterns from the examples above — their specific rhythm, word length, how casual or formal they are
-- No em-dashes. Use commas, periods, or short sentence breaks
-- No "hey guys", no "smash that like button", no generic phrases
-- End with a natural, low-pressure call to action that fits the vibe
-- Format: just the spoken words, clean paragraphs, no stage directions or labels
-- Stay within ${durationWords} words — no more, no less`;
+RULES:
+- First sentence = the hook. Follow the hook style above precisely. Make it impossible to scroll past.
+- Write in first person as ${creatorName}. Match their vocabulary, rhythm, and sentence length exactly.
+- Follow the emotional arc — take the viewer on the journey described above
+- If a pattern interrupt technique is listed, weave it into the middle of the script naturally
+- No em-dashes. Use commas, periods, or short breaks
+- No "hey guys", no "smash that like button", no hollow phrases
+- End with a natural, low-pressure CTA that fits the vibe
+- Just the words — no labels, no stage directions
+- Exactly ${durationWords} words`;
 
   // === 5. CAPTION PROMPT ===
   const captionPrompt = `You are writing a social media caption for ${creatorName} on ${platformContext}.
