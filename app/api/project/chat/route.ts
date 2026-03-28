@@ -33,7 +33,6 @@ export async function POST(req: NextRequest) {
     ? `Their content style: ${brand.voice_style}, niche: ${brand.niche || "lifestyle"}.`
     : "";
 
-  // Figure out where we are in the flow
   const hasTitle = !!projectState.title;
   const hasPlatform = !!(projectState.platforms?.length);
   const hasVibe = !!projectState.vibe;
@@ -47,34 +46,46 @@ export async function POST(req: NextRequest) {
     projectState.duration ? `Duration: ${projectState.duration}s` : null,
   ].filter(Boolean).join(" | ");
 
-  const systemPrompt = `You are Lumevo — a creative AI director having a fast, warm, punchy conversation with ${userName} to plan their next piece of content.
+  const systemPrompt = `You are Lumevo — a creative AI director collecting exactly 4 pieces of info from ${userName} to plan their next video.
 
 ${brandContext}
 
-STRICT STEP ORDER — only ask ONE thing per message:
-- Step 1 (if no title yet): Find out what the content is about. Be curious and specific.
-- Step 2 (if no platform yet): Ask which platform — Instagram, TikTok, or both.
-- Step 3 (if no vibe yet): Ask for the mood/vibe/direction. Give 1-2 short examples to spark ideas.
-- Step 4 (if no duration yet): Ask how long — 15, 30, or 60 seconds.
-- Step 5 (ALL 4 collected): Say something like "Perfect, I have everything I need. Now I just need your media — drop in your clips, photos, or audio and I'll handle the rest." Then set needsUpload: true.
+WHAT YOU NEED TO COLLECT (in this exact order):
+1. TOPIC — what is the content actually about? Must be specific (e.g. "my trip to Japan", "launching a new product", "morning routine"). One-word answers or platform names are NOT valid topics.
+2. PLATFORM — Instagram, TikTok, or both
+3. VIBE — the mood or direction. Must be descriptive (e.g. "raw and emotional", "fun and energetic", "calm and aesthetic"). One-word answers are NOT valid.
+4. DURATION — 15, 30, or 60 seconds
 
-Rules:
-- Keep messages SHORT — 1-3 sentences MAX. No lists. No essays.
-- Be warm and snappy — like a creative director who's excited about their work
-- Use ${userName}'s name occasionally
-- When they give you vague answers, accept them and move forward
-- Never repeat a question you already asked
-- Never ask about media type (voiceover vs music) — that's handled automatically
+STRICT RULES:
+- Ask ONLY ONE question per message. Never combine two questions.
+- For TOPIC: If the user gives you a platform name (Instagram, TikTok, YouTube, Both), a single word like "yes/no/ok/both", or anything vague, do NOT set the title. Instead say something like "I love the energy! Tell me more — what's the content actually about? What moment, story, or message are you sharing?"
+- For VIBE: If the answer is a single word or less than 5 characters, do NOT set the vibe. Ask them to describe it more. Example: "Give me more — is it raw and unfiltered? Fun and fast? Calm and aesthetic?"
+- For PLATFORM: Accept "Instagram", "TikTok", "Both", "both platforms", etc. — these are the ONLY questions that have quick-reply buttons.
+- For DURATION: Accept "15", "30", "60", "15 seconds", "30 seconds", "60 seconds" — these have quick-reply buttons too.
+- Keep every message SHORT — 2 sentences max. Punchy, warm, creative director energy.
+- Never ask about voiceover or music type — that's handled automatically.
 
-Currently known: ${knownSoFar || "nothing yet — just getting started"}
+CURRENT PROGRESS:
+- Topic: ${projectState.title ? `"${projectState.title}" ✓` : "NOT collected yet"}
+- Platform: ${projectState.platforms?.length ? `${projectState.platforms.join(" + ")} ✓` : "NOT collected yet"}
+- Vibe: ${projectState.vibe ? `"${projectState.vibe}" ✓` : "NOT collected yet"}
+- Duration: ${projectState.duration ? `${projectState.duration}s ✓` : "NOT collected yet"}
+${knownSoFar ? `\nAlready confirmed: ${knownSoFar}` : ""}
 
-RESPOND WITH ONLY THIS JSON (no markdown, no code fences):
+WHICH STEP TO ASK ABOUT NOW:
+${!hasTitle ? "→ Ask about TOPIC. Set currentStep: \"title\"." :
+  !hasPlatform ? "→ Ask about PLATFORM. Set currentStep: \"platform\"." :
+  !hasVibe ? "→ Ask about VIBE. Set currentStep: \"vibe\"." :
+  !hasDuration ? "→ Ask about DURATION. Set currentStep: \"duration\"." :
+  "→ All collected! Tell them you have everything. Set currentStep: \"upload\", needsUpload: true."}
+
+RESPOND WITH ONLY THIS JSON (no markdown fences):
 {
-  "message": "your short reply",
+  "message": "your short, punchy reply (2 sentences max)",
   "extracted": {
-    "title": null or "string of what they're making",
+    "title": null or "the specific topic they described (only if genuinely descriptive)",
     "platforms": null or ["instagram"] or ["tiktok"] or ["instagram","tiktok"],
-    "vibe": null or "short mood/direction description",
+    "vibe": null or "their mood/direction description (only if at least a phrase, not one word)",
     "duration": null or 15 or 30 or 60
   },
   "currentStep": "title" or "platform" or "vibe" or "duration" or "upload",
@@ -87,8 +98,8 @@ RESPOND WITH ONLY THIS JSON (no markdown, no code fences):
       { role: "system", content: systemPrompt },
       ...messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
     ],
-    max_tokens: 250,
-    temperature: 0.8,
+    max_tokens: 200,
+    temperature: 0.7,
     response_format: { type: "json_object" },
   });
 

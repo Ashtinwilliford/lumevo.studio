@@ -476,7 +476,7 @@ type ChatStep = "title" | "platform" | "vibe" | "duration" | "upload" | null;
 function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
   const firstName = user.name.split(" ")[0];
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "ai", content: `What are we creating today, ${firstName}? Tell me anything — a trip, a moment, a vibe, a product. I'll figure out the rest.`, id: 0 }
+    { role: "ai", content: `What's the content about, ${firstName}? Tell me the actual topic — a trip, a product launch, a morning routine, something that happened. The more specific, the better.`, id: 0 }
   ]);
   const [projectState, setProjectState] = useState<ProjectState>({ title: null, platforms: null, mediaType: null, vibe: null, duration: null });
   const [phase, setPhase] = useState<"chat" | "generating" | "done">("chat");
@@ -610,7 +610,7 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
   function handleReset() {
     setPhase("chat");
     setResult(null);
-    setMessages([{ role: "ai", content: `What are we creating today, ${firstName}? Tell me anything — a trip, a moment, a vibe, a product. I'll figure out the rest.`, id: 0 }]);
+    setMessages([{ role: "ai", content: `What's the content about, ${firstName}? Tell me the actual topic — a trip, a product launch, a morning routine, something that happened. The more specific, the better.`, id: 0 }]);
     setProjectState({ title: null, platforms: null, mediaType: null, vibe: null, duration: null });
     setSelectedIds([]);
     setNeedsUpload(false);
@@ -818,7 +818,11 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            placeholder="Type anything…"
+            placeholder={
+              currentStep === "title" ? "e.g. My trip to Bali, launching my skincare line, my morning routine…" :
+              currentStep === "vibe" ? "e.g. raw and emotional, fun and fast-paced, calm and aesthetic…" :
+              "Type anything…"
+            }
             disabled={isTyping || needsUpload}
             rows={1}
             style={{ flex: 1, padding: "11px 14px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, resize: "none", outline: "none", background: "#fafaf4", lineHeight: 1.5, opacity: isTyping || needsUpload ? 0.5 : 1 }}
