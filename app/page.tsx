@@ -146,12 +146,12 @@ export default function LandingPage() {
         .result-item { background: #F8F8A6; border-radius: 14px; padding: 20px 22px; display: flex; align-items: center; gap: 12px; }
         .result-check { width: 28px; height: 28px; background: #FF2D2D; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700; flex-shrink: 0; }
         .result-text { font-size: 15px; font-weight: 600; color: #1a1a1a; }
-        .output-climax { text-align: center; padding: 72px 48px; background: #1a1a1a; border-radius: 28px; }
-        .output-climax-pre { font-size: 17px; color: rgba(255,255,255,0.4); margin-bottom: 24px; font-style: italic; letter-spacing: 0.2px; line-height: 1.7; }
-        .output-climax-pre em { color: rgba(255,255,255,0.75); font-style: normal; font-weight: 700; }
-        .output-climax-title { font-family: 'Syne', sans-serif; font-size: clamp(48px, 8vw, 96px); font-weight: 800; line-height: 1.0; letter-spacing: -2px; color: #ffffff; margin-bottom: 28px; }
-        .output-climax-title em { color: #F8F8A6; font-style: normal; }
-        .output-climax-sub { font-size: 17px; color: rgba(255,255,255,0.38); letter-spacing: 0.3px; }
+        .output-climax { text-align: center; padding: 72px 48px; background: #FF2D2D; border-radius: 28px; }
+        .output-climax-pre { font-size: 17px; color: rgba(255,255,255,0.65); margin-bottom: 24px; font-style: italic; letter-spacing: 0.2px; line-height: 1.7; }
+        .output-climax-pre em { color: #ffffff; font-style: normal; font-weight: 700; }
+        .output-climax-title { font-family: 'Syne', sans-serif; font-size: clamp(48px, 8vw, 96px); font-weight: 800; line-height: 1.0; letter-spacing: -2px; color: #F8F8A6; margin-bottom: 28px; }
+        .output-climax-title em { color: #ffffff; font-style: normal; }
+        .output-climax-sub { font-size: 17px; color: rgba(255,255,255,0.65); letter-spacing: 0.3px; }
 
         .steps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 52px; }
         .step-card { background: #ffffff; border-radius: 20px; padding: 28px; }
