@@ -36,7 +36,7 @@ function trialDaysLeft(startedAt?: string) {
 }
 const TYPE_LABELS: Record<string, string> = { caption: "Caption", hook: "Hook", post: "Post", script: "Script", video: "Video", ideas: "Ideas" };
 const PLATFORM_LABELS: Record<string, string> = { tiktok: "TikTok", instagram: "Instagram", youtube: "YouTube", general: "General" };
-const STATUS_COLORS: Record<string, string> = { draft: "#b5b09a", queued: "#7c7660", analyzing: "#FF8C00", scripting: "#FF8C00", completed: "#2da44e", failed: "#FF2D2D" };
+const STATUS_COLORS: Record<string, string> = { draft: "#b5b09a", chatting: "#7B61FF", generating: "#FF8C00", queued: "#7c7660", analyzing: "#FF8C00", scripting: "#FF8C00", completed: "#2da44e", failed: "#FF2D2D" };
 
 function fmt(bytes: number) { if (bytes < 1024) return `${bytes} B`; if (bytes < 1048576) return `${(bytes/1024).toFixed(1)} KB`; return `${(bytes/1048576).toFixed(1)} MB`; }
 function fmtDate(d: string) {
@@ -185,6 +185,8 @@ function Overview({ user, uploads, projects, brand, onNav }: {
 function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadCount, setUploadCount] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [textType, setTextType] = useState("caption");
@@ -193,23 +195,33 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
   const [savedToast, setSavedToast] = useState(false);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []).slice(0, 10);
+    if (!files.length) return;
     setUploading(true);
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const fileData = ev.target?.result as string;
-      const type = file.type.startsWith("video/") ? "video" : file.type.startsWith("image/") ? "image" : file.type.startsWith("audio/") ? "audio" : "text";
-      await fetch("/api/uploads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file_name: file.name, file_type: type, mime_type: file.type, file_size: file.size, file_data: fileData.slice(0, 5000) }),
-      });
+    setUploadError(null);
+    setUploadCount(files.length);
+
+    const formData = new FormData();
+    files.forEach(f => formData.append("files", f));
+
+    try {
+      const res = await fetch("/api/uploads", { method: "POST", body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Upload failed" })) as { error?: string };
+        setUploadError(err.error || `Upload failed (${res.status})`);
+      } else {
+        const data = await res.json() as { uploads?: unknown[] };
+        if (!data.uploads?.length) setUploadError("No files were saved. Check file type and try again.");
+        onRefresh();
+      }
+    } catch (err) {
+      setUploadError("Connection error — check your internet and try again.");
+      console.error("Upload error:", err);
+    } finally {
       setUploading(false);
-      onRefresh();
+      setUploadCount(0);
       if (fileRef.current) fileRef.current.value = "";
-    };
-    reader.readAsDataURL(file);
+    }
   }
 
   async function handleGenerate() {
@@ -273,12 +285,26 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
         </div>
 
         {activeTab === "file" ? (
-          <div onClick={() => fileRef.current?.click()}
-            style={{ border: "2px dashed rgba(255,45,45,0.25)", borderRadius: 14, padding: "40px 24px", textAlign: "center", cursor: "pointer", transition: "all 0.2s" }}>
-            <input ref={fileRef} type="file" style={{ display: "none" }} onChange={handleFile} accept="video/*,image/*,audio/*,.txt,.pdf" />
-            <div style={{ fontSize: 32, marginBottom: 12 }}>↑</div>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{uploading ? "Uploading…" : "Click to upload a file"}</div>
-            <div style={{ fontSize: 13, color: "#7c7660" }}>Video, image, audio, text — anything that shows Lumevo your style</div>
+          <div>
+            {uploadError && (
+              <div style={{ background: "#fff0f0", border: "1.5px solid rgba(255,45,45,0.25)", borderRadius: 12, padding: "12px 16px", marginBottom: 10, display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 16 }}>⚠</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#FF2D2D", marginBottom: 2 }}>Upload failed</div>
+                  <div style={{ fontSize: 12, color: "#7c7660" }}>{uploadError}</div>
+                </div>
+                <button onClick={() => setUploadError(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#b5b09a", fontSize: 16, lineHeight: 1 }}>×</button>
+              </div>
+            )}
+            <div onClick={() => !uploading && fileRef.current?.click()}
+              style={{ border: `2px dashed ${uploadError ? "rgba(255,45,45,0.4)" : "rgba(255,45,45,0.25)"}`, borderRadius: 14, padding: "40px 24px", textAlign: "center", cursor: uploading ? "wait" : "pointer", transition: "all 0.2s" }}>
+              <input ref={fileRef} type="file" multiple style={{ display: "none" }} onChange={handleFile} accept="video/*,image/*,audio/*,.txt,.pdf" />
+              <div style={{ fontSize: 32, marginBottom: 12 }}>{uploading ? "⏳" : "↑"}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>
+                {uploading ? `Uploading ${uploadCount} file${uploadCount !== 1 ? "s" : ""}…` : "Click to upload files"}
+              </div>
+              <div style={{ fontSize: 13, color: "#7c7660" }}>Video, image, audio, text — anything that shows Lumevo your style</div>
+            </div>
           </div>
         ) : (
           <div>
@@ -503,7 +529,7 @@ interface ProjectState {
 }
 type ChatStep = "title" | "platform" | "vibe" | "duration" | "upload" | null;
 
-function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: User; projects: Project[] }) {
+function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed }: { uploads: Upload[]; user: User; projects: Project[]; resumeDraftId?: string | null; onResumeConsumed?: () => void }) {
   const firstName = user.name.split(" ")[0];
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "ai", content: `What's the content about, ${firstName}? Tell me the actual topic — a trip, a product launch, a morning routine, something that happened. The more specific, the better.`, id: 0 }
@@ -530,6 +556,36 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
   const [includeMusic, setIncludeMusic] = useState(true);
   const [feedbackSent, setFeedbackSent] = useState<string | null>(null);
   const [composeResult, setComposeResult] = useState<{ editorialNote?: string; emotionalArc?: string } | null>(null);
+  const [draftProjectId, setDraftProjectId] = useState<string | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const draftSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Resume a saved draft project: restore chat history + project state
+  useEffect(() => {
+    if (!resumeDraftId) return;
+    fetch(`/api/project/draft?id=${resumeDraftId}`)
+      .then(r => r.json())
+      .then((data: { project?: { id: string; title: string; chat_history?: Array<{ role: string; content: string }>; draft_state?: Record<string, unknown> } }) => {
+        const p = data.project;
+        if (!p) return;
+        setDraftProjectId(p.id);
+        if (p.draft_state) {
+          setProjectState(p.draft_state as ProjectState);
+        }
+        if (p.chat_history?.length) {
+          const restored = p.chat_history.map((m, i) => ({
+            role: m.role === "assistant" ? "ai" as const : "user" as const,
+            content: m.content,
+            id: i,
+          }));
+          setMessages(restored);
+          setMsgCounter(restored.length);
+        }
+        setPhase("chat");
+        onResumeConsumed?.();
+      })
+      .catch(e => console.warn("Resume failed:", e));
+  }, [resumeDraftId]);
 
   async function logFeedback(action: string, projectId?: string) {
     setFeedbackSent(action);
@@ -625,7 +681,6 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
         if (data.extracted.platforms) newState.platforms = data.extracted.platforms;
         if (data.extracted.vibe) newState.vibe = data.extracted.vibe;
         if (data.extracted.duration) newState.duration = data.extracted.duration;
-        // default mediaType to "both" for generation
         if (!newState.mediaType) newState.mediaType = "both";
       }
       setProjectState(newState);
@@ -635,7 +690,32 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
       setIsTyping(false);
       const aiId = msgCounter + 1;
       setMsgCounter(c => c + 2);
-      setMessages(prev => [...prev, { role: "ai", content: data.message, id: aiId }]);
+      const finalMessages = [...updated, { role: "ai" as const, content: data.message as string, id: aiId }];
+      setMessages(finalMessages);
+
+      // Persist draft: create on first title, update on every subsequent message
+      const chatForDb = finalMessages.map(m => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content }));
+      if (newState.title) {
+        if (draftSaveRef.current) clearTimeout(draftSaveRef.current);
+        draftSaveRef.current = setTimeout(async () => {
+          try {
+            const draftId = draftProjectId;
+            const saveRes = await fetch("/api/project/draft", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                projectId: draftId ?? undefined,
+                title: newState.title,
+                chat_history: chatForDb,
+                draft_state: newState,
+                status: "chatting",
+              }),
+            });
+            const saveData = await saveRes.json() as { projectId?: string };
+            if (!draftId && saveData.projectId) setDraftProjectId(saveData.projectId);
+          } catch (e) { console.warn("Draft save failed:", e); }
+        }, 600);
+      }
     } catch {
       setIsTyping(false);
       setMessages(prev => [...prev, { role: "ai", content: "Sorry, I hit a snag. Try saying that again.", id: msgCounter + 1 }]);
@@ -644,48 +724,71 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
 
   async function startGeneration(state: ProjectState, uploadIdsForGen: string[]) {
     setPhase("generating");
+    setGenerationError(null);
     setStepIdx(0);
     const timers = STEPS.map((_, i) => setTimeout(() => setStepIdx(i), i * 2500));
 
-    // Step 1: Generate script + caption + narration
-    const res = await fetch("/api/video/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: state.title,
-        uploadIds: uploadIdsForGen,
-        platform: state.platforms?.[0] || "tiktok",
-        duration: state.duration || 30,
-        vibe: state.vibe,
-        mediaType: state.mediaType,
-        useVoiceClone,
-      }),
-    });
-    const data = await res.json() as { trialLimitReached?: boolean; script?: string; audioBase64?: string | null; projectId?: string; hasVoice?: boolean; caption?: string };
+    // Mark draft as generating so user can resume if needed
+    if (draftProjectId) {
+      fetch("/api/project/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: draftProjectId, status: "generating" }),
+      }).catch(() => {});
+    }
 
-    if (data.trialLimitReached) {
+    try {
+      // Step 1: Generate script + caption + narration
+      const res = await fetch("/api/video/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: state.title,
+          uploadIds: uploadIdsForGen,
+          platform: state.platforms?.[0] || "tiktok",
+          duration: state.duration || 30,
+          vibe: state.vibe,
+          mediaType: state.mediaType,
+          useVoiceClone,
+          draftProjectId: draftProjectId ?? undefined,
+        }),
+      });
+      const data = await res.json() as { trialLimitReached?: boolean; script?: string; audioBase64?: string | null; projectId?: string; hasVoice?: boolean; caption?: string };
+
+      if (data.trialLimitReached) {
+        timers.forEach(clearTimeout);
+        setTrialBlocked(true);
+        setPhase("chat");
+        return;
+      }
+
+      if (!data.script) {
+        throw new Error("No script was generated — please try again.");
+      }
+
+      // Step 2: If media files selected, compose actual video from clips
+      let videoUrl: string | null = null;
+      if (uploadIdsForGen.length > 0 && data.projectId && data.script) {
+        setStepIdx(3);
+        const composed = await composeVideo(data.projectId, data.script, data.audioBase64 || null);
+        videoUrl = composed;
+      }
+
       timers.forEach(clearTimeout);
-      setTrialBlocked(true);
-      setPhase("chat");
-      return;
+      setStepIdx(STEPS.length);
+      await new Promise(r => setTimeout(r, 500));
+      setResult({
+        ...(data as { script: string; audioBase64: string | null; projectId: string; hasVoice: boolean; caption?: string }),
+        videoUrl,
+      });
+      setDraftProjectId(null);
+      setPhase("done");
+    } catch (err) {
+      timers.forEach(clearTimeout);
+      const msg = err instanceof Error ? err.message : "Something went wrong during generation.";
+      setGenerationError(msg);
+      // Keep phase as "generating" so we can show the error UI with resume option
     }
-
-    // Step 2: If media files selected, compose actual video from clips
-    let videoUrl: string | null = null;
-    if (uploadIdsForGen.length > 0 && data.projectId && data.script) {
-      setStepIdx(3); // show compose step
-      const composed = await composeVideo(data.projectId, data.script, data.audioBase64 || null);
-      videoUrl = composed;
-    }
-
-    timers.forEach(clearTimeout);
-    setStepIdx(STEPS.length);
-    await new Promise(r => setTimeout(r, 500));
-    setResult({
-      ...(data as { script: string; audioBase64: string | null; projectId: string; hasVoice: boolean; caption?: string }),
-      videoUrl,
-    });
-    setPhase("done");
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -724,18 +827,6 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
     startGeneration(projectState, selectedIds);
   }
 
-  function handleReset() {
-    setPhase("chat");
-    setResult(null);
-    setMessages([{ role: "ai", content: `What's the content about, ${firstName}? Tell me the actual topic — a trip, a product launch, a morning routine, something that happened. The more specific, the better.`, id: 0 }]);
-    setProjectState({ title: null, platforms: null, mediaType: null, vibe: null, duration: null });
-    setSelectedIds([]);
-    setNeedsUpload(false);
-    setCurrentStep(null);
-    setStepIdx(0);
-    setInput("");
-  }
-
   // Quick replies tied exactly to what the AI just asked about
   const quickReplies: string[] =
     currentStep === "platform" ? ["Instagram", "TikTok", "Both — Instagram & TikTok"] :
@@ -743,12 +834,60 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
     [];
 
   if (phase === "generating") {
+    if (generationError) {
+      return (
+        <div style={{ paddingTop: 20 }}>
+          <div style={{ textAlign: "center", marginBottom: 32 }}>
+            <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: "#FF2D2D", marginBottom: 8 }}>LUMEVO</div>
+            <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 24, fontWeight: 800, marginBottom: 8 }}>
+              Hit a snag{projectState.title ? ` on "${projectState.title}"` : ""}
+            </h2>
+            <p style={{ fontSize: 14, color: "#7c7660", maxWidth: 360, margin: "0 auto" }}>{generationError}</p>
+          </div>
+
+          {draftProjectId && (
+            <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "16px 20px", maxWidth: 480, margin: "0 auto 16px", border: "1px solid rgba(0,0,0,0.07)", display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 20 }}>💾</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>Your project is saved</div>
+                <div style={{ fontSize: 13, color: "#7c7660" }}>
+                  {projectState.title ? `"${projectState.title}"` : "Your project"} is safe in your Projects tab — pick up where you left off anytime.
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 12, maxWidth: 480, margin: "0 auto" }}>
+            <button
+              onClick={() => { setGenerationError(null); startGeneration(projectState, selectedIds); }}
+              style={{ flex: 1, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 14, padding: "16px 20px", fontFamily: "'Syne', sans-serif", fontSize: 15, fontWeight: 800, cursor: "pointer" }}
+            >
+              Try again
+            </button>
+            <button
+              onClick={() => { setGenerationError(null); setPhase("chat"); }}
+              style={{ flex: 1, background: "#fff", color: "#1a1a1a", border: "1px solid rgba(0,0,0,0.12)", borderRadius: 14, padding: "16px 20px", fontFamily: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+            >
+              Back to chat
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div style={{ paddingTop: 20 }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: "#FF2D2D", marginBottom: 8 }}>LUMEVO</div>
-          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 26, fontWeight: 800, marginBottom: 8 }}>Creating your {projectState.title || "video"}...</h2>
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 26, fontWeight: 800, marginBottom: 8 }}>
+            Creating{projectState.title ? ` "${projectState.title}"` : " your video"}...
+          </h2>
           <p style={{ fontSize: 15, color: "#7c7660" }}>Sit tight — this is where the magic happens.</p>
+          {draftProjectId && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, background: "rgba(248,248,166,0.6)", borderRadius: 999, padding: "5px 14px", fontSize: 12, color: "#7c7660", fontWeight: 600 }}>
+              <span>💾</span> Auto-saved — you can always resume from Projects
+            </div>
+          )}
         </div>
         <div style={{ background: "#fff", borderRadius: 24, padding: "36px 32px", border: "1px solid rgba(0,0,0,0.07)", maxWidth: 480, margin: "0 auto" }}>
           {STEPS.map((step, i) => {
@@ -997,11 +1136,41 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
     );
   }
 
+  function handleReset() {
+    setPhase("chat");
+    setResult(null);
+    setProjectState({ title: null, platforms: null, mediaType: null, vibe: null, duration: null });
+    setMessages([{ role: "ai", content: `What's the content about, ${firstName}? Tell me the actual topic — a trip, a product launch, a morning routine, something that happened. The more specific, the better.`, id: 0 }]);
+    setMsgCounter(1);
+    setSelectedIds([]);
+    setCurrentStep(null);
+    setNeedsUpload(false);
+    setGenerationError(null);
+    setDraftProjectId(null);
+  }
+
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
-        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 4 }}>New Project</h2>
-        <p style={{ fontSize: 14, color: "#7c7660" }}>Tell your AI creative director what you&apos;re making. It handles everything else.</p>
+        {draftProjectId && projectState.title ? (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(123,97,255,0.1)", borderRadius: 999, padding: "4px 12px", fontSize: 11, fontWeight: 700, color: "#7B61FF", marginBottom: 8, letterSpacing: 0.5 }}>
+                ↩ Resuming saved project
+              </div>
+              <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 4 }}>{projectState.title}</h2>
+              <p style={{ fontSize: 14, color: "#7c7660" }}>Pick up exactly where you left off.</p>
+            </div>
+            <button onClick={handleReset} style={{ background: "none", border: "1px solid rgba(0,0,0,0.12)", borderRadius: 999, padding: "8px 16px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#7c7660", whiteSpace: "nowrap" }}>
+              Start fresh
+            </button>
+          </div>
+        ) : (
+          <>
+            <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 4 }}>New Project</h2>
+            <p style={{ fontSize: 14, color: "#7c7660" }}>Tell your AI creative director what you&apos;re making. It handles everything else.</p>
+          </>
+        )}
       </div>
 
       <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", overflow: "hidden", marginBottom: 16 }}>
@@ -1527,6 +1696,8 @@ function ProjectsSection({ projects, onNav, initialProjectId, onClearInitial }: 
   const [viewing, setViewing] = useState<{ project: FullProject; voiceover: Voiceover | null } | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
+  const isDraft = (status: string) => status === "chatting" || status === "generating";
+
   const filtered = filter === "all" ? projects : projects.filter(p => p.project_type === filter || p.target_platform === filter);
 
   async function openProject(id: string) {
@@ -1586,27 +1757,39 @@ function ProjectsSection({ projects, onNav, initialProjectId, onClearInitial }: 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {filtered.map(p => {
             const isLoading = loadingId === p.id;
+            const draft = isDraft(p.status);
             return (
-              <button key={p.id} onClick={() => openProject(p.id)} disabled={!!loadingId}
-                style={{ width: "100%", background: "#fff", borderRadius: 16, padding: "18px 20px", border: "1px solid rgba(0,0,0,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: isLoading ? "wait" : "pointer", fontFamily: "inherit", textAlign: "left", transition: "box-shadow 0.15s", opacity: loadingId && !isLoading ? 0.5 : 1 }}
-                onMouseOver={e => { if (!loadingId) e.currentTarget.style.boxShadow = "0 2px 16px rgba(0,0,0,0.09)"; }}
-                onMouseOut={e => (e.currentTarget.style.boxShadow = "none")}
-              >
+              <div key={p.id} style={{ width: "100%", background: draft ? "rgba(123,97,255,0.04)" : "#fff", borderRadius: 16, padding: "18px 20px", border: `1px solid ${draft ? "rgba(123,97,255,0.2)" : "rgba(0,0,0,0.07)"}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 11, color: "#7c7660", background: "#F8F8A6", padding: "2px 8px", borderRadius: 999 }}>{TYPE_LABELS[p.project_type]}</span>
-                    <span style={{ fontSize: 11, color: "#7c7660", background: "#F8F8A6", padding: "2px 8px", borderRadius: 999 }}>{PLATFORM_LABELS[p.target_platform]}</span>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {p.project_type && p.project_type !== "video" && <span style={{ fontSize: 11, color: "#7c7660", background: "#F8F8A6", padding: "2px 8px", borderRadius: 999 }}>{TYPE_LABELS[p.project_type] || p.project_type}</span>}
+                    {p.target_platform && <span style={{ fontSize: 11, color: "#7c7660", background: "#F8F8A6", padding: "2px 8px", borderRadius: 999 }}>{PLATFORM_LABELS[p.target_platform] || p.target_platform}</span>}
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: `${STATUS_COLORS[p.status] || "#7c7660"}18`, color: STATUS_COLORS[p.status] || "#7c7660" }}>
+                      {draft ? (p.status === "chatting" ? "In chat" : "Generating") : p.status}
+                    </span>
                     <span style={{ fontSize: 11, color: "#b5b09a" }}>{fmtDate(p.updated_at)}</span>
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, marginLeft: 12 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: `${STATUS_COLORS[p.status] || "#7c7660"}18`, color: STATUS_COLORS[p.status] || "#7c7660" }}>
-                    {p.status}
-                  </span>
-                  <span style={{ fontSize: 16, color: isLoading ? "#FF2D2D" : "#b5b09a" }}>{isLoading ? "…" : "→"}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  {draft ? (
+                    <>
+                      <button
+                        onClick={() => onNav("video", p.id)}
+                        style={{ background: "#7B61FF", color: "#fff", border: "none", borderRadius: 999, padding: "8px 16px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+                      >
+                        Resume →
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => openProject(p.id)} disabled={!!loadingId}
+                      style={{ background: "none", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 999, padding: "7px 14px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: isLoading ? "wait" : "pointer", color: "#1a1a1a", whiteSpace: "nowrap" }}
+                    >
+                      {isLoading ? "…" : "View →"}
+                    </button>
+                  )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -2282,6 +2465,7 @@ export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [resumeDraftId, setResumeDraftId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     const [uRes, pRes, bRes] = await Promise.all([
@@ -2317,6 +2501,11 @@ export default function DashboardPage() {
       setSelectedProjectId(projectId);
     } else if (s !== "projects") {
       setSelectedProjectId(null);
+    }
+    if (s === "video" && projectId) {
+      setResumeDraftId(projectId);
+    } else if (s === "video" && !projectId) {
+      setResumeDraftId(null);
     }
   }
 
@@ -2403,7 +2592,7 @@ export default function DashboardPage() {
             {section === "overview" && <Overview user={user} uploads={uploads} projects={projects} brand={brand} onNav={navigate} />}
             {section === "uploads" && <UploadsSection uploads={uploads} onRefresh={fetchData} />}
             {section === "create" && <CreateContent brand={brand} />}
-            {section === "video" && <CreateVideo uploads={uploads} user={user} projects={projects} />}
+            {section === "video" && <CreateVideo uploads={uploads} user={user} projects={projects} resumeDraftId={resumeDraftId} onResumeConsumed={() => setResumeDraftId(null)} />}
             {section === "brand" && <BrandSection brand={brand} onRefresh={fetchData} />}
             {section === "projects" && <ProjectsSection projects={projects} onNav={navigate} initialProjectId={selectedProjectId} onClearInitial={() => setSelectedProjectId(null)} />}
             {section === "plan" && <ContentPlan user={user} onNav={navigate} />}

@@ -5,6 +5,8 @@ import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
+import busboy from "busboy";
+import { Readable } from "stream";
 import OpenAI from "openai";
 
 const execAsync = promisify(exec);
@@ -36,41 +38,59 @@ export async function POST(req: NextRequest) {
 
   const contentType = req.headers.get("content-type") || "";
 
-  // === Multipart upload (new — actual files) ===
+  // === Multipart upload — uses busboy to stream files with no size limit ===
   if (contentType.includes("multipart/form-data")) {
     try {
-      const formData = await req.formData();
-      const files = formData.getAll("files") as File[];
-      const projectId = formData.get("project_id") as string | null;
-
-      if (!files.length) {
-        return NextResponse.json({ error: "No files provided" }, { status: 400 });
-      }
-
       const userDir = join(process.cwd(), "public", "media", session.id);
       await mkdir(userDir, { recursive: true });
 
+      type ParsedFile = { fieldname: string; filename: string; mimetype: string; data: Buffer; size: number };
+      const parsedFiles: ParsedFile[] = [];
+      let projectId: string | null = null;
+
+      await new Promise<void>((resolve, reject) => {
+        const bb = busboy({ headers: { "content-type": contentType }, limits: { files: 10, fileSize: 500 * 1024 * 1024 } });
+
+        bb.on("field", (name, val) => { if (name === "project_id") projectId = val; });
+        bb.on("file", (fieldname, stream, info) => {
+          const chunks: Buffer[] = [];
+          stream.on("data", (c: Buffer) => chunks.push(c));
+          stream.on("end", () => {
+            parsedFiles.push({ fieldname, filename: info.filename, mimetype: info.mimeType, data: Buffer.concat(chunks), size: Buffer.concat(chunks).length });
+          });
+          stream.on("error", reject);
+        });
+        bb.on("finish", resolve);
+        bb.on("error", reject);
+
+        // Pipe the request body into busboy
+        const nodeStream = Readable.fromWeb(req.body as import("stream/web").ReadableStream);
+        nodeStream.pipe(bb);
+      });
+
+      if (!parsedFiles.length) {
+        return NextResponse.json({ error: "No files provided" }, { status: 400 });
+      }
+
       const uploads = [];
 
-      for (const file of files.slice(0, 10)) {
-        const isVideo = file.type.startsWith("video/");
-        const isImage = file.type.startsWith("image/");
-        const isAudio = file.type.startsWith("audio/");
+      for (const file of parsedFiles) {
+        const isVideo = file.mimetype.startsWith("video/");
+        const isImage = file.mimetype.startsWith("image/");
+        const isAudio = file.mimetype.startsWith("audio/");
         const fileType = isVideo ? "video" : isImage ? "image" : isAudio ? "audio" : "text";
 
-        // Save original file
-        const ext = file.name.split(".").pop()?.toLowerCase() || (isVideo ? "mp4" : isImage ? "jpg" : "bin");
+        const ext = file.filename.split(".").pop()?.toLowerCase() || (isVideo ? "mp4" : isImage ? "jpg" : "bin");
         const insertRow = await query(
           `INSERT INTO uploads (user_id, project_id, file_type, file_name, mime_type, file_size, analysis_status)
            VALUES ($1, $2, $3, $4, $5, $6, 'processing') RETURNING id`,
-          [session.id, projectId || null, fileType, file.name, file.type, file.size]
+          [session.id, projectId || null, fileType, file.filename, file.mimetype, file.size]
         );
         const uploadId: string = (insertRow.rows[0] as { id: string }).id;
 
         const fileName = `${uploadId}.${ext}`;
         const filePath = join(userDir, fileName);
-        const fileBuffer = Buffer.from(await file.arrayBuffer());
-        await writeFile(filePath, fileBuffer);
+        await writeFile(filePath, file.data);
 
         const relPath = `/media/${session.id}/${fileName}`;
         await query("UPDATE uploads SET file_path = $1 WHERE id = $2", [relPath, uploadId]);
@@ -78,7 +98,6 @@ export async function POST(req: NextRequest) {
         let thumbPath: string | null = null;
         let videoDuration: number | null = null;
 
-        // Extract thumbnail
         if (isVideo) {
           const thumbName = `${uploadId}_thumb.jpg`;
           const thumbFilePath = join(userDir, thumbName);
@@ -87,7 +106,6 @@ export async function POST(req: NextRequest) {
               `ffprobe -v error -show_entries format=duration -of csv=p=0 "${filePath}"`
             );
             videoDuration = parseFloat(durationOut.trim()) || null;
-
             await execAsync(
               `ffmpeg -y -ss 1 -i "${filePath}" -frames:v 1 -q:v 3 -vf "scale=400:-1" "${thumbFilePath}" 2>/dev/null`
             );
@@ -99,9 +117,7 @@ export async function POST(req: NextRequest) {
           const thumbName = `${uploadId}_thumb.jpg`;
           const thumbFilePath = join(userDir, thumbName);
           try {
-            await execAsync(
-              `ffmpeg -y -i "${filePath}" -vf "scale=400:-1" "${thumbFilePath}" 2>/dev/null`
-            );
+            await execAsync(`ffmpeg -y -i "${filePath}" -vf "scale=400:-1" "${thumbFilePath}" 2>/dev/null`);
             thumbPath = `/media/${session.id}/${thumbName}`;
           } catch {
             thumbPath = relPath;
@@ -112,13 +128,10 @@ export async function POST(req: NextRequest) {
           await query("UPDATE uploads SET thumb_path = $1, video_duration_sec = $2 WHERE id = $3", [thumbPath, videoDuration, uploadId]);
         }
 
-        // Kick off AI vision analysis (non-blocking)
-        analyzeWithVision(uploadId, filePath, thumbPath, fileType, file.name, session.id).catch(console.error);
-
-        uploads.push({ id: uploadId, file_name: file.name, file_type: fileType, file_path: relPath, thumb_path: thumbPath, analysis_status: "processing" });
+        analyzeWithVision(uploadId, filePath, thumbPath, fileType, file.filename, session.id).catch(console.error);
+        uploads.push({ id: uploadId, file_name: file.filename, file_type: fileType, file_path: relPath, thumb_path: thumbPath, analysis_status: "processing" });
       }
 
-      // Update brand profile
       await query(
         `UPDATE brand_profiles SET upload_count = upload_count + $1,
          learning_progress_percent = LEAST(100, learning_progress_percent + $2),
@@ -130,7 +143,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ uploads });
     } catch (err) {
       console.error("Multipart upload error:", err);
-      return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+      return NextResponse.json({ error: "Upload failed — " + (err instanceof Error ? err.message : "unknown error") }, { status: 500 });
     }
   }
 
