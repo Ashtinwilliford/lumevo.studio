@@ -524,6 +524,46 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
   const [localUploads, setLocalUploads] = useState<Upload[]>(uploads);
   const [useVoiceClone, setUseVoiceClone] = useState(!!user.elevenlabs_voice_id);
   const [trialBlocked, setTrialBlocked] = useState(user.subscription_tier === "trial" && projects.length >= TRIAL_LIMIT);
+  const [videoGenerating, setVideoGenerating] = useState(false);
+  const [videoBase64, setVideoBase64] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+
+  async function generateVideo() {
+    if (!result) return;
+    setVideoGenerating(true);
+    setVideoError(null);
+    setVideoBase64(null);
+    try {
+      const res = await fetch("/api/video/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audioBase64: result.audioBase64 || null,
+          script: result.script,
+          title: projectState.title,
+          vibe: projectState.vibe,
+        }),
+      });
+      const data = await res.json() as { videoBase64?: string; error?: string };
+      if (data.videoBase64) {
+        setVideoBase64(data.videoBase64);
+      } else {
+        setVideoError(data.error || "Render failed — try again");
+      }
+    } catch {
+      setVideoError("Connection error — try again");
+    } finally {
+      setVideoGenerating(false);
+    }
+  }
+
+  function downloadVideo() {
+    if (!videoBase64) return;
+    const link = document.createElement("a");
+    link.href = `data:video/mp4;base64,${videoBase64}`;
+    link.download = `${(projectState.title || "lumevo-video").replace(/\s+/g, "-").toLowerCase()}.mp4`;
+    link.click();
+  }
 
   useEffect(() => { setLocalUploads(uploads); }, [uploads]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isTyping]);
@@ -714,6 +754,79 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
             <audio controls style={{ width: "100%", borderRadius: 8, accentColor: "#FF2D2D" }} src={`data:audio/mpeg;base64,${result.audioBase64}`} />
           </div>
         )}
+
+        {/* Video Generator */}
+        <div style={{ background: "#1a1a1a", borderRadius: 20, marginBottom: 14, overflow: "hidden" }}>
+          <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 3 }}>Video Generator</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>9:16 · TikTok &amp; Reels ready · MP4</div>
+            </div>
+            {!videoBase64 && !videoGenerating && (
+              <button
+                onClick={generateVideo}
+                style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}>
+                {result.audioBase64 ? "▶ Generate with Voice" : "▶ Generate Video"}
+              </button>
+            )}
+            {videoBase64 && (
+              <button onClick={downloadVideo} style={{ background: "#F8F8A6", color: "#1a1a1a", border: "none", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                ↓ Download MP4
+              </button>
+            )}
+          </div>
+
+          <div style={{ padding: "18px 20px" }}>
+            {!videoGenerating && !videoBase64 && !videoError && (
+              <div style={{ textAlign: "center", padding: "28px 0" }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>🎬</div>
+                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.55)", lineHeight: 1.6 }}>
+                  {result.audioBase64
+                    ? "Your script + voice narration will be composed into a downloadable video."
+                    : "A styled caption video will be generated from your script. Add a voice clone to include narration."}
+                </div>
+              </div>
+            )}
+
+            {videoGenerating && (
+              <div style={{ textAlign: "center", padding: "32px 0" }}>
+                <div style={{ width: 44, height: 44, border: "3px solid rgba(255,45,45,0.25)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.9s linear infinite", margin: "0 auto 16px" }} />
+                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", fontWeight: 600, marginBottom: 6 }}>Rendering your video…</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>This takes 20–60 seconds. Don&apos;t close this tab.</div>
+              </div>
+            )}
+
+            {videoError && !videoGenerating && (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: "rgba(255,45,45,0.08)", borderRadius: 12 }}>
+                <div style={{ fontSize: 18 }}>⚠</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: "#FF2D2D", fontWeight: 700, marginBottom: 2 }}>Render failed</div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{videoError}</div>
+                </div>
+                <button onClick={generateVideo} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "8px 16px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Retry</button>
+              </div>
+            )}
+
+            {videoBase64 && (
+              <div>
+                <video
+                  controls
+                  playsInline
+                  style={{ width: "100%", maxHeight: 400, borderRadius: 14, background: "#000", display: "block" }}
+                  src={`data:video/mp4;base64,${videoBase64}`}
+                />
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button onClick={downloadVideo} style={{ flex: 1, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "12px 18px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                    ↓ Download MP4
+                  </button>
+                  <button onClick={generateVideo} style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)", border: "none", borderRadius: 999, padding: "12px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                    Re-render
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Script as storyboard */}
         <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 14, overflow: "hidden" }}>
