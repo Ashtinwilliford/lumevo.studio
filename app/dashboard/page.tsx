@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAllProjects, createAndSaveProject, deleteProject } from "../../lib/projectStore";
+import { getAllVoices } from "../../lib/voiceStore";
 import type { Project } from "../../lib/types";
 import { VIBE_LABELS, TONE_LABELS } from "../../lib/types";
 
@@ -62,9 +63,10 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 export default function DashboardPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [voiceCount, setVoiceCount] = useState(0);
   const [filter, setFilter] = useState<"all" | "draft" | "ready">("all");
 
-  useEffect(() => { setProjects(getAllProjects()); }, []);
+  useEffect(() => { setProjects(getAllProjects()); setVoiceCount(getAllVoices().length); }, []);
 
   function handleNew() {
     const p = createAndSaveProject({ title: "Untitled Project" });
@@ -136,6 +138,7 @@ export default function DashboardPage() {
             <div className="stat"><span className="stat-num">{projects.length}</span><span className="stat-label">Total</span></div>
             <div className="stat"><span className="stat-num">{projects.filter(p => p.status === "ready").length}</span><span className="stat-label">Ready</span></div>
             <div className="stat"><span className="stat-num">{projects.filter(p => p.status === "draft").length}</span><span className="stat-label">Drafts</span></div>
+            <div className="stat"><span className="stat-num">{voiceCount}</span><span className="stat-label">Voice Clones</span></div>
           </div>
         )}
 

@@ -44,10 +44,14 @@ export interface ContentBlock {
   duration?: string;
 }
 
-export interface VoiceClone {
-  voiceId: string;
-  voiceName: string;
+export interface VoiceEntry {
+  id: string;
+  elevenLabsId: string;
+  name: string;
+  personality: string;
   createdAt: string;
+  usedInProjects: string[];
+  sampleCount: number;
 }
 
 export interface Project {
@@ -63,7 +67,7 @@ export interface Project {
   updatedAt: string;
   status: "draft" | "generating" | "ready";
   thumbnail?: string;
-  voiceClone?: VoiceClone;
+  selectedVoiceId?: string;
 }
 
 export function createProject(partial: Partial<Project> = {}): Project {
@@ -81,7 +85,7 @@ export function createProject(partial: Partial<Project> = {}): Project {
     status: partial.status ?? "draft",
     thumbnail: partial.thumbnail,
     generated: partial.generated,
-    voiceClone: partial.voiceClone,
+    selectedVoiceId: partial.selectedVoiceId,
   };
 }
 
