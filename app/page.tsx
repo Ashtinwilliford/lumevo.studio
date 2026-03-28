@@ -146,12 +146,12 @@ export default function LandingPage() {
         .result-item { background: #F8F8A6; border-radius: 14px; padding: 20px 22px; display: flex; align-items: center; gap: 12px; }
         .result-check { width: 28px; height: 28px; background: #FF2D2D; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700; flex-shrink: 0; }
         .result-text { font-size: 15px; font-weight: 600; color: #1a1a1a; }
-        .output-climax { text-align: center; margin-top: 52px; padding: 48px 32px; background: #1a1a1a; border-radius: 24px; max-width: 720px; margin-left: auto; margin-right: auto; }
-        .output-climax-pre { font-size: 16px; color: rgba(255,255,255,0.45); margin-bottom: 14px; font-style: italic; letter-spacing: 0.2px; }
-        .output-climax-pre em { color: rgba(255,255,255,0.7); font-style: normal; font-weight: 600; }
-        .output-climax-title { font-family: 'Syne', sans-serif; font-size: clamp(28px, 4vw, 52px); font-weight: 800; line-height: 1.08; letter-spacing: -1px; color: #ffffff; margin-bottom: 18px; }
+        .output-climax { text-align: center; margin-top: 64px; padding: 72px 48px; background: #1a1a1a; border-radius: 28px; }
+        .output-climax-pre { font-size: 17px; color: rgba(255,255,255,0.4); margin-bottom: 24px; font-style: italic; letter-spacing: 0.2px; line-height: 1.7; }
+        .output-climax-pre em { color: rgba(255,255,255,0.75); font-style: normal; font-weight: 700; }
+        .output-climax-title { font-family: 'Syne', sans-serif; font-size: clamp(48px, 8vw, 96px); font-weight: 800; line-height: 1.0; letter-spacing: -2px; color: #ffffff; margin-bottom: 28px; }
         .output-climax-title em { color: #F8F8A6; font-style: normal; }
-        .output-climax-sub { font-size: 16px; color: rgba(255,255,255,0.45); }
+        .output-climax-sub { font-size: 17px; color: rgba(255,255,255,0.38); letter-spacing: 0.3px; }
 
         .steps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 52px; }
         .step-card { background: #ffffff; border-radius: 20px; padding: 28px; }
@@ -297,17 +297,23 @@ export default function LandingPage() {
         <div className="container">
           <div style={{ textAlign: "center", marginBottom: 48 }}>
             <p className="section-label">The Output</p>
-            <h2 className="section-title" style={{ maxWidth: 520, margin: "0 auto" }}>Content That Actually Sounds Like You</h2>
+            <h2 className="section-title" style={{ maxWidth: 480, margin: "0 auto" }}>Indistinguishable From You</h2>
+            <p style={{ fontSize: 17, color: "#7c7660", marginTop: 14, maxWidth: 400, marginLeft: "auto", marginRight: "auto", lineHeight: 1.6 }}>Your audience will never know. Your engagement will tell a different story.</p>
           </div>
           <div className="result-grid">
-            {["Sounds like you", "Looks like you", "Feels like you", "Performs better over time"].map(item => (
+            {[
+              "Your tone. Word for word.",
+              "Your look. Down to the filter.",
+              "Built for your audience.",
+              "Gets sharper every post."
+            ].map(item => (
               <div className="result-item" key={item}>
                 <div className="result-check">✓</div>
                 <span className="result-text">{item}</span>
               </div>
             ))}
           </div>
-          <p style={{ textAlign: "center", marginTop: 24, fontSize: 16, color: "#7c7660" }}>Without you doing everything manually.</p>
+          <p style={{ textAlign: "center", marginTop: 28, fontSize: 16, color: "#7c7660" }}>Every single post. On autopilot.</p>
           <div className="output-climax">
             <p className="output-climax-pre">It doesn&apos;t just <em>look</em> like you. It doesn&apos;t just <em>sound</em> like you.</p>
             <h3 className="output-climax-title">It <em>is</em> you.</h3>
