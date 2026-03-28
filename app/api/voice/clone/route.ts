@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ReplitConnectors } from "@replit/connectors-sdk";
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "ElevenLabs API key not configured." }, { status: 500 });
-  }
-
   const form = await req.formData();
   const name = form.get("name") as string;
   const files = form.getAll("files") as File[];
@@ -21,9 +17,9 @@ export async function POST(req: NextRequest) {
     elForm.append("files", file, file.name);
   }
 
-  const res = await fetch("https://api.elevenlabs.io/v1/voices/add", {
+  const connectors = new ReplitConnectors();
+  const res = await connectors.proxy("elevenlabs", "/v1/voices/add", {
     method: "POST",
-    headers: { "xi-api-key": apiKey },
     body: elForm,
   });
 

@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ReplitConnectors } from "@replit/connectors-sdk";
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "ElevenLabs API key not configured." }, { status: 500 });
-  }
-
   const { voiceId, text } = (await req.json()) as { voiceId: string; text: string };
 
   if (!voiceId || !text) {
     return NextResponse.json({ error: "voiceId and text are required." }, { status: 400 });
   }
 
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+  const connectors = new ReplitConnectors();
+  const res = await connectors.proxy("elevenlabs", `/v1/text-to-speech/${voiceId}`, {
     method: "POST",
     headers: {
-      "xi-api-key": apiKey,
       "Content-Type": "application/json",
       "Accept": "audio/mpeg",
     },
