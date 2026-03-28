@@ -1,14 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("lumevo_remembered_email");
+    if (saved) { setEmail(saved); setRemember(true); }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,6 +30,11 @@ export default function LoginPage() {
       if (!res.ok) {
         setError(data.error || "Login failed");
       } else {
+        if (remember) {
+          localStorage.setItem("lumevo_remembered_email", email);
+        } else {
+          localStorage.removeItem("lumevo_remembered_email");
+        }
         router.push("/dashboard");
       }
     } catch {
@@ -53,16 +64,18 @@ export default function LoginPage() {
         .input { width: 100%; background: #F8F8A6; border: 1.5px solid rgba(0,0,0,0.1); border-radius: 12px; color: #1a1a1a; font-family: inherit; font-size: 15px; padding: 13px 16px; outline: none; transition: border-color 0.2s; margin-bottom: 20px; }
         .input:focus { border-color: #FF2D2D; }
         .input::placeholder { color: #b5b09a; }
-        .btn { width: 100%; background: #FF2D2D; color: #fff; border: none; font-family: inherit; font-size: 15px; font-weight: 700; padding: 14px; border-radius: 999px; cursor: pointer; transition: opacity 0.2s, transform 0.15s; margin-top: 4px; }
+        .row { display: flex; align-items: center; justify-content: space-between; margin-top: -10px; margin-bottom: 24px; }
+        .remember { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .remember-box { width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid rgba(0,0,0,0.18); background: #F8F8A6; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s, border-color 0.15s; }
+        .remember-box.checked { background: #FF2D2D; border-color: #FF2D2D; }
+        .remember-label { font-size: 13px; color: #7c7660; }
+        .btn { width: 100%; background: #FF2D2D; color: #fff; border: none; font-family: inherit; font-size: 15px; font-weight: 700; padding: 14px; border-radius: 999px; cursor: pointer; transition: opacity 0.2s, transform 0.15s; }
         .btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
         .btn:disabled { opacity: 0.6; cursor: default; }
         .error { background: rgba(255,45,45,0.08); border: 1px solid rgba(255,45,45,0.2); color: #CC2020; font-size: 14px; padding: 12px 16px; border-radius: 10px; margin-bottom: 18px; }
         .switch { text-align: center; margin-top: 28px; font-size: 14px; color: #7c7660; }
         .switch-link { color: #FF2D2D; font-weight: 600; background: none; border: none; cursor: pointer; font-family: inherit; font-size: 14px; }
-        .divider { display: flex; align-items: center; gap: 14px; margin: 20px 0; }
-        .divider-line { flex: 1; border-top: 1px solid rgba(0,0,0,0.08); }
-        .divider-text { font-size: 12px; color: #b5b09a; }
-        .forgot { display: block; text-align: right; margin-top: -12px; margin-bottom: 20px; font-size: 13px; color: #FF2D2D; font-weight: 600; background: none; border: none; cursor: pointer; font-family: inherit; }
+        .forgot { font-size: 13px; color: #FF2D2D; font-weight: 600; background: none; border: none; cursor: pointer; font-family: inherit; }
         .forgot:hover { opacity: 0.75; }
       `}</style>
       <div className="page">
@@ -80,10 +93,18 @@ export default function LoginPage() {
             {error && <div className="error">{error}</div>}
             <form onSubmit={handleSubmit}>
               <label className="label">Email</label>
-              <input className="input" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
+              <input className="input" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required autoFocus autoComplete="email" />
               <label className="label">Password</label>
-              <input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
-              <button type="button" className="forgot" onClick={() => router.push("/forgot-password")}>Forgot password?</button>
+              <input className="input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required autoComplete="current-password" />
+              <div className="row">
+                <label className="remember" onClick={() => setRemember(r => !r)}>
+                  <div className={`remember-box${remember ? " checked" : ""}`}>
+                    {remember && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}
+                  </div>
+                  <span className="remember-label">Remember me</span>
+                </label>
+                <button type="button" className="forgot" onClick={() => router.push("/forgot-password")}>Forgot password?</button>
+              </div>
               <button className="btn" type="submit" disabled={loading}>{loading ? "Logging in…" : "Log In"}</button>
             </form>
             <div className="switch">

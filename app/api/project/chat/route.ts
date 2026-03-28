@@ -18,7 +18,7 @@ interface ProjectState {
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
-  if (!session?.userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { messages, projectState, userName } = await req.json() as {
     messages: { role: string; content: string }[];
@@ -26,8 +26,8 @@ export async function POST(req: NextRequest) {
     userName: string;
   };
 
-  const brandRows = await query("SELECT * FROM brand_profiles WHERE user_id = $1", [session.userId]);
-  const brand = brandRows[0];
+  const brandRows = await query("SELECT * FROM brand_profiles WHERE user_id = $1", [session.id]);
+  const brand = brandRows.rows[0];
   const brandContext = brand
     ? `Their niche: ${brand.niche || "content creation"}. Voice: ${brand.voice_style || "conversational"}. Audience: ${brand.target_audience || "general"}.`
     : "";

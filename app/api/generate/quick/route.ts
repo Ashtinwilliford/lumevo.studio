@@ -10,13 +10,13 @@ const client = new OpenAI({
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
-  if (!session?.userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { prompt, contentType } = await req.json();
   if (!prompt?.trim()) return NextResponse.json({ error: "Prompt required" }, { status: 400 });
 
-  const rows = await query("SELECT * FROM brand_profiles WHERE user_id = $1", [session.userId]);
-  const brand = rows[0];
+  const rows = await query("SELECT * FROM brand_profiles WHERE user_id = $1", [session.id]);
+  const brand = rows.rows[0];
 
   const brandContext = brand
     ? `Brand voice: ${brand.voice_style || "conversational"}\nTone: ${brand.tone_keywords?.join(", ") || "authentic, engaging"}\nNiche: ${brand.niche || "lifestyle content"}\nAudience: ${brand.target_audience || "general audience"}`

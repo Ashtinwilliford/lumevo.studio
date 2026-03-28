@@ -11,18 +11,18 @@ const client = new OpenAI({
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
-  if (!session?.userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { title, uploadIds, platform, duration } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: "Title required" }, { status: 400 });
 
-  const userId = session.userId;
+  const userId = session.id;
 
   const brandRows = await query("SELECT * FROM brand_profiles WHERE user_id = $1", [userId]);
-  const brand = brandRows[0];
+  const brand = brandRows.rows[0];
 
   const userRows = await query("SELECT name, elevenlabs_voice_id FROM users WHERE id = $1", [userId]);
-  const user = userRows[0];
+  const user = userRows.rows[0];
 
   let mediaContext = "";
   if (uploadIds?.length > 0) {
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       `SELECT file_name, file_type, transcript_text, extracted_metadata FROM uploads WHERE user_id = $1 AND id IN (${placeholders})`,
       [userId, ...uploadIds]
     );
-    mediaContext = uploadRows
+    mediaContext = uploadRows.rows
       .map((u: { file_name: string; file_type: string; transcript_text: string; extracted_metadata: Record<string, unknown> }) => {
         const meta = u.extracted_metadata ? JSON.stringify(u.extracted_metadata).slice(0, 200) : "";
         const transcript = u.transcript_text ? u.transcript_text.slice(0, 300) : "";
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       "SELECT file_name, file_type, transcript_text FROM uploads WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10",
       [userId]
     );
-    mediaContext = allUploads
+    mediaContext = allUploads.rows
       .map((u: { file_name: string; file_type: string; transcript_text: string }) =>
         `[${u.file_type.toUpperCase()}: ${u.file_name}]${u.transcript_text ? ` — "${u.transcript_text.slice(0, 200)}"` : ""}`
       )
@@ -90,7 +90,7 @@ Rules:
      VALUES ($1, $2, 'video', $3, $4, $5, 'scripting', $6) RETURNING id`,
     [userId, title, platform || "tiktok", duration || 30, title, JSON.stringify({ script })]
   );
-  const projectId = projectRows[0]?.id;
+  const projectId = projectRows.rows[0]?.id;
 
   if (uploadIds?.length > 0) {
     for (const uploadId of uploadIds) {
