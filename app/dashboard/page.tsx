@@ -42,6 +42,7 @@ function Overview({ user, uploads, projects, brand, onNav }: {
 }) {
   const prog = brand?.learning_progress_percent ?? 0;
   const completed = projects.filter(p => p.status === "completed").length;
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
   return (
     <div>
       <div style={{ marginBottom: 40 }}>
@@ -84,34 +85,61 @@ function Overview({ user, uploads, projects, brand, onNav }: {
         </div>
       </div>
 
-      <div style={{ marginBottom: 20, fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 700 }}>Quick Actions</div>
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 44 }}>
-        {[
-          { label: "Upload Content", section: "uploads" as Section, primary: false },
-          { label: "Create Content", section: "create" as Section, primary: true },
-          { label: "Generate Video", section: "video" as Section, primary: false },
-          { label: "View Brand Profile", section: "brand" as Section, primary: false },
-        ].map(a => (
-          <button key={a.label} onClick={() => onNav(a.section)}
-            style={{ display: "flex", alignItems: "center", gap: 8, background: a.primary ? "#FF2D2D" : "#fff", border: `1px solid ${a.primary ? "#FF2D2D" : "rgba(0,0,0,0.08)"}`, borderRadius: 12, padding: "13px 20px", cursor: "pointer", fontFamily: "inherit", fontSize: 14, fontWeight: 600, color: a.primary ? "#fff" : "#1a1a1a", transition: "all 0.15s" }}>
-            {a.label} →
-          </button>
-        ))}
-      </div>
+      <button onClick={() => onNav("video")}
+        style={{ width: "100%", background: "#FF2D2D", border: "none", borderRadius: 16, padding: "18px 24px", cursor: "pointer", fontFamily: "inherit", fontSize: 16, fontWeight: 700, color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 44, transition: "opacity 0.2s" }}
+        onMouseOver={e => (e.currentTarget.style.opacity = "0.88")}
+        onMouseOut={e => (e.currentTarget.style.opacity = "1")}>
+        <span>Create Content</span>
+        <span style={{ fontSize: 20 }}>→</span>
+      </button>
 
       {projects.length > 0 && (
         <>
-          <div style={{ marginBottom: 16, fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 700 }}>Recent Projects</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 700 }}>Recent Projects</div>
+            <button onClick={() => onNav("projects")} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: "#FF2D2D", cursor: "pointer", fontFamily: "inherit" }}>View all →</button>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {projects.slice(0, 4).map(p => (
-              <div key={p.id} style={{ background: "#fff", borderRadius: 12, padding: "14px 18px", border: "1px solid rgba(0,0,0,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>{p.title}</div>
-                  <div style={{ fontSize: 12, color: "#7c7660" }}>{TYPE_LABELS[p.project_type]} · {PLATFORM_LABELS[p.target_platform]}</div>
+              <div key={p.id} style={{ position: "relative" }}>
+                <div
+                  onClick={() => onNav("projects")}
+                  style={{ background: "#fff", borderRadius: 12, padding: "14px 18px", border: "1px solid rgba(0,0,0,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", transition: "box-shadow 0.15s" }}
+                  onMouseOver={e => (e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.08)")}
+                  onMouseOut={e => (e.currentTarget.style.boxShadow = "none")}
+                >
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>{p.title}</div>
+                    <div style={{ fontSize: 12, color: "#7c7660" }}>{TYPE_LABELS[p.project_type]} · {PLATFORM_LABELS[p.target_platform]}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: `${STATUS_COLORS[p.status]}20`, color: STATUS_COLORS[p.status] }}>
+                      {p.status}
+                    </span>
+                    <button
+                      onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === p.id ? null : p.id); }}
+                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#7c7660", padding: "0 4px", lineHeight: 1 }}>
+                      ···
+                    </button>
+                  </div>
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: `${STATUS_COLORS[p.status]}20`, color: STATUS_COLORS[p.status] }}>
-                  {p.status}
-                </span>
+                {menuOpen === p.id && (
+                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.12)", border: "1px solid rgba(0,0,0,0.08)", zIndex: 50, minWidth: 180, overflow: "hidden" }}>
+                    {[
+                      { label: "Open project", icon: "↗", action: () => { onNav("projects"); setMenuOpen(null); } },
+                      { label: "Use as template", icon: "◻", action: () => { onNav("video"); setMenuOpen(null); } },
+                      { label: "Edit details", icon: "✎", action: () => { onNav("projects"); setMenuOpen(null); } },
+                    ].map(item => (
+                      <button key={item.label} onClick={item.action}
+                        style={{ width: "100%", background: "none", border: "none", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontFamily: "inherit", fontSize: 14, color: "#1a1a1a", textAlign: "left" }}
+                        onMouseOver={e => (e.currentTarget.style.background = "#F8F8A6")}
+                        onMouseOut={e => (e.currentTarget.style.background = "none")}>
+                        <span style={{ fontSize: 13, color: "#FF2D2D" }}>{item.icon}</span>
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
