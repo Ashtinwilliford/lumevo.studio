@@ -61,14 +61,14 @@ export default function ProjectPage() {
       description: "Add images and videos for your project.",
       icon: "📁",
       href: `/project/${id}/upload`,
-      ready: false,
+      ready: true,
     },
     {
       title: "Voice Clone",
-      description: "Configure voice cloning settings for narration.",
-      icon: "🎙️",
+      description: "Clone your voice and hear generated captions read back in your own voice.",
+      icon: "🎙",
       href: `/project/${id}/voice`,
-      ready: false,
+      ready: true,
     },
     {
       title: "Brand Style",

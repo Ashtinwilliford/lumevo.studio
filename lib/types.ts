@@ -44,6 +44,12 @@ export interface ContentBlock {
   duration?: string;
 }
 
+export interface VoiceClone {
+  voiceId: string;
+  voiceName: string;
+  createdAt: string;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -57,6 +63,7 @@ export interface Project {
   updatedAt: string;
   status: "draft" | "generating" | "ready";
   thumbnail?: string;
+  voiceClone?: VoiceClone;
 }
 
 export function createProject(partial: Partial<Project> = {}): Project {
@@ -74,18 +81,19 @@ export function createProject(partial: Partial<Project> = {}): Project {
     status: partial.status ?? "draft",
     thumbnail: partial.thumbnail,
     generated: partial.generated,
+    voiceClone: partial.voiceClone,
   };
 }
 
 export const VIBE_LABELS: Record<Vibe, string> = {
-  hype: "🔥 Hype",
-  chill: "😌 Chill",
-  aesthetic: "✨ Aesthetic",
-  educational: "🎓 Educational",
-  storytelling: "📖 Storytelling",
-  motivational: "💪 Motivational",
-  funny: "😂 Funny",
-  luxury: "💎 Luxury",
+  hype: "Hype",
+  chill: "Chill",
+  aesthetic: "Aesthetic",
+  educational: "Educational",
+  storytelling: "Storytelling",
+  motivational: "Motivational",
+  funny: "Funny",
+  luxury: "Luxury",
 };
 
 export const TONE_LABELS: Record<Tone, string> = {

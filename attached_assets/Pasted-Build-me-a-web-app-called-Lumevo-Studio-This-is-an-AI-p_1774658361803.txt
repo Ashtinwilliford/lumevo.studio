@@ -1,0 +1,101 @@
+Build me a web app called Lumevo Studio.
+
+This is an AI-powered creator platform for influencers, content creators, and personal brands. It should feel like a premium product, not a basic website.
+
+Purpose:
+Help users turn raw videos, images, and rough content ideas into polished, on-brand short-form content with minimal effort.
+
+Design direction:
+- Minimal, calm, premium, creator-focused
+- No emojis
+- Soft pastel yellow background
+- Red accent color for buttons and key text
+- Rounded corners
+- Clean typography
+- Spacious layout
+- Feels like a mix of Canva, Notion, and Apple-style simplicity
+
+Brand vibe:
+- intentional
+- elevated
+- creative
+- modern
+- soft but confident
+
+Core app flow:
+1. Landing page
+2. Dashboard
+3. Create project
+4. Project page
+5. Upload page
+6. Script page
+
+Pages needed:
+
+1. Landing Page
+- Clean hero section
+- Headline: “Turn raw content into branded short-form videos that feel like you.”
+- Short supporting text about uploading content, defining tone, and generating polished output
+- Main CTA button: “Start Creating”
+- Secondary CTA: “See Demo”
+
+2. Dashboard
+- Title: “Lumevo Studio”
+- Intro text should feel calm and premium, like:
+  “Turn raw content into something intentional. Build projects, shape your voice, and create content that feels like you.”
+- Card/button for “Create Project”
+- Background should be pastel yellow
+- Main CTA button should be red
+
+3. Create Project Page
+- Input for project name
+- Textarea for content description
+- Continue button
+
+4. Dynamic Project Page
+- URL structure should support /project/[id]
+- Show project title
+- Show two sections/cards:
+  - Upload Content
+  - Add Script
+
+5. Upload Page
+- URL structure should support /project/[id]/upload
+- File upload for images and videos
+- Show previews of uploaded images and videos
+- Make the upload area clean and modern
+
+6. Script Page
+- URL structure should support /project/[id]/script
+- Add:
+  - Title input
+  - Description textarea
+  - Vibe selector
+  - Tone selector
+  - Audience goal selector
+- This page should feel like a creator briefing form
+
+Technical requirements:
+- Use Next.js App Router
+- Use TypeScript
+- Use Tailwind CSS
+- Keep components modular and clean
+- Build this as a real app structure, not a static marketing site
+- Use mock/local state for now if needed
+- Do not rebuild from scratch conceptually if structure already exists
+- Keep the code beginner-friendly and organized
+
+Visual requirements:
+- pastel yellow background on dashboard and warm light neutrals elsewhere
+- red buttons and red accent text where appropriate
+- simple, bubble-like rounded UI
+- no loud gradients
+- no playful emoji-heavy styling
+- should feel polished and brandable
+
+Output:
+- Full file structure
+- Full code for each file
+- Clear note for where each file goes
+- Any install commands needed
+- Make the app runnable immediately
