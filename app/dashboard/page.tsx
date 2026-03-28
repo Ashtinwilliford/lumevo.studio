@@ -550,7 +550,8 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
   const [uploadProgress, setUploadProgress] = useState<{ name: string; done: boolean }[]>([]);
   const [localUploads, setLocalUploads] = useState<Upload[]>(uploads);
   const [useVoiceClone, setUseVoiceClone] = useState(!!user.elevenlabs_voice_id);
-  const [trialBlocked, setTrialBlocked] = useState(user.subscription_tier === "trial" && projects.length >= TRIAL_LIMIT);
+  // Only block trial users who are starting a brand-new project — never block resuming an existing one
+  const [trialBlocked, setTrialBlocked] = useState(user.subscription_tier === "trial" && projects.length >= TRIAL_LIMIT && !resumeDraftId);
   const [composing, setComposing] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const [includeMusic, setIncludeMusic] = useState(true);
@@ -582,6 +583,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
           setMessages(restored);
           setMsgCounter(restored.length);
         }
+        setTrialBlocked(false); // resuming an existing project is always allowed
         setPhase("chat");
         onResumeConsumed?.();
       })

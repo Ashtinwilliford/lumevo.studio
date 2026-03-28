@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { title, uploadIds, platform, duration, vibe, useVoiceClone } = await req.json();
+  const { title, uploadIds, platform, duration, vibe, useVoiceClone, draftProjectId } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: "Title required" }, { status: 400 });
 
   const userId = session.id;
@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
   const brand = brandRows.rows[0] as Record<string, unknown> | undefined;
   const user = userRows.rows[0] as Record<string, unknown> | undefined;
 
-  if (user?.subscription_tier === "trial") {
+  // Trial limit: only block NEW projects — always allow continuing an existing one
+  if (user?.subscription_tier === "trial" && !draftProjectId) {
     const countRes = await query("SELECT COUNT(*) AS cnt FROM projects WHERE user_id = $1", [userId]);
     const projectCount = parseInt((countRes.rows[0] as { cnt: string })?.cnt || "0");
     if (projectCount >= 2) {
