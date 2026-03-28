@@ -570,7 +570,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
         if (!p) return;
         setDraftProjectId(p.id);
         if (p.draft_state) {
-          setProjectState(p.draft_state as ProjectState);
+          setProjectState(p.draft_state as unknown as ProjectState);
         }
         if (p.chat_history?.length) {
           const restored = p.chat_history.map((m, i) => ({
@@ -673,6 +673,21 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: conversationForApi, projectState, userName: firstName }),
       });
+
+      if (res.status === 401) {
+        setIsTyping(false);
+        setMessages(prev => [...prev, { role: "ai", content: "Your session has expired. Please refresh the page and log back in — your conversation will still be here.", id: msgCounter + 1 }]);
+        return;
+      }
+
+      if (!res.ok) {
+        let errMsg = "I'm having trouble right now — please try again in a moment.";
+        try { const e = await res.json() as { message?: string }; if (e.message) errMsg = e.message; } catch { /* ignore */ }
+        setIsTyping(false);
+        setMessages(prev => [...prev, { role: "ai", content: errMsg, id: msgCounter + 1 }]);
+        return;
+      }
+
       const data = await res.json();
 
       const newState = { ...projectState };
@@ -2309,7 +2324,7 @@ function ContentPlan({ user, onNav }: { user: User; onNav: (s: Section) => void 
 }
 
 // ── AI MANAGER ────────────────────────────────────────────────────────────────
-interface ChatMessage { role: "user" | "assistant"; content: string; }
+interface AIMgrMessage { role: "user" | "assistant"; content: string; }
 
 const QUICK_COMMANDS = [
   "Make this feel more expensive",
@@ -2321,7 +2336,7 @@ const QUICK_COMMANDS = [
 ];
 
 function AIManagerSection({ user, brand, onNav }: { user: User; brand: BrandProfile | null; onNav: (s: Section) => void }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<AIMgrMessage[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -2331,7 +2346,7 @@ function AIManagerSection({ user, brand, onNav }: { user: User; brand: BrandProf
     const msg = text || input.trim();
     if (!msg || thinking) return;
     setInput("");
-    const newMessages: ChatMessage[] = [...messages, { role: "user", content: msg }];
+    const newMessages: AIMgrMessage[] = [...messages, { role: "user", content: msg }];
     setMessages(newMessages);
     setThinking(true);
 
@@ -2341,7 +2356,7 @@ function AIManagerSection({ user, brand, onNav }: { user: User; brand: BrandProf
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg, history: messages }),
       });
-      const data = await res.json();
+      const data = await res.json() as { reply?: string };
       if (data.reply) {
         setMessages([...newMessages, { role: "assistant", content: data.reply }]);
       }

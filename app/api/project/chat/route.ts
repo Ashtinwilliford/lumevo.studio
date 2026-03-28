@@ -15,6 +15,8 @@ interface ProjectState {
   duration: number | null;
 }
 
+export const maxDuration = 30;
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -95,16 +97,25 @@ RESPOND WITH ONLY THIS JSON (no markdown, no code fences):
   "needsUpload": false or true
 }`;
 
-  const completion = await client.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      { role: "system", content: systemPrompt },
-      ...messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
-    ],
-    max_tokens: 250,
-    temperature: 0.85,
-    response_format: { type: "json_object" },
-  });
+  let completion;
+  try {
+    completion = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...messages.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+      ],
+      max_tokens: 250,
+      temperature: 0.85,
+      response_format: { type: "json_object" },
+    });
+  } catch (err) {
+    console.error("Chat OpenAI error:", err);
+    return NextResponse.json(
+      { error: "ai_unavailable", message: "I'm having trouble connecting right now. Give me a second and try again." },
+      { status: 503 }
+    );
+  }
 
   const raw = completion.choices[0]?.message?.content || "{}";
   let parsed: {
@@ -123,6 +134,10 @@ RESPOND WITH ONLY THIS JSON (no markdown, no code fences):
       currentStep: "title",
       needsUpload: false,
     };
+  }
+
+  if (!parsed.message) {
+    parsed.message = "Sorry, got a bit lost — try again?";
   }
 
   // Safety: if all collected and not yet upload, force upload step

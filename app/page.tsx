@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 const PRICING = [
   {
@@ -87,6 +88,13 @@ const STEPS = [
 
 export default function LandingPage() {
   const router = useRouter();
+
+  // If already logged in, skip the landing page and go straight to the dashboard
+  useEffect(() => {
+    fetch("/api/me")
+      .then(res => { if (res.ok) router.replace("/dashboard"); })
+      .catch(() => {});
+  }, [router]);
 
   return (
     <>
