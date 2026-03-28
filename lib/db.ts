@@ -1,28 +1,23 @@
-import { Pool } from "pg";
+import postgres from "postgres";
 
-let pool: Pool | null = null;
+let client: ReturnType<typeof postgres> | null = null;
 
-export function getPool(): Pool {
-  if (!pool) {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL?.includes("sslmode=require")
-        ? { rejectUnauthorized: false }
-        : false,
+function getSql() {
+  if (!client) {
+    client = postgres(process.env.DATABASE_URL!, {
       max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      idle_timeout: 30,
+      connect_timeout: 10,
+      ssl: process.env.DATABASE_URL?.includes("sslmode=require")
+        ? "require"
+        : false,
     });
   }
-  return pool;
+  return client;
 }
 
-export async function query(sql: string, params?: unknown[]) {
-  const client = await getPool().connect();
-  try {
-    const result = await client.query(sql, params);
-    return result;
-  } finally {
-    client.release();
-  }
+export async function query(sqlStr: string, params: unknown[] = []) {
+  const sql = getSql();
+  const result = await sql.unsafe(sqlStr, params as never[]);
+  return { rows: result as Record<string, unknown>[] };
 }
