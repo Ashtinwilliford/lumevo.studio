@@ -7,7 +7,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
   const result = await query(
-    `SELECT id, title, project_type, target_platform, status, created_at, updated_at
+    `SELECT id, title, project_type, target_platform, target_duration, vibe, status, created_at, updated_at
      FROM projects WHERE user_id = $1 ORDER BY updated_at DESC`,
     [session.id]
   );

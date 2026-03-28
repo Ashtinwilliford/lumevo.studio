@@ -111,7 +111,7 @@ Respond with ONLY the caption text including hashtags. Nothing else.`;
   const projectRows = await query(
     `INSERT INTO projects (user_id, title, project_type, target_platform, target_duration, prompt_text, status, generated_content)
      VALUES ($1, $2, 'video', $3, $4, $5, 'scripting', $6) RETURNING id`,
-    [userId, title, platform || "tiktok", duration || 30, title, JSON.stringify({ script })]
+    [userId, title, platform || "tiktok", duration || 30, title, JSON.stringify({ script, caption })]
   );
   const projectId = projectRows.rows[0]?.id;
 
