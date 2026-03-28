@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 type Section = "overview" | "uploads" | "create" | "video" | "brand" | "projects" | "plan" | "aimanager" | "analytics" | "billing" | "settings";
 
-interface User { id: string; name: string; email: string; subscription_tier: string; created_at: string; }
+interface User { id: string; name: string; email: string; subscription_tier: string; created_at: string; elevenlabs_voice_id?: string; }
 interface Upload { id: string; file_type: string; file_name: string; mime_type: string; file_size: number; analysis_status: string; created_at: string; }
 interface Project { id: string; title: string; project_type: string; target_platform: string; status: string; created_at: string; updated_at: string; }
 interface BrandProfile { user_id: string; tone_summary: string; personality_summary: string; audience_summary: string; pacing_style: string; cta_style: string; confidence_score: number; learning_progress_percent: number; upload_count: number; generation_count: number; }
@@ -431,48 +431,179 @@ function CreateContent({ brand }: { brand: BrandProfile | null }) {
 }
 
 // ── CREATE VIDEO ──────────────────────────────────────────────────────────────
-function CreateVideo() {
-  const [duration, setDuration] = useState(30);
-  const [prompt, setPrompt] = useState("");
+function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
+  const [title, setTitle] = useState("");
   const [platform, setPlatform] = useState("tiktok");
-  const [voiceover, setVoiceover] = useState(true);
-  const [musicMood, setMusicMood] = useState("energetic");
-  const [status, setStatus] = useState<null | "queued" | "scripting" | "voiceover" | "editing" | "rendering" | "done">(null);
+  const [duration, setDuration] = useState(30);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [phase, setPhase] = useState<"setup" | "generating" | "done">("setup");
+  const [stepIdx, setStepIdx] = useState(0);
+  const [result, setResult] = useState<{ script: string; audioBase64: string | null; projectId: string; hasVoice: boolean } | null>(null);
+  const [error, setError] = useState("");
 
-  const STEPS = ["Analyzing uploads", "Writing script", "Generating voiceover", "Editing clips", "Rendering video"];
-  const STEP_STATUS = ["scripting", "voiceover", "editing", "rendering", "done"];
-  const currentStep = status ? STEP_STATUS.indexOf(status) : -1;
+  const STEPS = [
+    { label: "Analyzing your media", sub: "Reading through your photos, videos, and clips" },
+    { label: "Writing your script", sub: "GPT-4o is crafting your voiceover in your voice" },
+    { label: "Cloning your voice", sub: "ElevenLabs is synthesizing your audio" },
+    { label: "Assembling the video", sub: "Putting it all together" },
+  ];
+
+  const media = uploads.filter(u => u.file_type === "video" || u.file_type === "image" || u.file_type === "audio");
+  const hasVoiceClone = !!user.elevenlabs_voice_id;
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
 
   async function handleCreate() {
-    if (!prompt.trim()) return;
-    setStatus("queued");
-    const steps: typeof status[] = ["scripting", "voiceover", "editing", "rendering", "done"];
-    for (const s of steps) {
-      await new Promise(r => setTimeout(r, 2200));
-      setStatus(s);
+    if (!title.trim()) return;
+    setPhase("generating");
+    setStepIdx(0);
+    setError("");
+
+    const timers = STEPS.map((_, i) => setTimeout(() => setStepIdx(i), i * 1800));
+
+    try {
+      const res = await fetch("/api/video/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, uploadIds: selectedIds, platform, duration }),
+      });
+      timers.forEach(clearTimeout);
+
+      if (!res.ok) {
+        setError("Something went wrong. Try again.");
+        setPhase("setup");
+        return;
+      }
+
+      const data = await res.json();
+      setStepIdx(STEPS.length);
+      await new Promise(r => setTimeout(r, 500));
+      setResult(data);
+      setPhase("done");
+    } catch {
+      timers.forEach(clearTimeout);
+      setError("Connection error. Try again.");
+      setPhase("setup");
     }
+  }
+
+  function handleReset() {
+    setPhase("setup");
+    setResult(null);
+    setTitle("");
+    setSelectedIds([]);
+    setStepIdx(0);
+    setError("");
+  }
+
+  const TYPE_ICON: Record<string, string> = { video: "▶", image: "◻", audio: "◉" };
+
+  if (phase === "generating") {
+    return (
+      <div>
+        <div style={{ marginBottom: 36 }}>
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Creating Your Video</h2>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Lumevo is reading your media, writing your script, and cloning your voice.</p>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 20, padding: 36, border: "1px solid rgba(0,0,0,0.07)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {STEPS.map((step, i) => {
+              const done = i < stepIdx;
+              const active = i === stepIdx;
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 16, opacity: i > stepIdx ? 0.3 : 1, transition: "opacity 0.4s" }}>
+                  <div style={{ width: 36, height: 36, borderRadius: "50%", flexShrink: 0, background: done ? "#FF2D2D" : active ? "rgba(255,45,45,0.12)" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: done ? "#fff" : active ? "#FF2D2D" : "#b5b09a", transition: "all 0.4s", marginTop: 2 }}>
+                    {done ? "✓" : active ? <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid rgba(255,45,45,0.3)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> : i + 1}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: done || active ? 700 : 400, color: done ? "#1a1a1a" : active ? "#FF2D2D" : "#b5b09a" }}>{step.label}</div>
+                    {active && <div style={{ fontSize: 13, color: "#7c7660", marginTop: 3 }}>{step.sub}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "done" && result) {
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 36 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>✦ Video Created</div>
+            <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>{title}</h2>
+            <p style={{ fontSize: 15, color: "#7c7660" }}>{platform.charAt(0).toUpperCase() + platform.slice(1)} · {duration}s</p>
+          </div>
+          <button onClick={handleReset} style={{ background: "transparent", border: "1.5px solid rgba(0,0,0,0.1)", color: "#7c7660", borderRadius: 999, padding: "9px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+            + New Video
+          </button>
+        </div>
+
+        <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 14 }}>Your Script</div>
+          <p style={{ fontSize: 15, lineHeight: 1.8, color: "#1a1a1a", whiteSpace: "pre-wrap" }}>{result.script}</p>
+        </div>
+
+        {result.audioBase64 && (
+          <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 14 }}>Your Voice · ElevenLabs</div>
+            <audio controls style={{ width: "100%", borderRadius: 10 }}
+              src={`data:audio/mpeg;base64,${result.audioBase64}`} />
+          </div>
+        )}
+
+        {!result.hasVoice && (
+          <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "20px 24px", border: "1px solid rgba(0,0,0,0.07)" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Add your voice clone to hear yourself</div>
+            <div style={{ fontSize: 13, color: "#7c7660", marginBottom: 12 }}>Go to Settings to connect your ElevenLabs voice clone and Lumevo will narrate every video in your actual voice.</div>
+          </div>
+        )}
+
+        {!result.audioBase64 && result.hasVoice && (
+          <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "20px 24px" }}>
+            <div style={{ fontSize: 13, color: "#7c7660" }}>Voice synthesis encountered an issue. Your script is ready — you can use it manually or try regenerating.</div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
     <div>
       <div style={{ marginBottom: 36 }}>
         <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Create Video</h2>
-        <p style={{ fontSize: 15, color: "#7c7660" }}>Tell Lumevo what to create. It writes the script, records the voiceover, and assembles your video.</p>
+        <p style={{ fontSize: 15, color: "#7c7660" }}>Pick your media, name your video. Lumevo writes the script and narrates it in your voice.</p>
       </div>
 
-      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 24 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+      {!hasVoiceClone && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: "14px 18px", border: "1.5px solid rgba(255,45,45,0.2)", marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-start" }}>
+          <span style={{ fontSize: 18, flexShrink: 0 }}>🎙</span>
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Duration</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              {[30, 60, 120, 180].map(d => (
-                <button key={d} onClick={() => setDuration(d)}
-                  style={{ flex: 1, padding: "9px 0", borderRadius: 10, border: `1.5px solid ${duration === d ? "#FF2D2D" : "rgba(0,0,0,0.1)"}`, fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", background: duration === d ? "rgba(255,45,45,0.07)" : "transparent", color: duration === d ? "#FF2D2D" : "#7c7660" }}>
-                  {d}s
-                </button>
-              ))}
-            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>No voice clone connected yet</div>
+            <div style={{ fontSize: 13, color: "#7c7660" }}>Lumevo will write your script but can&apos;t generate audio until you add your ElevenLabs Voice ID in Settings.</div>
           </div>
+        </div>
+      )}
+
+      {error && (
+        <div style={{ background: "rgba(255,45,45,0.08)", borderRadius: 12, padding: "12px 16px", marginBottom: 16, fontSize: 14, color: "#FF2D2D", fontWeight: 500 }}>{error}</div>
+      )}
+
+      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20 }}>
+        <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Video Name / Topic</label>
+        <input
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="e.g. Day in the life with my niece, Morning routine, New product drop…"
+          style={{ width: "100%", padding: "13px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, outline: "none", background: "#fafaf4", boxSizing: "border-box" }}
+        />
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 18 }}>
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Platform</label>
             <select value={platform} onChange={e => setPlatform(e.target.value)}
@@ -480,63 +611,70 @@ function CreateVideo() {
               {Object.entries(PLATFORM_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Music Mood</label>
-            <select value={musicMood} onChange={e => setMusicMood(e.target.value)}
-              style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, background: "#fafaf4", outline: "none" }}>
-              {["Energetic", "Calm", "Dramatic", "Uplifting", "Lo-fi", "None"].map(m => <option key={m} value={m.toLowerCase()}>{m}</option>)}
-            </select>
-          </div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", paddingBottom: 11 }}>
-              <input type="checkbox" checked={voiceover} onChange={e => setVoiceover(e.target.checked)} style={{ accentColor: "#FF2D2D", width: 16, height: 16 }} />
-              <span style={{ fontSize: 14, fontWeight: 500 }}>AI Voiceover (ElevenLabs)</span>
-            </label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Duration</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              {[30, 60, 120, 180].map(d => (
+                <button key={d} onClick={() => setDuration(d)}
+                  style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${duration === d ? "#FF2D2D" : "rgba(0,0,0,0.1)"}`, fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer", background: duration === d ? "rgba(255,45,45,0.07)" : "transparent", color: duration === d ? "#FF2D2D" : "#7c7660" }}>
+                  {d}s
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>What should this video be about?</label>
-          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Describe the story, topic, or message. Lumevo will write the script and produce the video."
-            style={{ width: "100%", minHeight: 100, padding: "13px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, resize: "vertical", outline: "none", background: "#fafaf4", boxSizing: "border-box" }} />
-        </div>
-
-        <button onClick={handleCreate} disabled={!prompt.trim() || status !== null}
-          style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 32px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: !prompt.trim() || status !== null ? "not-allowed" : "pointer", opacity: !prompt.trim() ? 0.5 : 1 }}>
-          {status ? "Creating…" : `Create ${duration}s Video`}
-        </button>
       </div>
 
-      {status && (
-        <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "#7c7660", marginBottom: 20 }}>
-            {status === "done" ? "Video Ready" : "Creating Your Video"}
+      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Your Media</div>
+            <div style={{ fontSize: 13, color: "#7c7660" }}>Select photos and videos to include in this video.</div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {STEPS.map((step, i) => {
-              const done = status === "done" || i < currentStep;
-              const active = i === currentStep;
+          {selectedIds.length > 0 && (
+            <div style={{ fontSize: 12, fontWeight: 700, background: "#F8F8A6", padding: "4px 12px", borderRadius: 999 }}>
+              {selectedIds.length} selected
+            </div>
+          )}
+        </div>
+
+        {media.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "32px 0", color: "#b5b09a" }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>↑</div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No media uploaded yet</div>
+            <div style={{ fontSize: 13 }}>Upload photos and videos in the Uploads section, then come back here.</div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {media.map(u => {
+              const sel = selectedIds.includes(u.id);
               return (
-                <div key={step} style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: done ? "#FF2D2D" : active ? "rgba(255,45,45,0.15)" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: done ? "#fff" : active ? "#FF2D2D" : "#b5b09a", flexShrink: 0, transition: "all 0.3s" }}>
-                    {done ? "✓" : active ? "…" : i + 1}
+                <div key={u.id} onClick={() => toggleSelect(u.id)}
+                  style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 12, border: `1.5px solid ${sel ? "#FF2D2D" : "rgba(0,0,0,0.07)"}`, cursor: "pointer", background: sel ? "rgba(255,45,45,0.04)" : "#fafaf4", transition: "all 0.15s" }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: sel ? "#FF2D2D" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: sel ? "#fff" : "#FF2D2D", flexShrink: 0 }}>
+                    {sel ? "✓" : TYPE_ICON[u.file_type] || "◻"}
                   </div>
-                  <span style={{ fontSize: 14, fontWeight: done || active ? 600 : 400, color: done ? "#1a1a1a" : active ? "#FF2D2D" : "#b5b09a" }}>{step}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.file_name}</div>
+                    <div style={{ fontSize: 12, color: "#7c7660" }}>{u.file_type} · {(u.file_size / 1024 / 1024).toFixed(1)} MB</div>
+                  </div>
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${sel ? "#FF2D2D" : "rgba(0,0,0,0.15)"}`, background: sel ? "#FF2D2D" : "transparent", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {sel && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}
+                  </div>
                 </div>
               );
             })}
           </div>
-          {status === "done" && (
-            <div style={{ marginTop: 24, padding: "16px 20px", background: "#F8F8A6", borderRadius: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Video generation requires the Pro or Elite plan.</div>
-              <div style={{ fontSize: 13, color: "#7c7660" }}>Upgrade to unlock full video rendering, voiceover, and music assembly.</div>
-            </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
+
+      <button onClick={handleCreate} disabled={!title.trim()}
+        style={{ width: "100%", background: !title.trim() ? "rgba(255,45,45,0.3)" : "#FF2D2D", color: "#fff", border: "none", borderRadius: 16, padding: "16px 32px", fontFamily: "inherit", fontSize: 16, fontWeight: 700, cursor: !title.trim() ? "not-allowed" : "pointer", transition: "background 0.2s" }}>
+        ✦ Create Video{selectedIds.length > 0 ? ` from ${selectedIds.length} clip${selectedIds.length > 1 ? "s" : ""}` : ""}
+      </button>
+      <div style={{ textAlign: "center", fontSize: 12, color: "#b5b09a", marginTop: 10 }}>
+        {hasVoiceClone ? "Script + voice narration will be generated" : "Script only — add your voice clone in Settings to get audio"}
+      </div>
     </div>
   );
 }
@@ -756,34 +894,69 @@ function Billing({ user }: { user: User }) {
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
 function Settings({ user, onLogout }: { user: User; onLogout: () => void }) {
+  const [voiceId, setVoiceId] = useState(user.elevenlabs_voice_id || "");
+  const [savingVoice, setSavingVoice] = useState(false);
+  const [voiceSaved, setVoiceSaved] = useState(false);
+
+  async function saveVoiceId() {
+    setSavingVoice(true);
+    await fetch("/api/settings/voice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ voiceId: voiceId.trim() }) });
+    setSavingVoice(false);
+    setVoiceSaved(true);
+    setTimeout(() => setVoiceSaved(false), 2500);
+  }
+
   return (
     <div>
       <div style={{ marginBottom: 36 }}>
         <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Settings</h2>
         <p style={{ fontSize: 15, color: "#7c7660" }}>Manage your account and preferences.</p>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 14, marginBottom: 28 }}>
-        <div style={{ background: "#fff", borderRadius: 16, padding: 24, border: "1px solid rgba(0,0,0,0.07)" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 16 }}>Account</div>
-          {[["Name", user.name], ["Email", user.email], ["Plan", TIER_LABELS[user.subscription_tier]], ["Member since", fmtDate(user.created_at)]].map(([k, v]) => (
-            <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-              <span style={{ fontSize: 14, color: "#7c7660" }}>{k}</span>
-              <span style={{ fontSize: 14, fontWeight: 500 }}>{v}</span>
-            </div>
-          ))}
+
+      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 18 }}>Account</div>
+        {[["Name", user.name], ["Email", user.email], ["Plan", TIER_LABELS[user.subscription_tier]], ["Member since", fmtDate(user.created_at)]].map(([k, v]) => (
+          <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+            <span style={{ fontSize: 14, color: "#7c7660" }}>{k}</span>
+            <span style={{ fontSize: 14, fontWeight: 500 }}>{v}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>🎙 Voice Clone</div>
+          {user.elevenlabs_voice_id && <span style={{ fontSize: 11, fontWeight: 700, background: "#F8F8A6", padding: "3px 10px", borderRadius: 999, color: "#7c7660" }}>Connected</span>}
         </div>
-        <div style={{ background: "#fff", borderRadius: 16, padding: 24, border: "1px solid rgba(0,0,0,0.07)" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 16 }}>Notifications</div>
-          {["Content generation complete", "Weekly brand report", "New AI improvements"].map(n => (
-            <div key={n} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-              <span style={{ fontSize: 14, color: "#7c7660" }}>{n}</span>
-              <div style={{ width: 36, height: 20, background: "#FF2D2D", borderRadius: 999, position: "relative" }}>
-                <div style={{ width: 16, height: 16, background: "#fff", borderRadius: "50%", position: "absolute", right: 2, top: 2 }} />
-              </div>
-            </div>
-          ))}
+        <p style={{ fontSize: 13, color: "#7c7660", marginBottom: 16, lineHeight: 1.6 }}>
+          Paste your ElevenLabs Voice ID to let Lumevo narrate every video in your actual voice. Find it in your ElevenLabs dashboard under Voice Lab.
+        </p>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <input
+            value={voiceId}
+            onChange={e => setVoiceId(e.target.value)}
+            placeholder="e.g. abc123xyz456..."
+            style={{ flex: 1, padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "monospace", fontSize: 13, outline: "none", background: "#fafaf4" }}
+          />
+          <button onClick={saveVoiceId} disabled={savingVoice || !voiceId.trim()}
+            style={{ background: voiceSaved ? "#2da44e" : "#FF2D2D", color: "#fff", border: "none", borderRadius: 10, padding: "11px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", transition: "background 0.2s" }}>
+            {voiceSaved ? "Saved ✓" : savingVoice ? "Saving…" : "Save"}
+          </button>
         </div>
       </div>
+
+      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 24 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 18 }}>Notifications</div>
+        {["Content generation complete", "Weekly brand report", "New AI improvements"].map(n => (
+          <div key={n} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+            <span style={{ fontSize: 14, color: "#7c7660" }}>{n}</span>
+            <div style={{ width: 36, height: 20, background: "#FF2D2D", borderRadius: 999, position: "relative", flexShrink: 0 }}>
+              <div style={{ width: 16, height: 16, background: "#fff", borderRadius: "50%", position: "absolute", right: 2, top: 2 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
       <button onClick={onLogout}
         style={{ background: "none", border: "1px solid rgba(255,45,45,0.25)", color: "#FF2D2D", fontFamily: "inherit", fontSize: 14, fontWeight: 600, padding: "10px 24px", borderRadius: 999, cursor: "pointer" }}>
         Log out of Lumevo
@@ -1158,7 +1331,7 @@ export default function DashboardPage() {
             {section === "overview" && <Overview user={user} uploads={uploads} projects={projects} brand={brand} onNav={navigate} />}
             {section === "uploads" && <UploadsSection uploads={uploads} onRefresh={fetchData} />}
             {section === "create" && <CreateContent brand={brand} />}
-            {section === "video" && <CreateVideo />}
+            {section === "video" && <CreateVideo uploads={uploads} user={user} />}
             {section === "brand" && <BrandSection brand={brand} onRefresh={fetchData} />}
             {section === "projects" && <ProjectsSection projects={projects} onNav={navigate} />}
             {section === "plan" && <ContentPlan user={user} onNav={navigate} />}
