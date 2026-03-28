@@ -105,9 +105,9 @@ export default function LandingPage() {
         .hero { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 72px 24px 72px; }
         .hero-eyebrow { display: inline-block; background: rgba(255,45,45,0.1); color: #FF2D2D; font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; padding: 6px 18px; border-radius: 999px; margin-bottom: 32px; }
         .hero-brand { margin-bottom: 40px; }
-        .hero-lumevo { font-family: 'Fredoka One', cursive; font-size: clamp(80px, 18vw, 170px); color: #FF2D2D; line-height: 0.88; letter-spacing: 3px; display: block; }
-        .hero-studio-text { font-size: clamp(14px, 2.5vw, 24px); font-style: italic; color: #FF2D2D; letter-spacing: 8px; text-transform: uppercase; display: block; margin-top: 6px; opacity: 0.8; }
-        .hero-headline { font-family: 'Syne', sans-serif; font-size: clamp(30px, 4.5vw, 54px); font-weight: 800; line-height: 1.12; letter-spacing: -1px; color: #1a1a1a; max-width: 780px; margin: 0 auto 22px; }
+        .hero-lumevo { font-family: 'Fredoka One', cursive; font-size: clamp(64px, 13vw, 130px); color: #FF2D2D; line-height: 0.88; letter-spacing: 2px; display: block; }
+        .hero-studio-text { font-size: clamp(12px, 2vw, 18px); font-style: italic; color: #FF2D2D; letter-spacing: 8px; text-transform: uppercase; display: block; margin-top: 6px; opacity: 0.8; }
+        .hero-headline { font-family: 'Syne', sans-serif; font-size: clamp(26px, 3vw, 40px); font-weight: 700; line-height: 1.18; letter-spacing: -0.5px; color: #1a1a1a; max-width: 640px; margin: 0 auto 22px; }
         .hero-headline em { color: #FF2D2D; font-style: normal; }
         .hero-sub { font-size: clamp(15px, 1.8vw, 19px); color: #7c7660; line-height: 1.7; max-width: 520px; margin: 0 auto 44px; }
         .hero-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; margin-bottom: 52px; }
@@ -123,7 +123,7 @@ export default function LandingPage() {
         .section-yellow { background: #F8F8A6; }
         .container { max-width: 1100px; margin: 0 auto; }
         .section-label { font-size: 11px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: #FF2D2D; margin-bottom: 10px; }
-        .section-title { font-family: 'Syne', sans-serif; font-size: clamp(26px, 3.5vw, 46px); font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; margin-bottom: 12px; color: #1a1a1a; }
+        .section-title { font-family: 'Syne', sans-serif; font-size: clamp(22px, 2.8vw, 36px); font-weight: 700; letter-spacing: -0.3px; line-height: 1.15; margin-bottom: 12px; color: #1a1a1a; }
         .section-body { font-size: 17px; color: #7c7660; line-height: 1.7; max-width: 500px; margin-top: 0; }
 
         .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
@@ -149,7 +149,7 @@ export default function LandingPage() {
         .output-climax { text-align: center; margin-top: 52px; padding: 48px 32px; background: #1a1a1a; border-radius: 24px; max-width: 720px; margin-left: auto; margin-right: auto; }
         .output-climax-pre { font-size: 16px; color: rgba(255,255,255,0.45); margin-bottom: 14px; font-style: italic; letter-spacing: 0.2px; }
         .output-climax-pre em { color: rgba(255,255,255,0.7); font-style: normal; font-weight: 600; }
-        .output-climax-title { font-family: 'Syne', sans-serif; font-size: clamp(32px, 5.5vw, 62px); font-weight: 800; line-height: 1.08; letter-spacing: -1.5px; color: #ffffff; margin-bottom: 18px; }
+        .output-climax-title { font-family: 'Syne', sans-serif; font-size: clamp(28px, 4vw, 52px); font-weight: 800; line-height: 1.08; letter-spacing: -1px; color: #ffffff; margin-bottom: 18px; }
         .output-climax-title em { color: #F8F8A6; font-style: normal; }
         .output-climax-sub { font-size: 16px; color: rgba(255,255,255,0.45); }
 
@@ -185,7 +185,7 @@ export default function LandingPage() {
 
         .final-section { padding: 80px 24px; text-align: center; background: #F8F8A6; }
         .final-pre { font-size: 18px; color: #7c7660; margin-bottom: 6px; }
-        .final-title { font-family: 'Syne', sans-serif; font-size: clamp(30px, 5vw, 58px); font-weight: 800; letter-spacing: -1px; line-height: 1.1; margin-bottom: 6px; }
+        .final-title { font-family: 'Syne', sans-serif; font-size: clamp(26px, 3.5vw, 44px); font-weight: 700; letter-spacing: -0.5px; line-height: 1.15; margin-bottom: 6px; }
         .final-title em { color: #FF2D2D; font-style: normal; }
         .final-detail { font-size: 17px; color: #7c7660; margin: 20px auto 44px; max-width: 420px; line-height: 1.6; }
         .final-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
