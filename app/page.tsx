@@ -213,7 +213,7 @@ export default function LandingPage() {
           <span className="hero-studio-text">Studio</span>
         </div>
         <h1 className="hero-headline">
-          You Upload. Lumevo Learns. <em>We Create.</em>
+          You Upload. <span style={{ whiteSpace: "nowrap" }}>Lumevo Learns.</span> <em>We Create.</em>
         </h1>
         <p className="hero-sub">
           Every time you upload content, Lumevo studies your voice, your style, and what your audience responds to — then it starts creating for you.
