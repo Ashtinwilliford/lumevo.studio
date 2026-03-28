@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
 
 interface GenerateRequest {
   title: string;
@@ -12,42 +18,41 @@ export async function POST(req: NextRequest) {
   const body = (await req.json()) as GenerateRequest;
   const { title, description, vibe, tone, audienceGoal } = body;
 
-  const mock = {
-    captions: [
-      `${title} just hit different ✨ #${vibe}vibes`,
-      `POV: you finally found your ${tone} era 🙌`,
-      `This one's for the ${audienceGoal.replace("_", " ")} gang 💫`,
-      `The way this turned out... I can't 😭🔥`,
-    ],
-    titleIdeas: [
-      `My ${vibe} ${title} era`,
-      `You NEED to try this`,
-      `Wait for it... 👀`,
-      `The honest truth about ${description.split(" ").slice(0, 3).join(" ")}`,
-    ],
-    contentStructure: [
-      {
-        label: "Hook",
-        suggestion: `Open with a bold statement or surprising visual related to "${title}". Grab attention in the first 0–2 seconds.`,
-        duration: "0–3s",
-      },
-      {
-        label: "Context",
-        suggestion: `Quickly explain the setup: ${description.slice(0, 80)}…`,
-        duration: "3–8s",
-      },
-      {
-        label: "Value Drop",
-        suggestion: `Deliver the main insight or moment. Match the ${vibe} energy — this is the shareable part.`,
-        duration: "8–20s",
-      },
-      {
-        label: "CTA",
-        suggestion: `Close with a clear ask that supports your goal: ${audienceGoal.replace("_", " ")}. Keep it natural and on-brand.`,
-        duration: "20–30s",
-      },
-    ],
-  };
+  if (!title && !description) {
+    return NextResponse.json({ error: "title or description is required" }, { status: 400 });
+  }
 
-  return NextResponse.json(mock);
+  const prompt = `You are an expert short-form video content strategist for social media creators.
+
+Given this content brief:
+- Title: ${title}
+- Description: ${description}
+- Vibe: ${vibe}
+- Tone: ${tone}
+- Audience goal: ${audienceGoal.replace(/_/g, " ")}
+
+Generate the following in JSON format:
+1. "captions" - array of 4 engaging social media captions (include relevant emojis and 2-3 hashtags each)
+2. "titleIdeas" - array of 4 punchy video title ideas suited for the vibe and tone
+3. "contentStructure" - array of 4 objects, each with:
+   - "label": the section name (Hook, Context, Value Drop, CTA)
+   - "suggestion": a specific, actionable suggestion for this creator's content
+   - "duration": suggested screen time (e.g. "0-3s")
+
+Return only valid JSON with those three keys, no markdown or extra text.`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-5-mini",
+    messages: [{ role: "user", content: prompt }],
+    response_format: { type: "json_object" },
+    max_completion_tokens: 8192,
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    return NextResponse.json({ error: "No content generated" }, { status: 500 });
+  }
+
+  const result = JSON.parse(content);
+  return NextResponse.json(result);
 }

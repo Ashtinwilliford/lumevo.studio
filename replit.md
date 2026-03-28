@@ -26,5 +26,6 @@ npm run start  # Production server on port 5000
 
 ## Notes
 - Project data is stored in the browser's localStorage (no backend database)
-- The content generation API currently uses mock data — connect an AI API (e.g. OpenAI) to enable real generation
-- No environment variables are required to run in the current mock state
+- The content generation API uses OpenAI via Replit AI Integrations (no personal API key required — billed to Replit credits)
+- Model used: `gpt-5-mini` for cost-efficient generation
+- Required env vars (`AI_INTEGRATIONS_OPENAI_API_KEY`, `AI_INTEGRATIONS_OPENAI_BASE_URL`) are injected automatically by Replit
