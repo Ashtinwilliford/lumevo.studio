@@ -14,7 +14,7 @@ const NAV: { id: Section; icon: string; label: string; group?: string; elite?: b
   { id: "overview", icon: "⌂", label: "Overview" },
   { id: "uploads", icon: "↑", label: "Uploads", group: "Create" },
   { id: "create", icon: "✦", label: "Create Content", group: "Create" },
-  { id: "video", icon: "▶", label: "Create Video", group: "Create" },
+  { id: "video", icon: "▶", label: "New Project", group: "Create" },
   { id: "brand", icon: "◉", label: "Brand Profile", group: "Learn" },
   { id: "projects", icon: "◻", label: "Projects", group: "Learn" },
   { id: "plan", icon: "◆", label: "Content Plan", group: "Learn" },
@@ -430,143 +430,235 @@ function CreateContent({ brand }: { brand: BrandProfile | null }) {
   );
 }
 
-// ── CREATE VIDEO ──────────────────────────────────────────────────────────────
-function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
-  const [title, setTitle] = useState("");
-  const [platform, setPlatform] = useState("tiktok");
-  const [duration, setDuration] = useState(30);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [phase, setPhase] = useState<"setup" | "generating" | "done">("setup");
-  const [stepIdx, setStepIdx] = useState(0);
-  const [result, setResult] = useState<{ script: string; audioBase64: string | null; projectId: string; hasVoice: boolean } | null>(null);
-  const [error, setError] = useState("");
+// ── NEW PROJECT (AGENTIC) ─────────────────────────────────────────────────────
+interface ChatMessage { role: "ai" | "user"; content: string; id: number; }
+interface ProjectState {
+  title: string | null; platforms: string[] | null;
+  mediaType: "voiceover" | "music" | "both" | null;
+  vibe: string | null; duration: number | null;
+}
 
+function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
+  const firstName = user.name.split(" ")[0];
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: "ai", content: `What are we creating today, ${firstName}? Tell me anything — a trip, a moment, a vibe, a product. I'll figure out the rest.`, id: 0 }
+  ]);
+  const [projectState, setProjectState] = useState<ProjectState>({ title: null, platforms: null, mediaType: null, vibe: null, duration: null });
+  const [phase, setPhase] = useState<"chat" | "generating" | "done">("chat");
+  const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [needsUpload, setNeedsUpload] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [msgCounter, setMsgCounter] = useState(1);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [result, setResult] = useState<{ script: string; audioBase64: string | null; projectId: string; hasVoice: boolean; caption?: string } | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [localUploads, setLocalUploads] = useState<Upload[]>(uploads);
+
+  useEffect(() => { setLocalUploads(uploads); }, [uploads]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isTyping]);
+
+  const media = localUploads.filter(u => u.file_type === "video" || u.file_type === "image" || u.file_type === "audio");
+  const MEDIA_ICON: Record<string, string> = { video: "▶", image: "◻", audio: "◉" };
   const STEPS = [
-    { label: "Analyzing your media", sub: "Reading through your photos, videos, and clips" },
-    { label: "Writing your script", sub: "GPT-4o is crafting your voiceover in your voice" },
-    { label: "Cloning your voice", sub: "ElevenLabs is synthesizing your audio" },
-    { label: "Assembling the video", sub: "Putting it all together" },
+    "Reading your media",
+    "Writing your script",
+    "Cloning your voice",
+    "Assembling your video",
   ];
 
-  const media = uploads.filter(u => u.file_type === "video" || u.file_type === "image" || u.file_type === "audio");
-  const hasVoiceClone = !!user.elevenlabs_voice_id;
+  async function sendMessage(text?: string) {
+    const content = text ?? input.trim();
+    if (!content) return;
+    const newId = msgCounter;
+    setMsgCounter(c => c + 1);
+    const userMsg: ChatMessage = { role: "user", content, id: newId };
+    const updated = [...messages, userMsg];
+    setMessages(updated);
+    setInput("");
+    setIsTyping(true);
+
+    const conversationForApi = updated.map(m => ({ role: m.role === "ai" ? "assistant" : "user", content: m.content }));
+
+    try {
+      const res = await fetch("/api/project/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: conversationForApi, projectState, userName: firstName }),
+      });
+      const data = await res.json();
+
+      const newState = { ...projectState };
+      if (data.extracted) {
+        if (data.extracted.title) newState.title = data.extracted.title;
+        if (data.extracted.platforms) newState.platforms = data.extracted.platforms;
+        if (data.extracted.mediaType) newState.mediaType = data.extracted.mediaType;
+        if (data.extracted.vibe) newState.vibe = data.extracted.vibe;
+        if (data.extracted.duration) newState.duration = data.extracted.duration;
+      }
+      setProjectState(newState);
+      if (data.needsUpload) setNeedsUpload(true);
+
+      setIsTyping(false);
+      const aiId = msgCounter + 1;
+      setMsgCounter(c => c + 2);
+      setMessages(prev => [...prev, { role: "ai", content: data.message, id: aiId }]);
+
+      if (data.readyToCreate && newState.title) {
+        setTimeout(() => startGeneration(newState, selectedIds), 800);
+      }
+    } catch {
+      setIsTyping(false);
+      setMessages(prev => [...prev, { role: "ai", content: "Sorry, I hit a snag. Try saying that again.", id: msgCounter + 1 }]);
+    }
+  }
+
+  async function startGeneration(state: ProjectState, uploadIds: string[]) {
+    setPhase("generating");
+    setStepIdx(0);
+    const timers = STEPS.map((_, i) => setTimeout(() => setStepIdx(i), i * 2000));
+
+    const res = await fetch("/api/video/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: state.title,
+        uploadIds,
+        platform: state.platforms?.[0] || "tiktok",
+        duration: state.duration || 30,
+        vibe: state.vibe,
+        mediaType: state.mediaType,
+      }),
+    });
+    timers.forEach(clearTimeout);
+    const data = await res.json();
+    setStepIdx(STEPS.length);
+    await new Promise(r => setTimeout(r, 600));
+    setResult(data);
+    setPhase("done");
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingFile(true);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const fileData = ev.target?.result as string;
+      const type = file.type.startsWith("video/") ? "video" : file.type.startsWith("image/") ? "image" : file.type.startsWith("audio/") ? "audio" : "text";
+      const res = await fetch("/api/uploads", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file_name: file.name, file_type: type, mime_type: file.type, file_size: file.size, file_data: fileData.slice(0, 5000) }),
+      });
+      const newUpload = await res.json();
+      if (newUpload?.upload) {
+        setLocalUploads(prev => [newUpload.upload, ...prev]);
+        setSelectedIds(prev => [newUpload.upload.id, ...prev]);
+      }
+      setUploadingFile(false);
+      if (fileRef.current) fileRef.current.value = "";
+    };
+    reader.readAsDataURL(file);
+  }
 
   function toggleSelect(id: string) {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
 
-  async function handleCreate() {
-    if (!title.trim()) return;
-    setPhase("generating");
-    setStepIdx(0);
-    setError("");
-
-    const timers = STEPS.map((_, i) => setTimeout(() => setStepIdx(i), i * 1800));
-
-    try {
-      const res = await fetch("/api/video/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, uploadIds: selectedIds, platform, duration }),
-      });
-      timers.forEach(clearTimeout);
-
-      if (!res.ok) {
-        setError("Something went wrong. Try again.");
-        setPhase("setup");
-        return;
-      }
-
-      const data = await res.json();
-      setStepIdx(STEPS.length);
-      await new Promise(r => setTimeout(r, 500));
-      setResult(data);
-      setPhase("done");
-    } catch {
-      timers.forEach(clearTimeout);
-      setError("Connection error. Try again.");
-      setPhase("setup");
-    }
+  function handleConfirmUploads() {
+    const count = selectedIds.length;
+    const msg = count > 0
+      ? `I've selected ${count} file${count > 1 ? "s" : ""} — ready to go!`
+      : "I don't have media to add right now, just use my brand voice.";
+    setNeedsUpload(false);
+    sendMessage(msg);
   }
 
   function handleReset() {
-    setPhase("setup");
+    setPhase("chat");
     setResult(null);
-    setTitle("");
+    setMessages([{ role: "ai", content: `What are we creating today, ${firstName}? Tell me anything — a trip, a moment, a vibe, a product. I'll figure out the rest.`, id: 0 }]);
+    setProjectState({ title: null, platforms: null, mediaType: null, vibe: null, duration: null });
     setSelectedIds([]);
+    setNeedsUpload(false);
     setStepIdx(0);
-    setError("");
+    setInput("");
   }
 
-  const TYPE_ICON: Record<string, string> = { video: "▶", image: "◻", audio: "◉" };
+  const quickReplies: string[] = !projectState.platforms
+    ? ["Instagram", "TikTok", "Both — Instagram & TikTok"]
+    : !projectState.mediaType
+    ? ["Voiceover", "Background music", "Both"]
+    : !projectState.duration
+    ? ["15 seconds", "30 seconds", "60 seconds"]
+    : [];
 
   if (phase === "generating") {
     return (
-      <div>
-        <div style={{ marginBottom: 36 }}>
-          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Creating Your Video</h2>
-          <p style={{ fontSize: 15, color: "#7c7660" }}>Lumevo is reading your media, writing your script, and cloning your voice.</p>
+      <div style={{ paddingTop: 20 }}>
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: "#FF2D2D", marginBottom: 8 }}>LUMEVO</div>
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 26, fontWeight: 800, marginBottom: 8 }}>Creating your {projectState.title || "video"}...</h2>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Sit tight — this is where the magic happens.</p>
         </div>
-        <div style={{ background: "#fff", borderRadius: 20, padding: 36, border: "1px solid rgba(0,0,0,0.07)" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {STEPS.map((step, i) => {
-              const done = i < stepIdx;
-              const active = i === stepIdx;
-              return (
-                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 16, opacity: i > stepIdx ? 0.3 : 1, transition: "opacity 0.4s" }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", flexShrink: 0, background: done ? "#FF2D2D" : active ? "rgba(255,45,45,0.12)" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: done ? "#fff" : active ? "#FF2D2D" : "#b5b09a", transition: "all 0.4s", marginTop: 2 }}>
-                    {done ? "✓" : active ? <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid rgba(255,45,45,0.3)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> : i + 1}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: done || active ? 700 : 400, color: done ? "#1a1a1a" : active ? "#FF2D2D" : "#b5b09a" }}>{step.label}</div>
-                    {active && <div style={{ fontSize: 13, color: "#7c7660", marginTop: 3 }}>{step.sub}</div>}
-                  </div>
+        <div style={{ background: "#fff", borderRadius: 24, padding: "36px 32px", border: "1px solid rgba(0,0,0,0.07)", maxWidth: 480, margin: "0 auto" }}>
+          {STEPS.map((step, i) => {
+            const done = i < stepIdx;
+            const active = i === stepIdx;
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 0", borderBottom: i < STEPS.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none", opacity: i > stepIdx ? 0.3 : 1, transition: "opacity 0.5s" }}>
+                <div style={{ width: 38, height: 38, borderRadius: "50%", flexShrink: 0, background: done ? "#FF2D2D" : active ? "rgba(255,45,45,0.1)" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: done ? "#fff" : active ? "#FF2D2D" : "#b5b09a", transition: "all 0.4s" }}>
+                  {done ? "✓" : active ? <span style={{ display: "inline-block", width: 15, height: 15, border: "2.5px solid rgba(255,45,45,0.25)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.75s linear infinite" }} /> : i + 1}
                 </div>
-              );
-            })}
-          </div>
+                <span style={{ fontSize: 15, fontWeight: done || active ? 700 : 400, color: active ? "#FF2D2D" : done ? "#1a1a1a" : "#b5b09a" }}>{step}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
   }
 
   if (phase === "done" && result) {
+    const platforms = projectState.platforms?.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" + ") || "Video";
     return (
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 36 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>✦ Video Created</div>
-            <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>{title}</h2>
-            <p style={{ fontSize: 15, color: "#7c7660" }}>{platform.charAt(0).toUpperCase() + platform.slice(1)} · {duration}s</p>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>✦ Ready to post</div>
+            <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 26, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 4 }}>{projectState.title}</h2>
+            <p style={{ fontSize: 14, color: "#7c7660" }}>{platforms} · {projectState.duration || 30}s {projectState.mediaType === "both" ? "· Voice + Music" : projectState.mediaType === "voiceover" ? "· Voice" : "· Music"}</p>
           </div>
-          <button onClick={handleReset} style={{ background: "transparent", border: "1.5px solid rgba(0,0,0,0.1)", color: "#7c7660", borderRadius: 999, padding: "9px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            + New Video
+          <button onClick={handleReset} style={{ background: "#111", color: "#fff", border: "none", borderRadius: 999, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            + New Project
           </button>
         </div>
 
-        <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 14 }}>Your Script</div>
-          <p style={{ fontSize: 15, lineHeight: 1.8, color: "#1a1a1a", whiteSpace: "pre-wrap" }}>{result.script}</p>
+        {result.audioBase64 && (
+          <div style={{ background: "#fff", borderRadius: 20, padding: 24, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 12 }}>🎙 Your Voice Narration</div>
+            <audio controls style={{ width: "100%", borderRadius: 8 }} src={`data:audio/mpeg;base64,${result.audioBase64}`} />
+          </div>
+        )}
+
+        <div style={{ background: "#fff", borderRadius: 20, padding: 24, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 12 }}>📋 Caption</div>
+          <p style={{ fontSize: 15, lineHeight: 1.7, color: "#1a1a1a", fontStyle: "italic" }}>
+            &quot;{projectState.vibe ? `${projectState.title} — ${projectState.vibe.slice(0, 80)}` : projectState.title}&quot;
+          </p>
         </div>
 
-        {result.audioBase64 && (
-          <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 14 }}>Your Voice · ElevenLabs</div>
-            <audio controls style={{ width: "100%", borderRadius: 10 }}
-              src={`data:audio/mpeg;base64,${result.audioBase64}`} />
-          </div>
-        )}
+        <div style={{ background: "#fff", borderRadius: 20, padding: 24, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 12 }}>🎬 Voiceover Script</div>
+          <p style={{ fontSize: 14, lineHeight: 1.8, color: "#1a1a1a", whiteSpace: "pre-wrap" }}>{result.script}</p>
+        </div>
 
         {!result.hasVoice && (
-          <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "20px 24px", border: "1px solid rgba(0,0,0,0.07)" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Add your voice clone to hear yourself</div>
-            <div style={{ fontSize: 13, color: "#7c7660", marginBottom: 12 }}>Go to Settings to connect your ElevenLabs voice clone and Lumevo will narrate every video in your actual voice.</div>
-          </div>
-        )}
-
-        {!result.audioBase64 && result.hasVoice && (
-          <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "20px 24px" }}>
-            <div style={{ fontSize: 13, color: "#7c7660" }}>Voice synthesis encountered an issue. Your script is ready — you can use it manually or try regenerating.</div>
+          <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "18px 22px" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Want to hear yourself narrate this?</div>
+            <div style={{ fontSize: 13, color: "#7c7660" }}>Add your ElevenLabs Voice ID in Settings and Lumevo will narrate every video in your actual voice.</div>
           </div>
         )}
       </div>
@@ -575,106 +667,115 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
 
   return (
     <div>
-      <div style={{ marginBottom: 36 }}>
-        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Create Video</h2>
-        <p style={{ fontSize: 15, color: "#7c7660" }}>Pick your media, name your video. Lumevo writes the script and narrates it in your voice.</p>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 4 }}>New Project</h2>
+        <p style={{ fontSize: 14, color: "#7c7660" }}>Tell your AI creative director what you&apos;re making. It handles everything else.</p>
       </div>
 
-      {!hasVoiceClone && (
-        <div style={{ background: "#fff", borderRadius: 14, padding: "14px 18px", border: "1.5px solid rgba(255,45,45,0.2)", marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-start" }}>
-          <span style={{ fontSize: 18, flexShrink: 0 }}>🎙</span>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>No voice clone connected yet</div>
-            <div style={{ fontSize: 13, color: "#7c7660" }}>Lumevo will write your script but can&apos;t generate audio until you add your ElevenLabs Voice ID in Settings.</div>
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <div style={{ background: "rgba(255,45,45,0.08)", borderRadius: 12, padding: "12px 16px", marginBottom: 16, fontSize: 14, color: "#FF2D2D", fontWeight: 500 }}>{error}</div>
-      )}
-
-      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20 }}>
-        <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Video Name / Topic</label>
-        <input
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          placeholder="e.g. Day in the life with my niece, Morning routine, New product drop…"
-          style={{ width: "100%", padding: "13px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, outline: "none", background: "#fafaf4", boxSizing: "border-box" }}
-        />
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 18 }}>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Platform</label>
-            <select value={platform} onChange={e => setPlatform(e.target.value)}
-              style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, background: "#fafaf4", outline: "none" }}>
-              {Object.entries(PLATFORM_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Duration</label>
-            <div style={{ display: "flex", gap: 6 }}>
-              {[30, 60, 120, 180].map(d => (
-                <button key={d} onClick={() => setDuration(d)}
-                  style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `1.5px solid ${duration === d ? "#FF2D2D" : "rgba(0,0,0,0.1)"}`, fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer", background: duration === d ? "rgba(255,45,45,0.07)" : "transparent", color: duration === d ? "#FF2D2D" : "#7c7660" }}>
-                  {d}s
-                </button>
-              ))}
+      <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", overflow: "hidden", marginBottom: 16 }}>
+        <div style={{ maxHeight: 420, overflowY: "auto", padding: "24px 20px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
+          {messages.map(msg => (
+            <div key={msg.id} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start", gap: 10 }}>
+              {msg.role === "ai" && (
+                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#1a1a1a", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontFamily: "'Fredoka One', cursive", color: "#FF2D2D", marginTop: 2 }}>L</div>
+              )}
+              <div style={{ maxWidth: "80%", padding: "12px 16px", borderRadius: msg.role === "ai" ? "4px 18px 18px 18px" : "18px 18px 4px 18px", background: msg.role === "ai" ? "#fafaf4" : "#FF2D2D", color: msg.role === "ai" ? "#1a1a1a" : "#fff", fontSize: 14, lineHeight: 1.6, fontWeight: msg.role === "ai" ? 400 : 500 }}>
+                {msg.content}
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
+          ))}
 
-      <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Your Media</div>
-            <div style={{ fontSize: 13, color: "#7c7660" }}>Select photos and videos to include in this video.</div>
-          </div>
-          {selectedIds.length > 0 && (
-            <div style={{ fontSize: 12, fontWeight: 700, background: "#F8F8A6", padding: "4px 12px", borderRadius: 999 }}>
-              {selectedIds.length} selected
+          {isTyping && (
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#1a1a1a", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontFamily: "'Fredoka One', cursive", color: "#FF2D2D" }}>L</div>
+              <div style={{ padding: "14px 18px", borderRadius: "4px 18px 18px 18px", background: "#fafaf4", display: "flex", gap: 4, alignItems: "center" }}>
+                {[0, 1, 2].map(i => (
+                  <span key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#b5b09a", display: "inline-block", animation: `bounce 1.2s ease-in-out ${i * 0.15}s infinite` }} />
+                ))}
+              </div>
             </div>
           )}
+
+          {needsUpload && !isTyping && (
+            <div style={{ marginTop: 8, background: "#fafaf4", borderRadius: 16, padding: 18, border: "1.5px solid rgba(255,45,45,0.15)" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: "#1a1a1a" }}>
+                Select your media for this video
+                {selectedIds.length > 0 && <span style={{ marginLeft: 8, fontSize: 11, background: "#F8F8A6", padding: "2px 10px", borderRadius: 999 }}>{selectedIds.length} selected</span>}
+              </div>
+
+              {media.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 220, overflowY: "auto", marginBottom: 12 }}>
+                  {media.map(u => {
+                    const sel = selectedIds.includes(u.id);
+                    return (
+                      <div key={u.id} onClick={() => toggleSelect(u.id)}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${sel ? "#FF2D2D" : "rgba(0,0,0,0.07)"}`, cursor: "pointer", background: sel ? "rgba(255,45,45,0.04)" : "#fff", transition: "all 0.15s" }}>
+                        <div style={{ width: 30, height: 30, borderRadius: 7, background: sel ? "#FF2D2D" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: sel ? "#fff" : "#FF2D2D", flexShrink: 0 }}>
+                          {sel ? "✓" : MEDIA_ICON[u.file_type] || "◻"}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.file_name}</div>
+                          <div style={{ fontSize: 11, color: "#7c7660" }}>{u.file_type} · {(u.file_size / 1024 / 1024).toFixed(1)} MB</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: "#b5b09a", marginBottom: 10 }}>No media in your library yet — upload below.</div>
+              )}
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={() => fileRef.current?.click()} disabled={uploadingFile}
+                  style={{ background: "#111", color: "#fff", border: "none", borderRadius: 999, padding: "9px 16px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  {uploadingFile ? "Uploading…" : "↑ Upload new"}
+                </button>
+                <input ref={fileRef} type="file" style={{ display: "none" }} onChange={handleFileUpload} accept="video/*,image/*,audio/*" />
+                <button onClick={handleConfirmUploads}
+                  style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "9px 18px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  {selectedIds.length > 0 ? `Continue with ${selectedIds.length} file${selectedIds.length > 1 ? "s" : ""}` : "Continue without media"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div ref={chatEndRef} />
         </div>
 
-        {media.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "32px 0", color: "#b5b09a" }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>↑</div>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No media uploaded yet</div>
-            <div style={{ fontSize: 13 }}>Upload photos and videos in the Uploads section, then come back here.</div>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {media.map(u => {
-              const sel = selectedIds.includes(u.id);
-              return (
-                <div key={u.id} onClick={() => toggleSelect(u.id)}
-                  style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 12, border: `1.5px solid ${sel ? "#FF2D2D" : "rgba(0,0,0,0.07)"}`, cursor: "pointer", background: sel ? "rgba(255,45,45,0.04)" : "#fafaf4", transition: "all 0.15s" }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 8, background: sel ? "#FF2D2D" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: sel ? "#fff" : "#FF2D2D", flexShrink: 0 }}>
-                    {sel ? "✓" : TYPE_ICON[u.file_type] || "◻"}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.file_name}</div>
-                    <div style={{ fontSize: 12, color: "#7c7660" }}>{u.file_type} · {(u.file_size / 1024 / 1024).toFixed(1)} MB</div>
-                  </div>
-                  <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${sel ? "#FF2D2D" : "rgba(0,0,0,0.15)"}`, background: sel ? "#FF2D2D" : "transparent", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {sel && <span style={{ color: "#fff", fontSize: 11, fontWeight: 700 }}>✓</span>}
-                  </div>
-                </div>
-              );
-            })}
+        {quickReplies.length > 0 && !isTyping && !needsUpload && (
+          <div style={{ padding: "8px 20px 12px", display: "flex", gap: 8, flexWrap: "wrap", borderTop: "1px solid rgba(0,0,0,0.04)" }}>
+            {quickReplies.map(q => (
+              <button key={q} onClick={() => sendMessage(q)}
+                style={{ padding: "7px 14px", borderRadius: 999, border: "1.5px solid rgba(255,45,45,0.25)", background: "transparent", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#FF2D2D", transition: "all 0.15s" }}>
+                {q}
+              </button>
+            ))}
           </div>
         )}
+
+        <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(0,0,0,0.06)", display: "flex", gap: 10, alignItems: "flex-end" }}>
+          <textarea
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+            placeholder="Type anything…"
+            disabled={isTyping || needsUpload}
+            rows={1}
+            style={{ flex: 1, padding: "11px 14px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, resize: "none", outline: "none", background: "#fafaf4", lineHeight: 1.5, opacity: isTyping || needsUpload ? 0.5 : 1 }}
+          />
+          <button onClick={() => sendMessage()} disabled={!input.trim() || isTyping || needsUpload}
+            style={{ width: 42, height: 42, borderRadius: 12, background: input.trim() && !isTyping ? "#FF2D2D" : "rgba(0,0,0,0.08)", border: "none", cursor: input.trim() && !isTyping ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: input.trim() && !isTyping ? "#fff" : "#b5b09a", transition: "all 0.15s", flexShrink: 0 }}>
+            →
+          </button>
+        </div>
       </div>
 
-      <button onClick={handleCreate} disabled={!title.trim()}
-        style={{ width: "100%", background: !title.trim() ? "rgba(255,45,45,0.3)" : "#FF2D2D", color: "#fff", border: "none", borderRadius: 16, padding: "16px 32px", fontFamily: "inherit", fontSize: 16, fontWeight: 700, cursor: !title.trim() ? "not-allowed" : "pointer", transition: "background 0.2s" }}>
-        ✦ Create Video{selectedIds.length > 0 ? ` from ${selectedIds.length} clip${selectedIds.length > 1 ? "s" : ""}` : ""}
-      </button>
-      <div style={{ textAlign: "center", fontSize: 12, color: "#b5b09a", marginTop: 10 }}>
-        {hasVoiceClone ? "Script + voice narration will be generated" : "Script only — add your voice clone in Settings to get audio"}
-      </div>
+      <style>{`
+        @keyframes bounce {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+          30% { transform: translateY(-5px); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }
