@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 type Section = "overview" | "uploads" | "create" | "video" | "brand" | "projects" | "plan" | "aimanager" | "analytics" | "billing" | "settings";
 
-interface User { id: string; name: string; email: string; subscription_tier: string; created_at: string; elevenlabs_voice_id?: string; voice_clone_name?: string; }
+interface User { id: string; name: string; email: string; subscription_tier: string; created_at: string; trial_started_at?: string; elevenlabs_voice_id?: string; voice_clone_name?: string; }
 interface Upload { id: string; file_type: string; file_name: string; mime_type: string; file_size: number; analysis_status: string; created_at: string; }
 interface Project { id: string; title: string; project_type: string; target_platform: string; target_duration?: number; vibe?: string; status: string; created_at: string; updated_at: string; }
 interface FullProject extends Project { generated_content?: { script?: string; caption?: string } | null; }
@@ -26,7 +26,14 @@ const NAV: { id: Section; icon: string; label: string; group?: string; elite?: b
   { id: "settings", icon: "⚙", label: "Settings", group: "Account" },
 ];
 
-const TIER_LABELS: Record<string, string> = { free: "Free", creator: "Creator", pro: "Pro", elite: "Elite" };
+const TIER_LABELS: Record<string, string> = { trial: "Free Trial", creator: "Creator", pro: "Pro", elite: "Elite" };
+const TRIAL_LIMIT = 2;
+const TRIAL_DAYS = 14;
+function trialDaysLeft(startedAt?: string) {
+  if (!startedAt) return TRIAL_DAYS;
+  const ms = Date.now() - new Date(startedAt).getTime();
+  return Math.max(0, TRIAL_DAYS - Math.floor(ms / 86400000));
+}
 const TYPE_LABELS: Record<string, string> = { caption: "Caption", hook: "Hook", post: "Post", script: "Script", video: "Video", ideas: "Ideas" };
 const PLATFORM_LABELS: Record<string, string> = { tiktok: "TikTok", instagram: "Instagram", youtube: "YouTube", general: "General" };
 const STATUS_COLORS: Record<string, string> = { draft: "#b5b09a", queued: "#7c7660", analyzing: "#FF8C00", scripting: "#FF8C00", completed: "#2da44e", failed: "#FF2D2D" };
@@ -54,6 +61,29 @@ function Overview({ user, uploads, projects, brand, onNav }: {
         </h2>
         <p style={{ fontSize: 15, color: "#7c7660" }}>Your AI content system is {prog < 20 ? "warming up" : prog < 60 ? "learning" : "trained and ready"}.</p>
       </div>
+
+      {user.subscription_tier === "trial" && (() => {
+        const projectsLeft = Math.max(0, TRIAL_LIMIT - projects.length);
+        const daysLeft = trialDaysLeft(user.trial_started_at);
+        const trialEndDt = user.trial_started_at ? new Date(new Date(user.trial_started_at).getTime() + TRIAL_DAYS * 86400000) : null;
+        const trialEndDate = trialEndDt ? fmtDate(trialEndDt.toISOString()) : "";
+        return (
+          <div style={{ background: "#1a1a1a", borderRadius: 16, padding: "20px 24px", marginBottom: 28, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>Free Trial</div>
+              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 17, fontWeight: 800, color: "#fff", marginBottom: 4 }}>
+                {projectsLeft === 0 ? "You've used both trial projects" : `${projectsLeft} project${projectsLeft !== 1 ? "s" : ""} left · ${daysLeft} day${daysLeft !== 1 ? "s" : ""} remaining`}
+              </div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
+                {trialEndDate ? `Trial ends ${trialEndDate} — then auto-renews to Creator ($29/mo). Cancel anytime.` : "Auto-renews to Creator ($29/mo) after trial. Cancel anytime."}
+              </div>
+            </div>
+            <button onClick={() => onNav("billing")} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 22px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+              Upgrade now →
+            </button>
+          </div>
+        );
+      })()}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(155px,1fr))", gap: 12, marginBottom: 44 }}>
         {[
@@ -473,7 +503,7 @@ interface ProjectState {
 }
 type ChatStep = "title" | "platform" | "vibe" | "duration" | "upload" | null;
 
-function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
+function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: User; projects: Project[] }) {
   const firstName = user.name.split(" ")[0];
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: "ai", content: `What's the content about, ${firstName}? Tell me the actual topic — a trip, a product launch, a morning routine, something that happened. The more specific, the better.`, id: 0 }
@@ -493,6 +523,7 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [localUploads, setLocalUploads] = useState<Upload[]>(uploads);
   const [useVoiceClone, setUseVoiceClone] = useState(!!user.elevenlabs_voice_id);
+  const [trialBlocked, setTrialBlocked] = useState(user.subscription_tier === "trial" && projects.length >= TRIAL_LIMIT);
 
   useEffect(() => { setLocalUploads(uploads); }, [uploads]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isTyping]);
@@ -569,10 +600,15 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
       }),
     });
     timers.forEach(clearTimeout);
-    const data = await res.json();
+    const data = await res.json() as { trialLimitReached?: boolean; script?: string; audioBase64?: string | null; projectId?: string; hasVoice?: boolean; caption?: string };
+    if (data.trialLimitReached) {
+      setTrialBlocked(true);
+      setPhase("chat");
+      return;
+    }
     setStepIdx(STEPS.length);
     await new Promise(r => setTimeout(r, 600));
-    setResult(data);
+    setResult(data as { script: string; audioBase64: string | null; projectId: string; hasVoice: boolean; caption?: string });
     setPhase("done");
   }
 
@@ -726,6 +762,31 @@ function CreateVideo({ uploads, user }: { uploads: Upload[]; user: User }) {
             </div>
           </div>
         )}
+      </div>
+    );
+  }
+
+  if (trialBlocked) {
+    return (
+      <div>
+        <div style={{ marginBottom: 24 }}>
+          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 4 }}>New Project</h2>
+        </div>
+        <div style={{ background: "#1a1a1a", borderRadius: 20, padding: "48px 40px", textAlign: "center" }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>◆</div>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 24, fontWeight: 800, color: "#fff", marginBottom: 12 }}>You&apos;ve used both trial projects</div>
+          <div style={{ fontSize: 15, color: "rgba(255,255,255,0.55)", maxWidth: 440, margin: "0 auto 32px", lineHeight: 1.7 }}>
+            Your free trial includes 2 projects. To keep creating, pick a plan — your work is saved and you can keep going instantly.
+          </div>
+          <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
+            {[{ name: "Creator", price: "$29/mo" }, { name: "Pro", price: "$79/mo" }, { name: "Elite", price: "$149/mo" }].map(p => (
+              <button key={p.name} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 28px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+                {p.name} — {p.price}
+              </button>
+            ))}
+          </div>
+          <div style={{ marginTop: 20, fontSize: 12, color: "rgba(255,255,255,0.3)" }}>Cancel anytime · No hidden fees</div>
+        </div>
       </div>
     );
   }
@@ -1246,26 +1307,60 @@ function Analytics() {
 
 // ── BILLING ───────────────────────────────────────────────────────────────────
 function Billing({ user }: { user: User }) {
+  const isTrial = user.subscription_tier === "trial";
+  const daysLeft = trialDaysLeft(user.trial_started_at);
+  const trialEndDt = user.trial_started_at ? new Date(new Date(user.trial_started_at).getTime() + TRIAL_DAYS * 86400000) : null;
+  const trialEndDate = trialEndDt ? fmtDate(trialEndDt.toISOString()) : "";
+
   const PLANS = [
-    { id: "free", name: "Free", price: "$0", features: ["5 uploads/month", "10 AI generations", "Basic brand learning", "Captions & hooks"] },
-    { id: "creator", name: "Creator", price: "$29", features: ["50 uploads/month", "100 AI generations", "Full brand learning", "All content types", "Weekly content ideas"] },
-    { id: "pro", name: "Pro", price: "$79", features: ["Unlimited uploads", "Unlimited generations", "Full personality profile", "Multi-platform content", "Advanced project history"] },
-    { id: "elite", name: "Elite", price: "$149", features: ["Everything in Pro", "AI Video Creation", "Voice Clone Studio — sounds exactly like you", "Agentic creative director", "Advanced creative briefs", "Priority support"] },
+    { id: "creator", name: "Creator", price: "$29", period: "/mo", features: ["50 uploads/month", "100 AI generations", "Full brand learning", "All content types", "Weekly content ideas", "Cancel anytime"] },
+    { id: "pro", name: "Pro", price: "$79", period: "/mo", features: ["Unlimited uploads", "Unlimited generations", "Full personality profile", "Multi-platform content", "Advanced project history", "Cancel anytime"] },
+    { id: "elite", name: "Elite", price: "$149", period: "/mo", features: ["Everything in Pro", "AI Video Creation", "Voice Clone Studio — sounds exactly like you", "Agentic creative director", "Advanced creative briefs", "Priority support", "Cancel anytime"] },
   ];
 
   return (
     <div>
       <div style={{ marginBottom: 36 }}>
         <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Billing</h2>
-        <p style={{ fontSize: 15, color: "#7c7660" }}>You are on the <strong>{TIER_LABELS[user.subscription_tier]}</strong> plan. Upgrade to unlock more.</p>
+        <p style={{ fontSize: 15, color: "#7c7660" }}>
+          {isTrial ? "You're on a free trial — choose a plan to keep going after your trial ends." : `You are on the ${TIER_LABELS[user.subscription_tier]} plan.`}
+        </p>
       </div>
+
+      {isTrial && (
+        <div style={{ background: "#1a1a1a", borderRadius: 20, padding: "28px", marginBottom: 24, position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: 0, right: 0, width: 180, height: 180, borderRadius: "50%", background: "rgba(255,45,45,0.08)", transform: "translate(40px,-60px)" }} />
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 10 }}>Your Free Trial</div>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 8 }}>2 projects · 14 days · Full access</div>
+          <div style={{ display: "flex", gap: 32, marginBottom: 16, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#FF2D2D", fontFamily: "'Syne', sans-serif" }}>{daysLeft}</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>days left</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#fff", fontFamily: "'Syne', sans-serif" }}>{trialEndDate || "—"}</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>trial ends</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
+            After your trial, you&apos;ll automatically move to Creator ($29/mo). Your card on file will be billed on {trialEndDate || "your trial end date"}. Cancel anytime before then to avoid being charged.
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 }}>
         {PLANS.map(plan => {
           const current = plan.id === user.subscription_tier;
+          const isAutoRenew = isTrial && plan.id === "creator";
           return (
-            <div key={plan.id} style={{ background: current ? "#1a1a1a" : "#fff", borderRadius: 20, padding: "24px 22px", border: `2px solid ${current ? "#FF2D2D" : "rgba(0,0,0,0.07)"}` }}>
-              <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: current ? "#FF2D2D" : "#FF2D2D", marginBottom: 4 }}>{plan.name}</div>
-              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 32, fontWeight: 800, color: current ? "#fff" : "#1a1a1a", marginBottom: 16 }}>{plan.price}<span style={{ fontSize: 14, fontWeight: 400, color: current ? "rgba(255,255,255,0.5)" : "#7c7660" }}>/mo</span></div>
+            <div key={plan.id} style={{ background: current ? "#1a1a1a" : "#fff", borderRadius: 20, padding: "24px 22px", border: `2px solid ${current || isAutoRenew ? "#FF2D2D" : "rgba(0,0,0,0.07)"}`, position: "relative" }}>
+              {isAutoRenew && (
+                <div style={{ position: "absolute", top: -1, right: 16, background: "#FF2D2D", color: "#fff", fontSize: 10, fontWeight: 800, letterSpacing: 1, padding: "4px 10px", borderRadius: "0 0 8px 8px", textTransform: "uppercase" }}>Auto-renews</div>
+              )}
+              <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: "#FF2D2D", marginBottom: 4 }}>{plan.name}</div>
+              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 32, fontWeight: 800, color: current ? "#fff" : "#1a1a1a", marginBottom: 16 }}>
+                {plan.price}<span style={{ fontSize: 14, fontWeight: 400, color: current ? "rgba(255,255,255,0.5)" : "#7c7660" }}>{plan.period}</span>
+              </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
                 {plan.features.map(f => (
                   <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: current ? "rgba(255,255,255,0.8)" : "#7c7660" }}>
@@ -1277,7 +1372,7 @@ function Billing({ user }: { user: User }) {
                 <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>Current Plan</div>
               ) : (
                 <button style={{ width: "100%", background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 0", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                  Upgrade to {plan.name}
+                  {isTrial ? `Start ${plan.name}` : `Upgrade to ${plan.name}`}
                 </button>
               )}
             </div>
@@ -1593,7 +1688,7 @@ function ContentPlan({ user, onNav }: { user: User; onNav: (s: Section) => void 
   const [plan, setPlan] = useState<ContentIdea[]>([]);
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState(false);
-  const isLocked = user.subscription_tier === "free";
+  const isLocked = false;
 
   const PLATFORM_ICON: Record<string, string> = { instagram: "◉", tiktok: "▶", youtube: "▲", general: "✦" };
 
@@ -1962,7 +2057,7 @@ export default function DashboardPage() {
             {section === "overview" && <Overview user={user} uploads={uploads} projects={projects} brand={brand} onNav={navigate} />}
             {section === "uploads" && <UploadsSection uploads={uploads} onRefresh={fetchData} />}
             {section === "create" && <CreateContent brand={brand} />}
-            {section === "video" && <CreateVideo uploads={uploads} user={user} />}
+            {section === "video" && <CreateVideo uploads={uploads} user={user} projects={projects} />}
             {section === "brand" && <BrandSection brand={brand} onRefresh={fetchData} />}
             {section === "projects" && <ProjectsSection projects={projects} onNav={navigate} initialProjectId={selectedProjectId} onClearInitial={() => setSelectedProjectId(null)} />}
             {section === "plan" && <ContentPlan user={user} onNav={navigate} />}

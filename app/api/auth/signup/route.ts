@@ -11,8 +11,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "All fields required" }, { status: 400 });
     }
 
-    const validTiers = ["free", "creator", "pro", "elite"];
-    const subscription_tier = validTiers.includes(plan) ? plan : "free";
+    const validTiers = ["trial", "creator", "pro", "elite"];
+    const subscription_tier = validTiers.includes(plan) ? plan : "trial";
 
     const existing = await query("SELECT id FROM users WHERE email = $1", [email]);
     if (existing.rows.length > 0) {
@@ -22,8 +22,8 @@ export async function POST(req: NextRequest) {
     const password_hash = await bcrypt.hash(password, 12);
 
     const result = await query(
-      `INSERT INTO users (name, email, password_hash, subscription_tier)
-       VALUES ($1, $2, $3, $4) RETURNING id, name, email, subscription_tier`,
+      `INSERT INTO users (name, email, password_hash, subscription_tier, trial_started_at)
+       VALUES ($1, $2, $3, $4, now()) RETURNING id, name, email, subscription_tier, trial_started_at`,
       [name, email, password_hash, subscription_tier]
     );
     const user = result.rows[0];

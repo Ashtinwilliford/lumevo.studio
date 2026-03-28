@@ -21,8 +21,16 @@ export async function POST(req: NextRequest) {
   const brandRows = await query("SELECT * FROM brand_profiles WHERE user_id = $1", [userId]);
   const brand = brandRows.rows[0];
 
-  const userRows = await query("SELECT name, elevenlabs_voice_id FROM users WHERE id = $1", [userId]);
+  const userRows = await query("SELECT name, elevenlabs_voice_id, subscription_tier FROM users WHERE id = $1", [userId]);
   const user = userRows.rows[0];
+
+  if (user?.subscription_tier === "trial") {
+    const countRes = await query("SELECT COUNT(*) AS cnt FROM projects WHERE user_id = $1", [userId]);
+    const projectCount = parseInt((countRes.rows[0] as { cnt: string })?.cnt || "0");
+    if (projectCount >= 2) {
+      return NextResponse.json({ error: "Trial limit reached. Upgrade to create more projects.", trialLimitReached: true }, { status: 403 });
+    }
+  }
 
   let mediaContext = "";
   if (uploadIds?.length > 0) {

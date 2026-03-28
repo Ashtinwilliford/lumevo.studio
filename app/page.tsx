@@ -4,20 +4,21 @@ import { useRouter } from "next/navigation";
 
 const PRICING = [
   {
-    id: "free",
-    name: "Free",
-    sub: "Starter",
-    price: "$0",
-    per: "forever",
-    desc: "Test the waters. See what Lumevo can do.",
-    cta: "Start Free",
+    id: "trial",
+    name: "Trial",
+    sub: "2 Projects Free",
+    price: "Free",
+    per: "for 14 days",
+    desc: "2 full projects. 14 days. Then auto-renews to Creator — cancel anytime.",
+    cta: "Start Free Trial",
     highlight: false,
     features: [
-      "Basic content generation",
-      "5 uploads / month",
-      "25 AI generations / month",
-      "Basic dashboard",
-      "No brand learning",
+      "2 complete AI video projects",
+      "Full brand learning",
+      "All content types (captions, hooks, scripts)",
+      "Agentic creative director",
+      "Auto-renews to Creator ($29/mo)",
+      "Cancel before 14 days — no charge",
     ],
   },
   {
@@ -27,14 +28,15 @@ const PRICING = [
     price: "$29",
     per: "per month",
     desc: "Built for creators who want to move faster.",
-    cta: "Start Growing",
+    cta: "Start Creator",
     highlight: false,
     features: [
+      "50 uploads / month",
       "100 AI generations / month",
       "Personalized captions & hooks",
-      "Basic tone & style recognition",
+      "Full tone & style recognition",
       "Weekly content ideas",
-      "Early brand learning",
+      "Cancel anytime",
     ],
   },
   {
@@ -47,30 +49,31 @@ const PRICING = [
     cta: "Build Your Brand",
     highlight: false,
     features: [
-      "Unlimited AI generations",
+      "Unlimited uploads & generations",
       "Full personality training",
       "Multi-platform content",
+      "Advanced project history",
       "Content calendar",
-      "Advanced audience learning",
+      "Cancel anytime",
     ],
   },
   {
     id: "elite",
     name: "Elite",
     sub: "AI Manager",
-    price: "$199",
+    price: "$149",
     per: "per month",
     desc: "Let Lumevo run your entire content system.",
     cta: "Get Your AI Manager",
     highlight: true,
     features: [
       "Everything in Pro",
-      "AI Video Creator + Manager",
-      "Voiceover generation",
-      "Script → Video workflow",
-      "Content repurposing engine",
-      "Social media manager workflow",
+      "AI Video Creation",
+      "Voice Clone Studio — sounds exactly like you",
+      "Agentic creative director",
+      "Script → narrated in your voice",
       "Priority support",
+      "Cancel anytime",
     ],
   },
 ];
@@ -355,7 +358,7 @@ export default function LandingPage() {
         <h2 className="final-title">Lumevo builds you <em>a system.</em></h2>
         <p className="final-detail">You upload once. We learn forever.<br />And it only gets better from there.</p>
         <div className="final-actions">
-          <button className="btn-red" onClick={() => router.push("/signup")}>Start for Free →</button>
+          <button className="btn-red" onClick={() => router.push("/signup")}>Start Free Trial →</button>
           <button className="btn-outline" onClick={() => router.push("/login")}>Already have an account?</button>
         </div>
       </section>

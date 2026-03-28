@@ -4,17 +4,17 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const PLAN_LABELS: Record<string, { name: string; price: string; badge: string }> = {
-  free:    { name: "Free",    price: "$0/month",   badge: "Free to Start" },
+  trial:   { name: "Trial",   price: "Free for 14 days", badge: "2-Project Free Trial" },
   creator: { name: "Creator", price: "$29/month",  badge: "Growth Plan" },
   pro:     { name: "Pro",     price: "$79/month",  badge: "Brand Builder" },
-  elite:   { name: "Elite",   price: "$199/month", badge: "AI Manager" },
+  elite:   { name: "Elite",   price: "$149/month", badge: "AI Manager" },
 };
 
 function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const plan = searchParams.get("plan") || "free";
-  const planInfo = PLAN_LABELS[plan] || PLAN_LABELS.free;
+  const plan = searchParams.get("plan") || "trial";
+  const planInfo = PLAN_LABELS[plan] || PLAN_LABELS.trial;
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -51,16 +51,16 @@ function SignupForm() {
       <div className="card-tag">{planInfo.badge}</div>
       <h1 className="card-title">Create your account</h1>
       <p className="card-sub">
-        {plan === "free"
-          ? "Start building your personal content system. No credit card required."
+        {plan === "trial"
+          ? "Start your 2-project trial. Card required — cancel before 14 days and you won't be charged."
           : "You're signing up for the " + planInfo.name + " plan — " + planInfo.price + "."}
       </p>
       <div className="plan-note">
-        <div className="plan-note-title">✦ {plan === "free" ? "Starting on Free Plan" : `${planInfo.name} Plan — ${planInfo.price}`}</div>
+        <div className="plan-note-title">✦ {plan === "trial" ? "2 Projects Free · 14 Days · Auto-renews to Creator" : `${planInfo.name} Plan — ${planInfo.price}`}</div>
         <div className="plan-note-body">
-          {plan === "free"
-            ? "You can upgrade anytime as Lumevo learns more about your brand."
-            : "Your account will be created with " + planInfo.name + " access. Billing coming soon."}
+          {plan === "trial"
+            ? "After your trial, you'll be billed $29/mo for Creator. Upgrade anytime. Cancel before the trial ends to pay nothing."
+            : "Your account will be created with " + planInfo.name + " access."}
         </div>
       </div>
       {error && <div className="error">{error}</div>}
@@ -72,7 +72,7 @@ function SignupForm() {
         <label className="label">Password</label>
         <input className="input" type="password" placeholder="Min. 6 characters" value={password} onChange={e => setPassword(e.target.value)} required />
         <button className="btn" type="submit" disabled={loading}>
-          {loading ? "Creating account…" : plan === "free" ? "Create Free Account" : `Start ${planInfo.name} Plan`}
+          {loading ? "Creating account…" : plan === "trial" ? "Start Free Trial" : `Start ${planInfo.name} Plan`}
         </button>
       </form>
       <p className="terms">By signing up, you agree to our Terms of Service and Privacy Policy.</p>
