@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 type Section = "overview" | "uploads" | "create" | "video" | "brand" | "projects" | "plan" | "aimanager" | "analytics" | "billing" | "settings";
 
 interface User { id: string; name: string; email: string; subscription_tier: string; created_at: string; trial_started_at?: string; elevenlabs_voice_id?: string; voice_clone_name?: string; }
-interface Upload { id: string; file_type: string; file_name: string; mime_type: string; file_size: number; analysis_status: string; created_at: string; }
+interface Upload { id: string; file_type: string; file_name: string; mime_type: string; file_size: number; analysis_status: string; created_at: string; file_path?: string | null; thumb_path?: string | null; ai_analysis?: Record<string, string> | null; video_duration_sec?: number | null; }
 interface Project { id: string; title: string; project_type: string; target_platform: string; target_duration?: number; vibe?: string; status: string; created_at: string; updated_at: string; }
 interface FullProject extends Project { generated_content?: { script?: string; caption?: string } | null; }
 interface Voiceover { id: string; script_content: string; provider_voice_id?: string; status: string; created_at: string; }
@@ -517,50 +517,52 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
   const [msgCounter, setMsgCounter] = useState(1);
   const [stepIdx, setStepIdx] = useState(0);
   const [currentStep, setCurrentStep] = useState<ChatStep>(null);
-  const [result, setResult] = useState<{ script: string; audioBase64: string | null; projectId: string; hasVoice: boolean; caption?: string } | null>(null);
+  const [result, setResult] = useState<{ script: string; audioBase64: string | null; projectId: string; hasVoice: boolean; caption?: string; videoUrl?: string | null } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ name: string; done: boolean }[]>([]);
   const [localUploads, setLocalUploads] = useState<Upload[]>(uploads);
   const [useVoiceClone, setUseVoiceClone] = useState(!!user.elevenlabs_voice_id);
   const [trialBlocked, setTrialBlocked] = useState(user.subscription_tier === "trial" && projects.length >= TRIAL_LIMIT);
-  const [videoGenerating, setVideoGenerating] = useState(false);
-  const [videoBase64, setVideoBase64] = useState<string | null>(null);
-  const [videoError, setVideoError] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
+  const [composeError, setComposeError] = useState<string | null>(null);
 
-  async function generateVideo() {
-    if (!result) return;
-    setVideoGenerating(true);
-    setVideoError(null);
-    setVideoBase64(null);
+  async function composeVideo(projectId: string, script: string, audioBase64: string | null) {
+    if (!selectedIds.length) return null;
+    setComposing(true);
+    setComposeError(null);
     try {
-      const res = await fetch("/api/video/render", {
+      const res = await fetch("/api/video/compose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          audioBase64: result.audioBase64 || null,
-          script: result.script,
+          projectId,
+          uploadIds: selectedIds,
+          script,
           title: projectState.title,
           vibe: projectState.vibe,
+          platform: projectState.platforms?.[0] || "tiktok",
+          duration: projectState.duration || 30,
+          useVoiceClone,
+          audioBase64,
         }),
       });
-      const data = await res.json() as { videoBase64?: string; error?: string };
-      if (data.videoBase64) {
-        setVideoBase64(data.videoBase64);
-      } else {
-        setVideoError(data.error || "Render failed — try again");
-      }
+      const data = await res.json() as { videoUrl?: string; error?: string; timeline?: unknown };
+      if (data.videoUrl) return data.videoUrl as string;
+      setComposeError(data.error || "Compose failed");
+      return null;
     } catch {
-      setVideoError("Connection error — try again");
+      setComposeError("Connection error during video compose");
+      return null;
     } finally {
-      setVideoGenerating(false);
+      setComposing(false);
     }
   }
 
-  function downloadVideo() {
-    if (!videoBase64) return;
+  function downloadVideo(videoUrl: string) {
     const link = document.createElement("a");
-    link.href = `data:video/mp4;base64,${videoBase64}`;
+    link.href = videoUrl;
     link.download = `${(projectState.title || "lumevo-video").replace(/\s+/g, "-").toLowerCase()}.mp4`;
     link.click();
   }
@@ -621,17 +623,18 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
     }
   }
 
-  async function startGeneration(state: ProjectState, uploadIds: string[]) {
+  async function startGeneration(state: ProjectState, uploadIdsForGen: string[]) {
     setPhase("generating");
     setStepIdx(0);
-    const timers = STEPS.map((_, i) => setTimeout(() => setStepIdx(i), i * 2000));
+    const timers = STEPS.map((_, i) => setTimeout(() => setStepIdx(i), i * 2500));
 
+    // Step 1: Generate script + caption + narration
     const res = await fetch("/api/video/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: state.title,
-        uploadIds,
+        uploadIds: uploadIdsForGen,
         platform: state.platforms?.[0] || "tiktok",
         duration: state.duration || 30,
         vibe: state.vibe,
@@ -639,40 +642,57 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
         useVoiceClone,
       }),
     });
-    timers.forEach(clearTimeout);
     const data = await res.json() as { trialLimitReached?: boolean; script?: string; audioBase64?: string | null; projectId?: string; hasVoice?: boolean; caption?: string };
+
     if (data.trialLimitReached) {
+      timers.forEach(clearTimeout);
       setTrialBlocked(true);
       setPhase("chat");
       return;
     }
+
+    // Step 2: If media files selected, compose actual video from clips
+    let videoUrl: string | null = null;
+    if (uploadIdsForGen.length > 0 && data.projectId && data.script) {
+      setStepIdx(3); // show compose step
+      const composed = await composeVideo(data.projectId, data.script, data.audioBase64 || null);
+      videoUrl = composed;
+    }
+
+    timers.forEach(clearTimeout);
     setStepIdx(STEPS.length);
-    await new Promise(r => setTimeout(r, 600));
-    setResult(data as { script: string; audioBase64: string | null; projectId: string; hasVoice: boolean; caption?: string });
+    await new Promise(r => setTimeout(r, 500));
+    setResult({
+      ...(data as { script: string; audioBase64: string | null; projectId: string; hasVoice: boolean; caption?: string }),
+      videoUrl,
+    });
     setPhase("done");
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingFile(true);
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const fileData = ev.target?.result as string;
-      const type = file.type.startsWith("video/") ? "video" : file.type.startsWith("image/") ? "image" : file.type.startsWith("audio/") ? "audio" : "text";
-      const res = await fetch("/api/uploads", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file_name: file.name, file_type: type, mime_type: file.type, file_size: file.size, file_data: fileData.slice(0, 5000) }),
-      });
-      const newUpload = await res.json();
-      if (newUpload?.upload) {
-        setLocalUploads(prev => [newUpload.upload, ...prev]);
-        setSelectedIds(prev => [newUpload.upload.id, ...prev]);
+    const files = Array.from(e.target.files || []).slice(0, 10);
+    if (!files.length) return;
+    setUploadingFiles(true);
+    setUploadProgress(files.map(f => ({ name: f.name, done: false })));
+
+    const formData = new FormData();
+    files.forEach(f => formData.append("files", f));
+
+    try {
+      const res = await fetch("/api/uploads", { method: "POST", body: formData });
+      const data = await res.json() as { uploads?: Upload[] };
+      if (data.uploads?.length) {
+        setLocalUploads(prev => [...data.uploads!, ...prev]);
+        setSelectedIds(prev => [...data.uploads!.map((u: Upload) => u.id), ...prev]);
+        setUploadProgress(files.map(f => ({ name: f.name, done: true })));
       }
-      setUploadingFile(false);
+    } catch (err) {
+      console.error("Upload failed:", err);
+    } finally {
+      setUploadingFiles(false);
+      setUploadProgress([]);
       if (fileRef.current) fileRef.current.value = "";
-    };
-    reader.readAsDataURL(file);
+    }
   }
 
   function toggleSelect(id: string) {
@@ -755,76 +775,69 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
           </div>
         )}
 
-        {/* Video Generator */}
+        {/* Composed Video Player */}
         <div style={{ background: "#1a1a1a", borderRadius: 20, marginBottom: 14, overflow: "hidden" }}>
           <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 3 }}>Video Generator</div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>9:16 · TikTok &amp; Reels ready · MP4</div>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 3 }}>Your Video</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>9:16 · From your actual clips · MP4</div>
             </div>
-            {!videoBase64 && !videoGenerating && (
-              <button
-                onClick={generateVideo}
-                style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}>
-                {result.audioBase64 ? "▶ Generate with Voice" : "▶ Generate Video"}
-              </button>
-            )}
-            {videoBase64 && (
-              <button onClick={downloadVideo} style={{ background: "#F8F8A6", color: "#1a1a1a", border: "none", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+            {result.videoUrl && (
+              <button onClick={() => downloadVideo(result.videoUrl!)} style={{ background: "#F8F8A6", color: "#1a1a1a", border: "none", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
                 ↓ Download MP4
               </button>
             )}
           </div>
 
           <div style={{ padding: "18px 20px" }}>
-            {!videoGenerating && !videoBase64 && !videoError && (
-              <div style={{ textAlign: "center", padding: "28px 0" }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>🎬</div>
-                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.55)", lineHeight: 1.6 }}>
-                  {result.audioBase64
-                    ? "Your script + voice narration will be composed into a downloadable video."
-                    : "A styled caption video will be generated from your script. Add a voice clone to include narration."}
-                </div>
-              </div>
-            )}
-
-            {videoGenerating && (
+            {composing && (
               <div style={{ textAlign: "center", padding: "32px 0" }}>
                 <div style={{ width: 44, height: 44, border: "3px solid rgba(255,45,45,0.25)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.9s linear infinite", margin: "0 auto 16px" }} />
-                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", fontWeight: 600, marginBottom: 6 }}>Rendering your video…</div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>This takes 20–60 seconds. Don&apos;t close this tab.</div>
+                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", fontWeight: 600, marginBottom: 6 }}>Assembling your clips…</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>AI is selecting and cutting your footage. Takes 30–90 seconds.</div>
               </div>
             )}
 
-            {videoError && !videoGenerating && (
+            {composeError && !composing && !result.videoUrl && (
               <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: "rgba(255,45,45,0.08)", borderRadius: 12 }}>
                 <div style={{ fontSize: 18 }}>⚠</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: "#FF2D2D", fontWeight: 700, marginBottom: 2 }}>Render failed</div>
-                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{videoError}</div>
+                  <div style={{ fontSize: 13, color: "#FF2D2D", fontWeight: 700, marginBottom: 2 }}>Compose failed</div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{composeError}</div>
                 </div>
-                <button onClick={generateVideo} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "8px 16px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Retry</button>
+                <button onClick={() => result && composeVideo(result.projectId, result.script, result.audioBase64)} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "8px 16px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Retry</button>
               </div>
             )}
 
-            {videoBase64 && (
-              <div>
+            {result.videoUrl && !composing && (
+              <div style={{ borderRadius: 12, overflow: "hidden", maxWidth: 280, margin: "0 auto" }}>
                 <video
+                  src={result.videoUrl}
                   controls
                   playsInline
-                  style={{ width: "100%", maxHeight: 400, borderRadius: 14, background: "#000", display: "block" }}
-                  src={`data:video/mp4;base64,${videoBase64}`}
+                  style={{ width: "100%", display: "block", borderRadius: 12 }}
                 />
-                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                  <button onClick={downloadVideo} style={{ flex: 1, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "12px 18px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                    ↓ Download MP4
-                  </button>
-                  <button onClick={generateVideo} style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)", border: "none", borderRadius: 999, padding: "12px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                    Re-render
-                  </button>
-                </div>
               </div>
             )}
+
+            {!result.videoUrl && !composing && !composeError && (
+              <div style={{ textAlign: "center", padding: "28px 0" }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>🎬</div>
+                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.55)", lineHeight: 1.6, maxWidth: 280, margin: "0 auto" }}>
+                  {selectedIds.length > 0
+                    ? "Video compose is ready — your clips will be cut and assembled."
+                    : "No media was selected. Upload clips to get a real composed video, or use the script + voice above."}
+                </div>
+                {selectedIds.length > 0 && result.projectId && (
+                  <button
+                    onClick={() => composeVideo(result.projectId, result.script, result.audioBase64)}
+                    style={{ marginTop: 16, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 22px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                    ▶ Compose Video Now
+                  </button>
+                )}
+              </div>
+            )}
+
           </div>
         </div>
 
@@ -937,33 +950,83 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
 
           {needsUpload && !isTyping && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ background: "linear-gradient(135deg, #FF2D2D 0%, #cc1f1f 100%)", borderRadius: 16, padding: "18px 20px", marginBottom: 12, color: "#fff" }}>
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", opacity: 0.7, marginBottom: 6 }}>Step 2 of 2</div>
-                <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Add your media</div>
-                <div style={{ fontSize: 13, opacity: 0.85 }}>Select clips, photos, or audio you want in this video — or skip and I&apos;ll write from your brand voice alone.</div>
+              <div style={{ background: "linear-gradient(135deg, #1a1a1a 0%, #2a1a1a 100%)", borderRadius: 16, padding: "18px 20px", marginBottom: 12, color: "#fff" }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>Add Your Media</div>
+                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Upload up to 10 videos or photos</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", lineHeight: 1.5 }}>AI will analyze each clip, select the best ones, and assemble your video automatically.</div>
               </div>
 
-              {media.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto", marginBottom: 10 }}>
-                  {media.map(u => {
-                    const sel = selectedIds.includes(u.id);
-                    return (
-                      <div key={u.id} onClick={() => toggleSelect(u.id)}
-                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: `1.5px solid ${sel ? "#FF2D2D" : "rgba(0,0,0,0.08)"}`, cursor: "pointer", background: sel ? "rgba(255,45,45,0.04)" : "#fafaf4", transition: "all 0.15s" }}>
-                        <div style={{ width: 32, height: 32, borderRadius: 8, background: sel ? "#FF2D2D" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: sel ? "#fff" : "#FF2D2D", flexShrink: 0, fontWeight: 700 }}>
-                          {sel ? "✓" : MEDIA_ICON[u.file_type] || "◻"}
+              {/* Multi-file dropzone */}
+              <div
+                onClick={() => fileRef.current?.click()}
+                style={{ border: "2px dashed rgba(255,45,45,0.3)", borderRadius: 14, padding: "18px 16px", marginBottom: 12, textAlign: "center", cursor: "pointer", background: "rgba(255,45,45,0.02)", transition: "all 0.15s" }}
+                onDragOver={e => { e.preventDefault(); }}
+                onDrop={e => {
+                  e.preventDefault();
+                  const dt = e.dataTransfer;
+                  if (dt.files.length > 0) {
+                    const input = fileRef.current;
+                    if (input) {
+                      const fake = { target: { files: dt.files } } as unknown as React.ChangeEvent<HTMLInputElement>;
+                      handleFileUpload(fake);
+                    }
+                  }
+                }}
+              >
+                {uploadingFiles ? (
+                  <div>
+                    <div style={{ width: 32, height: 32, border: "3px solid rgba(255,45,45,0.2)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 10px" }} />
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#FF2D2D" }}>Uploading & analyzing…</div>
+                    <div style={{ fontSize: 11, color: "#7c7660", marginTop: 4 }}>{uploadProgress.length} file{uploadProgress.length !== 1 ? "s" : ""} · AI vision analysis running</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 28, marginBottom: 6 }}>⊕</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", marginBottom: 2 }}>Drop videos &amp; photos here</div>
+                    <div style={{ fontSize: 11, color: "#7c7660" }}>or click to browse · up to 10 files · MP4, MOV, JPG, PNG</div>
+                  </div>
+                )}
+              </div>
+              <input ref={fileRef} type="file" style={{ display: "none" }} onChange={handleFileUpload}
+                accept="video/*,image/*" multiple />
+
+              {/* Media thumbnail grid */}
+              {localUploads.filter(u => u.file_type === "video" || u.file_type === "image").length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#7c7660", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>
+                    Your Media Library · tap to select
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                    {localUploads.filter(u => u.file_type === "video" || u.file_type === "image").slice(0, 12).map(u => {
+                      const sel = selectedIds.includes(u.id);
+                      const analysis = u.ai_analysis as Record<string, string> | null;
+                      return (
+                        <div key={u.id} onClick={() => toggleSelect(u.id)}
+                          style={{ position: "relative", borderRadius: 10, overflow: "hidden", cursor: "pointer", border: `2.5px solid ${sel ? "#FF2D2D" : "transparent"}`, aspectRatio: "1", background: "#1a1a1a", transition: "border 0.15s" }}>
+                          {u.thumb_path ? (
+                            <img src={u.thumb_path} alt={u.file_name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : (
+                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, color: "rgba(255,255,255,0.3)" }}>
+                              {u.file_type === "video" ? "▶" : "◻"}
+                            </div>
+                          )}
+                          {/* Selection check */}
+                          {sel && (
+                            <div style={{ position: "absolute", top: 6, right: 6, width: 22, height: 22, background: "#FF2D2D", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#fff", fontWeight: 800 }}>✓</div>
+                          )}
+                          {/* Analysis badge */}
+                          {analysis?.energy && (
+                            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 6px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: 9, color: "rgba(255,255,255,0.8)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                              {analysis.energy} energy · {analysis.bestUse || u.file_type}
+                            </div>
+                          )}
+                          {u.analysis_status === "processing" && (
+                            <div style={{ position: "absolute", top: 6, left: 6, background: "rgba(0,0,0,0.7)", borderRadius: 4, padding: "2px 6px", fontSize: 9, color: "rgba(255,255,255,0.7)" }}>analyzing…</div>
+                          )}
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.file_name}</div>
-                          <div style={{ fontSize: 11, color: "#7c7660" }}>{u.file_type} · {(u.file_size / 1024 / 1024).toFixed(1)} MB</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{ background: "#fafaf4", borderRadius: 10, padding: "14px 16px", marginBottom: 10, fontSize: 13, color: "#7c7660", textAlign: "center" }}>
-                  No media yet — upload something below or skip to use your brand voice
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -976,24 +1039,21 @@ function CreateVideo({ uploads, user, projects }: { uploads: Upload[]; user: Use
                   </div>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700 }}>🎙 Narrate in my voice</div>
-                    <div style={{ fontSize: 11, color: "#7c7660" }}>{user.voice_clone_name || "Your voice clone"} · sounds exactly like you</div>
+                    <div style={{ fontSize: 11, color: "#7c7660" }}>{user.voice_clone_name || "Your voice clone"} · AI will mix this into the video</div>
                   </div>
                 </div>
               ) : user.subscription_tier === "elite" ? (
                 <div style={{ background: "#F8F8A6", borderRadius: 12, padding: "12px 14px", marginBottom: 10, fontSize: 12, color: "#7c7660" }}>
-                  🎙 Set up your Voice Clone in Settings to narrate this video in your voice.
+                  🎙 Set up your Voice Clone in Settings to narrate this video in your actual voice.
                 </div>
               ) : null}
 
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={() => fileRef.current?.click()} disabled={uploadingFile}
-                  style={{ background: "#111", color: "#fff", border: "none", borderRadius: 999, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                  {uploadingFile ? "Uploading…" : "↑ Upload file"}
-                </button>
-                <input ref={fileRef} type="file" style={{ display: "none" }} onChange={handleFileUpload} accept="video/*,image/*,audio/*" />
+              <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={handleConfirmUploads}
-                  style={{ flex: 1, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", minWidth: 160 }}>
-                  {selectedIds.length > 0 ? `Create with ${selectedIds.length} file${selectedIds.length > 1 ? "s" : ""} →` : "Create from brand voice →"}
+                  style={{ flex: 1, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 18px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                  {selectedIds.length > 0
+                    ? `✦ Create video with ${selectedIds.length} clip${selectedIds.length !== 1 ? "s" : ""}`
+                    : "Create from brand voice only →"}
                 </button>
               </div>
             </div>
