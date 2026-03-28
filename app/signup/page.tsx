@@ -1,10 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function SignupPage() {
+const PLAN_LABELS: Record<string, { name: string; price: string; badge: string }> = {
+  free:    { name: "Free",    price: "$0/month",   badge: "Free to Start" },
+  creator: { name: "Creator", price: "$29/month",  badge: "Growth Plan" },
+  pro:     { name: "Pro",     price: "$79/month",  badge: "Brand Builder" },
+  elite:   { name: "Elite",   price: "$199/month", badge: "AI Manager" },
+};
+
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const plan = searchParams.get("plan") || "free";
+  const planInfo = PLAN_LABELS[plan] || PLAN_LABELS.free;
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +31,7 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, plan }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -34,6 +45,47 @@ export default function SignupPage() {
       setLoading(false);
     }
   }
+
+  return (
+    <div className="card">
+      <div className="card-tag">{planInfo.badge}</div>
+      <h1 className="card-title">Create your account</h1>
+      <p className="card-sub">
+        {plan === "free"
+          ? "Start building your personal content system. No credit card required."
+          : "You're signing up for the " + planInfo.name + " plan — " + planInfo.price + "."}
+      </p>
+      <div className="plan-note">
+        <div className="plan-note-title">✦ {plan === "free" ? "Starting on Free Plan" : `${planInfo.name} Plan — ${planInfo.price}`}</div>
+        <div className="plan-note-body">
+          {plan === "free"
+            ? "You can upgrade anytime as Lumevo learns more about your brand."
+            : "Your account will be created with " + planInfo.name + " access. Billing coming soon."}
+        </div>
+      </div>
+      {error && <div className="error">{error}</div>}
+      <form onSubmit={handleSubmit}>
+        <label className="label">Your Name</label>
+        <input className="input" type="text" placeholder="Alex Creator" value={name} onChange={e => setName(e.target.value)} required autoFocus />
+        <label className="label">Email</label>
+        <input className="input" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required />
+        <label className="label">Password</label>
+        <input className="input" type="password" placeholder="Min. 6 characters" value={password} onChange={e => setPassword(e.target.value)} required />
+        <button className="btn" type="submit" disabled={loading}>
+          {loading ? "Creating account…" : plan === "free" ? "Create Free Account" : `Start ${planInfo.name} Plan`}
+        </button>
+      </form>
+      <p className="terms">By signing up, you agree to our Terms of Service and Privacy Policy.</p>
+      <div className="switch">
+        Already have an account?{" "}
+        <button className="switch-link" onClick={() => router.push("/login")}>Log in</button>
+      </div>
+    </div>
+  );
+}
+
+export default function SignupPage() {
+  const router = useRouter();
 
   return (
     <>
@@ -51,7 +103,7 @@ export default function SignupPage() {
         .card { background: #fff; border-radius: 24px; padding: 48px 44px; width: 100%; max-width: 420px; box-shadow: 0 4px 40px rgba(0,0,0,0.07); }
         .card-tag { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #FF2D2D; margin-bottom: 12px; }
         .card-title { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.5px; }
-        .card-sub { font-size: 15px; color: #7c7660; margin-bottom: 36px; line-height: 1.5; }
+        .card-sub { font-size: 15px; color: #7c7660; margin-bottom: 24px; line-height: 1.5; }
         .label { font-size: 12px; font-weight: 600; color: #7c7660; letter-spacing: 0.5px; margin-bottom: 7px; display: block; }
         .input { width: 100%; background: #F8F8A6; border: 1.5px solid rgba(0,0,0,0.1); border-radius: 12px; color: #1a1a1a; font-family: inherit; font-size: 15px; padding: 13px 16px; outline: none; transition: border-color 0.2s; margin-bottom: 20px; }
         .input:focus { border-color: #FF2D2D; }
@@ -76,30 +128,9 @@ export default function SignupPage() {
           <button className="nav-link" onClick={() => router.push("/login")}>Already have an account? Log in</button>
         </nav>
         <main className="main">
-          <div className="card">
-            <div className="card-tag">Free to Start</div>
-            <h1 className="card-title">Create your account</h1>
-            <p className="card-sub">Start building your personal content system. No credit card required.</p>
-            <div className="plan-note">
-              <div className="plan-note-title">✦ Starting on Free Plan</div>
-              <div className="plan-note-body">You can upgrade anytime as Lumevo learns more about your brand.</div>
-            </div>
-            {error && <div className="error">{error}</div>}
-            <form onSubmit={handleSubmit}>
-              <label className="label">Your Name</label>
-              <input className="input" type="text" placeholder="Alex Creator" value={name} onChange={e => setName(e.target.value)} required autoFocus />
-              <label className="label">Email</label>
-              <input className="input" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required />
-              <label className="label">Password</label>
-              <input className="input" type="password" placeholder="Min. 6 characters" value={password} onChange={e => setPassword(e.target.value)} required />
-              <button className="btn" type="submit" disabled={loading}>{loading ? "Creating account…" : "Create Free Account"}</button>
-            </form>
-            <p className="terms">By signing up, you agree to our Terms of Service and Privacy Policy.</p>
-            <div className="switch">
-              Already have an account?{" "}
-              <button className="switch-link" onClick={() => router.push("/login")}>Log in</button>
-            </div>
-          </div>
+          <Suspense fallback={<div className="card"><p style={{color:"#7c7660",fontSize:15}}>Loading…</p></div>}>
+            <SignupForm />
+          </Suspense>
         </main>
       </div>
     </>

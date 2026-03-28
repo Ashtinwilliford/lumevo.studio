@@ -5,11 +5,14 @@ import { createSession } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, password } = await req.json();
+    const { name, email, password, plan } = await req.json();
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: "All fields required" }, { status: 400 });
     }
+
+    const validTiers = ["free", "creator", "pro", "elite"];
+    const subscription_tier = validTiers.includes(plan) ? plan : "free";
 
     const existing = await query("SELECT id FROM users WHERE email = $1", [email]);
     if (existing.rows.length > 0) {
@@ -20,8 +23,8 @@ export async function POST(req: NextRequest) {
 
     const result = await query(
       `INSERT INTO users (name, email, password_hash, subscription_tier)
-       VALUES ($1, $2, $3, 'free') RETURNING id, name, email, subscription_tier`,
-      [name, email, password_hash]
+       VALUES ($1, $2, $3, $4) RETURNING id, name, email, subscription_tier`,
+      [name, email, password_hash, subscription_tier]
     );
     const user = result.rows[0];
 

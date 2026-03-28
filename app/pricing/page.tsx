@@ -188,7 +188,7 @@ export default function PricingPage() {
                   {plan.missing.map(f => <li key={f}>{f}</li>)}
                 </ul>
               )}
-              <button className="plan-btn" onClick={() => router.push("/signup")}>{plan.cta}</button>
+              <button className="plan-btn" onClick={() => router.push(`/signup?plan=${plan.id}`)}>{plan.cta}</button>
             </div>
           ))}
         </div>

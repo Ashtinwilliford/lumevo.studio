@@ -10,12 +10,12 @@ export async function GET() {
 
   const result = await query(
     "SELECT id, name, email, subscription_tier, created_at, elevenlabs_voice_id FROM users WHERE id = $1",
-    [session.userId]
+    [session.id]
   );
 
-  if (!result[0]) {
+  if (!result.rows[0]) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ user: result[0] });
+  return NextResponse.json({ user: result.rows[0] });
 }
