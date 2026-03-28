@@ -1092,24 +1092,29 @@ export default function DashboardPage() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; overflow-x: hidden; }
         body { background: #F8F8A6; font-family: 'DM Sans', system-ui, sans-serif; color: #1a1a1a; -webkit-font-smoothing: antialiased; }
-        .layout { display: flex; min-height: 100vh; }
-        .sidebar { width: 230px; flex-shrink: 0; background: #1a1a1a; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
-        @media (max-width: 768px) { .sidebar { position: fixed; top: 0; left: 0; z-index: 200; transform: translateX(-100%); transition: transform 0.3s; } .sidebar-open { transform: translateX(0) !important; } }
-        .topbar { display: none; background: rgba(248,248,166,0.97); border-bottom: 1px solid rgba(0,0,0,0.08); height: 54px; padding: 0 20px; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+        .page-shell { display: flex; flex-direction: column; min-height: 100vh; }
+        .topbar { display: none; background: rgba(248,248,166,0.97); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(0,0,0,0.08); height: 56px; padding: 0 18px; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 200; flex-shrink: 0; }
         @media (max-width: 768px) { .topbar { display: flex; } }
         .overlay { display: none; }
         @media (max-width: 768px) { .overlay-show { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 150; } }
-        .main { flex: 1; min-width: 0; padding: 48px 44px 100px; }
-        @media (max-width: 768px) { .main { padding: 28px 20px 80px; } }
+        .layout { display: flex; flex: 1; min-height: 0; }
+        .sidebar { width: 230px; flex-shrink: 0; background: #1a1a1a; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+        @media (max-width: 768px) { .sidebar { position: fixed; top: 0; left: 0; height: 100vh; z-index: 180; transform: translateX(-100%); transition: transform 0.28s ease; } .sidebar-open { transform: translateX(0) !important; } }
+        .main { flex: 1; min-width: 0; overflow-y: auto; padding: 48px 44px 100px; }
+        .main-inner { max-width: 860px; margin: 0 auto; }
+        @media (max-width: 768px) { .main { padding: 28px 18px 80px; } .main-inner { max-width: 100%; } }
         .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 9px; cursor: pointer; margin-bottom: 2px; border: none; background: transparent; color: rgba(255,255,255,0.45); font-family: inherit; font-size: 13.5px; font-weight: 500; width: 100%; text-align: left; transition: all 0.15s; }
         .nav-item:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.75); }
         .nav-item-active { background: rgba(255,45,45,0.15) !important; color: #FF6B6B !important; }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
+      <div className="page-shell">
       <div className="topbar">
         <span style={{ fontFamily: "'Fredoka One', cursive", fontSize: 20, color: "#FF2D2D" }}>LUMEVO</span>
-        <button onClick={() => setSidebarOpen(o => !o)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#1a1a1a" }}>☰</button>
+        <button onClick={() => setSidebarOpen(o => !o)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#1a1a1a", lineHeight: 1 }}>☰</button>
       </div>
       <div className={sidebarOpen ? "overlay overlay-show" : "overlay"} onClick={() => setSidebarOpen(false)} />
 
@@ -1149,18 +1154,21 @@ export default function DashboardPage() {
         </aside>
 
         <main className="main">
-          {section === "overview" && <Overview user={user} uploads={uploads} projects={projects} brand={brand} onNav={navigate} />}
-          {section === "uploads" && <UploadsSection uploads={uploads} onRefresh={fetchData} />}
-          {section === "create" && <CreateContent brand={brand} />}
-          {section === "video" && <CreateVideo />}
-          {section === "brand" && <BrandSection brand={brand} onRefresh={fetchData} />}
-          {section === "projects" && <ProjectsSection projects={projects} onNav={navigate} />}
-          {section === "plan" && <ContentPlan user={user} onNav={navigate} />}
-          {section === "aimanager" && <AIManagerSection user={user} brand={brand} onNav={navigate} />}
-          {section === "analytics" && <Analytics />}
-          {section === "billing" && <Billing user={user} />}
-          {section === "settings" && <Settings user={user} onLogout={handleLogout} />}
+          <div className="main-inner">
+            {section === "overview" && <Overview user={user} uploads={uploads} projects={projects} brand={brand} onNav={navigate} />}
+            {section === "uploads" && <UploadsSection uploads={uploads} onRefresh={fetchData} />}
+            {section === "create" && <CreateContent brand={brand} />}
+            {section === "video" && <CreateVideo />}
+            {section === "brand" && <BrandSection brand={brand} onRefresh={fetchData} />}
+            {section === "projects" && <ProjectsSection projects={projects} onNav={navigate} />}
+            {section === "plan" && <ContentPlan user={user} onNav={navigate} />}
+            {section === "aimanager" && <AIManagerSection user={user} brand={brand} onNav={navigate} />}
+            {section === "analytics" && <Analytics />}
+            {section === "billing" && <Billing user={user} />}
+            {section === "settings" && <Settings user={user} onLogout={handleLogout} />}
+          </div>
         </main>
+      </div>
       </div>
     </>
   );
