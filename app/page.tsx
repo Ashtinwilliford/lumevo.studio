@@ -102,7 +102,7 @@ export default function LandingPage() {
         .nav-cta { background: #FF2D2D; color: #fff; border: none; font-family: inherit; font-size: 14px; font-weight: 700; padding: 10px 22px; border-radius: 999px; cursor: pointer; transition: opacity 0.2s, transform 0.15s; }
         .nav-cta:hover { opacity: 0.88; transform: translateY(-1px); }
 
-        .hero { min-height: calc(100vh - 64px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 80px 24px 100px; }
+        .hero { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 72px 24px 72px; }
         .hero-eyebrow { display: inline-block; background: rgba(255,45,45,0.1); color: #FF2D2D; font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; padding: 6px 18px; border-radius: 999px; margin-bottom: 32px; }
         .hero-brand { margin-bottom: 40px; }
         .hero-lumevo { font-family: 'Fredoka One', cursive; font-size: clamp(80px, 18vw, 170px); color: #FF2D2D; line-height: 0.88; letter-spacing: 3px; display: block; }
@@ -118,13 +118,13 @@ export default function LandingPage() {
         .hero-chips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
         .hero-chip { background: rgba(255,255,255,0.7); border: 1px solid rgba(0,0,0,0.08); padding: 7px 16px; border-radius: 999px; font-size: 13px; color: #7c7660; font-weight: 500; }
 
-        .section { padding: 100px 24px; }
+        .section { padding: 80px 24px; }
         .section-white { background: #ffffff; }
         .section-yellow { background: #F8F8A6; }
         .container { max-width: 1100px; margin: 0 auto; }
-        .section-label { font-size: 11px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: #FF2D2D; margin-bottom: 14px; }
-        .section-title { font-family: 'Syne', sans-serif; font-size: clamp(26px, 3.5vw, 46px); font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; margin-bottom: 18px; color: #1a1a1a; }
-        .section-body { font-size: 17px; color: #7c7660; line-height: 1.7; max-width: 500px; }
+        .section-label { font-size: 11px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: #FF2D2D; margin-bottom: 10px; }
+        .section-title { font-family: 'Syne', sans-serif; font-size: clamp(26px, 3.5vw, 46px); font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; margin-bottom: 12px; color: #1a1a1a; }
+        .section-body { font-size: 17px; color: #7c7660; line-height: 1.7; max-width: 500px; margin-top: 0; }
 
         .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
         @media (max-width: 780px) { .two-col { grid-template-columns: 1fr; gap: 40px; } }
@@ -177,7 +177,7 @@ export default function LandingPage() {
         .price-card-elite .price-btn { background: #ffffff; color: #FF2D2D; }
         .elite-badge { display: inline-block; background: rgba(255,255,255,0.2); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; margin-bottom: 8px; }
 
-        .final-section { padding: 120px 24px; text-align: center; background: #F8F8A6; }
+        .final-section { padding: 80px 24px; text-align: center; background: #F8F8A6; }
         .final-pre { font-size: 18px; color: #7c7660; margin-bottom: 6px; }
         .final-title { font-family: 'Syne', sans-serif; font-size: clamp(30px, 5vw, 58px); font-weight: 800; letter-spacing: -1px; line-height: 1.1; margin-bottom: 6px; }
         .final-title em { color: #FF2D2D; font-style: normal; }
