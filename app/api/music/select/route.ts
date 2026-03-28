@@ -90,7 +90,7 @@ Return JSON only:
 
   try {
     const res = await ai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       max_tokens: 200,
       temperature: 0.5,
       messages: [{ role: "user", content: selectionPrompt }],

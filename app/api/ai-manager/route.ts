@@ -50,7 +50,7 @@ You can help with:
     const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_KEY}` },
-      body: JSON.stringify({ model: "gpt-4o", messages, temperature: 0.8, max_tokens: 1500 }),
+      body: JSON.stringify({ model: "gpt-4o-mini", messages, temperature: 0.8, max_tokens: 1500 }),
     });
 
     if (!res.ok) return NextResponse.json({ error: "AI unavailable" }, { status: 500 });

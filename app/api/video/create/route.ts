@@ -167,13 +167,13 @@ Respond with ONLY the caption text and hashtags. No labels, no quotes around it.
 
   const [completion, captionCompletion] = await Promise.all([
     client.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: scriptPrompt }],
       max_tokens: 600,
       temperature: 0.82,
     }),
     client.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: captionPrompt }],
       max_tokens: 180,
       temperature: 0.87,

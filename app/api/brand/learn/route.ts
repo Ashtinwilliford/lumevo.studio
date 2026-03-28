@@ -178,7 +178,7 @@ Be SPECIFIC. Do not use generic phrases like "engaging content" or "authentic vo
   let learned: Record<string, unknown> = {};
   try {
     const res = await ai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       max_tokens: 1200,
       temperature: 0.4,
       messages: [{ role: "user", content: learnPrompt }],

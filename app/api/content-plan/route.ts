@@ -47,7 +47,7 @@ Return ONLY valid JSON in this exact format:
     const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_KEY}` },
-      body: JSON.stringify({ model: "gpt-4o", messages: [{ role: "user", content: prompt }], temperature: 0.85, max_tokens: 800 }),
+      body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "user", content: prompt }], temperature: 0.85, max_tokens: 800 }),
     });
 
     if (!res.ok) return NextResponse.json({ plan: defaultPlan() });

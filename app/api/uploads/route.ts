@@ -220,7 +220,7 @@ async function analyzeWithVision(
     execAsync(`rm -f "${resizedPath}"`).catch(() => null);
 
     const response = await ai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       max_tokens: 300,
       messages: [
         {

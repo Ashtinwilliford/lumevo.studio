@@ -52,7 +52,7 @@ ${typePrompts[typeKey] || typePrompts.caption}`;
         Authorization: `Bearer ${OPENAI_KEY}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         messages: [
           { role: "system", content: "You are Lumevo, an expert AI social media manager. You write content that sounds exactly like the creator — not generic, not robotic. Every word should feel authentic and platform-native." },
           { role: "user", content: prompt },

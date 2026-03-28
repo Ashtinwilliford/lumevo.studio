@@ -269,7 +269,7 @@ Return ONLY this JSON:
 }`;
 
     const directorRes = await ai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       max_tokens: 1500,
       temperature: 0.65,
       messages: [{ role: "user", content: directorPrompt }],
