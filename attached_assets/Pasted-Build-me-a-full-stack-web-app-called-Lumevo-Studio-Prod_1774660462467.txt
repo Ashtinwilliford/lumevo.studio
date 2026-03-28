@@ -1,0 +1,203 @@
+Build me a full-stack web app called Lumevo Studio.
+
+## Product Concept
+Lumevo is an AI social media manager. The core difference is:
+
+You upload. Lumevo learns. We create.
+
+Users upload content they already make, and the app learns their:
+- voice
+- style
+- personality
+- audience preferences
+- visual vibe
+- fonts
+- pacing
+- content structure
+
+The more they upload and create, the better the app gets at generating content that feels like them.
+
+## Core Goal
+This should not feel like a generic AI tool.
+It should feel like a personalized AI social media manager that improves over time and eventually helps run the user’s content system.
+
+## Required Stack
+Please build this as a modern full-stack app with:
+- frontend UI
+- backend API
+- database
+- auth
+- file upload/storage
+- subscription tiers
+- dashboard
+- AI integrations
+
+Use a clean, premium, modern SaaS design.
+
+## Landing Page
+Create a beautiful landing page with:
+- headline: You Upload. Lumevo Learns. We Create.
+- subheadline explaining that Lumevo learns the user’s brand and creates content in their style
+- clear CTA buttons for sign up and pricing
+- section explaining how it works
+- pricing section with 4 tiers
+- feature highlights
+- login/signup flow
+
+## Pricing Tiers
+Build 4 tiers:
+
+### 1. Free – Starter
+- basic content generation
+- limited uploads
+- limited monthly generations
+- no deep memory/personality learning
+- basic dashboard
+
+### 2. Creator – Growth
+- more monthly generations
+- personalized captions and hooks
+- basic tone/style recognition
+- weekly content ideas
+- limited memory/profile learning
+
+### 3. Pro – Brand Builder
+- full personality training
+- multi-platform content generation
+- advanced analytics
+- content calendar
+- stronger brand memory
+- better audience learning
+
+### 4. Elite – AI Manager
+This is the flagship tier.
+Make this the most powerful plan.
+
+Features:
+- AI Video Creator + Manager
+- personalized script generation
+- voiceover generation
+- advanced brand memory
+- strongest audience optimization
+- content repurposing
+- social media manager style workflow
+- premium analytics and planning tools
+
+## Post-Login Experience
+Once a user signs up, take them into a dashboard.
+
+The dashboard should include:
+- overview/home
+- uploads
+- brand profile
+- content generation
+- video creator
+- analytics
+- subscription/account
+
+## Upload + Learning System
+Users should be able to upload:
+- videos
+- captions
+- post ideas
+- scripts
+- brand assets
+
+When they upload, the app should build a Brand Personality Profile that tracks:
+- tone
+- vocabulary
+- energy
+- visual vibe
+- content themes
+- audience style
+- preferred CTA style
+- posting personality
+
+Show this in the dashboard as something that evolves over time.
+
+Example sections:
+- Brand Voice
+- Visual Identity
+- Audience Vibe
+- Content Patterns
+- Confidence Score / Learning Progress
+
+## AI Generation Features
+Build generation tools for:
+- captions
+- hooks
+- post ideas
+- short video scripts
+- rewritten content in the user’s style
+- platform-specific variations
+- content calendar suggestions
+
+Important:
+The output should always try to match the learned user profile.
+
+## ElevenLabs Integration
+I already have ElevenLabs API connected.
+
+Use ElevenLabs for:
+- voiceover generation
+- AI narration for scripts
+- voice-based content options
+
+Add a feature in the Elite tier where users can generate a script and then create a voiceover from it.
+
+## Needed Integrations
+Please structure the app so it supports:
+- ElevenLabs for voice
+- an LLM/API for text generation and content intelligence
+- database for user memory
+- file storage for uploads
+- Stripe for subscriptions
+
+Even if some integrations need placeholders first, build the architecture cleanly so they can be connected easily.
+
+## Database Requirements
+Store:
+- users
+- subscription tier
+- uploads
+- generated content
+- brand profile data
+- voice preferences
+- content history
+- analytics summary
+
+## UX Direction
+The app should feel:
+- premium
+- clean
+- modern
+- creator-focused
+- easy to understand
+- emotionally intelligent, not robotic
+
+## Build Priorities
+Priority 1:
+- landing page
+- auth
+- pricing page
+- dashboard shell
+- uploads
+- brand profile structure
+
+Priority 2:
+- AI content generation
+- ElevenLabs voiceover generation
+- saved content history
+
+Priority 3:
+- advanced analytics
+- stronger memory system
+- content calendar
+- AI video manager workflow
+
+## Important Product Framing
+This is not just a content generator.
+This is a system that trains on the user.
+
+It should communicate:
+Other platforms give you tools. Lumevo builds you a system.
