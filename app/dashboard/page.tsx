@@ -121,9 +121,12 @@ function Overview({ user, uploads, projects, brand, onNav }: {
 function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [textType, setTextType] = useState("caption");
   const [activeTab, setActiveTab] = useState<"file" | "text">("file");
+  const [generated, setGenerated] = useState("");
+  const [savedToast, setSavedToast] = useState(false);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -145,23 +148,51 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
     reader.readAsDataURL(file);
   }
 
-  async function handleText() {
+  async function handleGenerate() {
     if (!textInput.trim()) return;
+    setGenerating(true);
+    setGenerated("");
+    const res = await fetch("/api/generate/quick", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: textInput, contentType: textType }),
+    });
+    const data = await res.json();
+    setGenerated(data.generated || "");
+    setGenerating(false);
+  }
+
+  async function handleSave(content: string) {
+    if (!content.trim()) return;
     setUploading(true);
     await fetch("/api/uploads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ file_name: `${textType}-${Date.now()}.txt`, file_type: textType, mime_type: "text/plain", file_size: textInput.length, file_data: textInput }),
+      body: JSON.stringify({ file_name: `${textType}-${Date.now()}.txt`, file_type: textType, mime_type: "text/plain", file_size: content.length, file_data: content }),
     });
     setTextInput("");
+    setGenerated("");
     setUploading(false);
+    setSavedToast(true);
+    setTimeout(() => setSavedToast(false), 2500);
     onRefresh();
   }
 
   const TYPE_ICON: Record<string, string> = { video: "▶", image: "◻", audio: "◉", caption: "✦", script: "≡", text: "T" };
 
+  const placeholders: Record<string, string> = {
+    caption: "Write me a caption for a morning routine video… or paste one that already sounds like you.",
+    script: "Write me a 30-second day in the life voiceover script… or paste a script you've used before.",
+    text: "Describe what you want, or paste any text that reflects your voice…",
+  };
+
   return (
     <div>
+      {savedToast && (
+        <div style={{ position: "fixed", top: 24, right: 24, background: "#111", color: "#fff", padding: "12px 20px", borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 9999, boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}>
+          Saved to library
+        </div>
+      )}
       <div style={{ marginBottom: 36 }}>
         <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Uploads</h2>
         <p style={{ fontSize: 15, color: "#7c7660" }}>Every upload teaches Lumevo your style. Upload videos, images, captions, or scripts.</p>
@@ -170,7 +201,7 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
       <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 28 }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
           {(["file", "text"] as const).map(t => (
-            <button key={t} onClick={() => setActiveTab(t)}
+            <button key={t} onClick={() => { setActiveTab(t); setGenerated(""); }}
               style={{ padding: "8px 20px", borderRadius: 999, border: "none", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", background: activeTab === t ? "#FF2D2D" : "transparent", color: activeTab === t ? "#fff" : "#7c7660" }}>
               {t === "file" ? "Upload File" : "Add Text / Caption"}
             </button>
@@ -189,22 +220,59 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
           <div>
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
               {["caption", "script", "text"].map(t => (
-                <button key={t} onClick={() => setTextType(t)}
+                <button key={t} onClick={() => { setTextType(t); setGenerated(""); }}
                   style={{ padding: "6px 16px", borderRadius: 999, border: `1.5px solid ${textType === t ? "#FF2D2D" : "rgba(0,0,0,0.1)"}`, fontFamily: "inherit", fontSize: 12, fontWeight: 600, cursor: "pointer", background: textType === t ? "rgba(255,45,45,0.07)" : "transparent", color: textType === t ? "#FF2D2D" : "#7c7660" }}>
                   {t.charAt(0).toUpperCase() + t.slice(1)}
                 </button>
               ))}
             </div>
+
             <textarea
               value={textInput}
-              onChange={e => setTextInput(e.target.value)}
-              placeholder={textType === "caption" ? "Paste a caption that sounds like you…" : textType === "script" ? "Paste a script you've used before…" : "Add any text that reflects your voice…"}
-              style={{ width: "100%", minHeight: 120, padding: "14px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, resize: "vertical", outline: "none", background: "#fafaf4", boxSizing: "border-box" }}
+              onChange={e => { setTextInput(e.target.value); if (generated) setGenerated(""); }}
+              placeholder={placeholders[textType]}
+              style={{ width: "100%", minHeight: 110, padding: "14px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, resize: "vertical", outline: "none", background: "#fafaf4", boxSizing: "border-box", lineHeight: 1.6 }}
             />
-            <button onClick={handleText} disabled={uploading || !textInput.trim()}
-              style={{ marginTop: 12, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 24px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: !textInput.trim() ? 0.5 : 1 }}>
-              {uploading ? "Saving…" : "Save to Library"}
-            </button>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={handleGenerate} disabled={generating || !textInput.trim()}
+                style={{ background: "#111", color: "#fff", border: "none", borderRadius: 999, padding: "11px 22px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: generating || !textInput.trim() ? "not-allowed" : "pointer", opacity: !textInput.trim() ? 0.4 : 1, display: "flex", alignItems: "center", gap: 8 }}>
+                {generating ? (
+                  <>
+                    <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                    Generating…
+                  </>
+                ) : "✦ Generate with AI"}
+              </button>
+              <button onClick={() => handleSave(textInput)} disabled={uploading || !textInput.trim()}
+                style={{ background: "transparent", color: "#7c7660", border: "1.5px solid rgba(0,0,0,0.12)", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: !textInput.trim() ? 0.4 : 1 }}>
+                {uploading ? "Saving…" : "Save as-is"}
+              </button>
+            </div>
+
+            {generated && (
+              <div style={{ marginTop: 20, background: "#fafaf4", border: "1.5px solid rgba(255,45,45,0.2)", borderRadius: 16, padding: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#FF2D2D" }}>✦ Generated {textType}</span>
+                  <button onClick={() => setGenerated("")} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#bbb", lineHeight: 1 }}>×</button>
+                </div>
+                <textarea
+                  value={generated}
+                  onChange={e => setGenerated(e.target.value)}
+                  style={{ width: "100%", minHeight: 140, padding: "12px 14px", borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontFamily: "inherit", fontSize: 14, resize: "vertical", outline: "none", background: "#fff", boxSizing: "border-box", lineHeight: 1.7 }}
+                />
+                <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+                  <button onClick={() => handleSave(generated)} disabled={uploading}
+                    style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 24px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                    {uploading ? "Saving…" : "Save to Library"}
+                  </button>
+                  <button onClick={handleGenerate} disabled={generating}
+                    style={{ background: "transparent", color: "#7c7660", border: "1.5px solid rgba(0,0,0,0.12)", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    Regenerate
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
