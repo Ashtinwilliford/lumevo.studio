@@ -146,6 +146,12 @@ export default function LandingPage() {
         .result-item { background: #F8F8A6; border-radius: 14px; padding: 20px 22px; display: flex; align-items: center; gap: 12px; }
         .result-check { width: 28px; height: 28px; background: #FF2D2D; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700; flex-shrink: 0; }
         .result-text { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+        .output-climax { text-align: center; margin-top: 52px; padding: 48px 32px; background: #1a1a1a; border-radius: 24px; max-width: 720px; margin-left: auto; margin-right: auto; }
+        .output-climax-pre { font-size: 16px; color: rgba(255,255,255,0.45); margin-bottom: 14px; font-style: italic; letter-spacing: 0.2px; }
+        .output-climax-pre em { color: rgba(255,255,255,0.7); font-style: normal; font-weight: 600; }
+        .output-climax-title { font-family: 'Syne', sans-serif; font-size: clamp(32px, 5.5vw, 62px); font-weight: 800; line-height: 1.08; letter-spacing: -1.5px; color: #ffffff; margin-bottom: 18px; }
+        .output-climax-title em { color: #F8F8A6; font-style: normal; }
+        .output-climax-sub { font-size: 16px; color: rgba(255,255,255,0.45); }
 
         .steps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 52px; }
         .step-card { background: #ffffff; border-radius: 20px; padding: 28px; }
@@ -302,6 +308,11 @@ export default function LandingPage() {
             ))}
           </div>
           <p style={{ textAlign: "center", marginTop: 24, fontSize: 16, color: "#7c7660" }}>Without you doing everything manually.</p>
+          <div className="output-climax">
+            <p className="output-climax-pre">It doesn&apos;t just <em>look</em> like you. It doesn&apos;t just <em>sound</em> like you.</p>
+            <h3 className="output-climax-title">It <em>is</em> you.</h3>
+            <p className="output-climax-sub">Your voice. Your style. Your audience. Running on autopilot.</p>
+          </div>
         </div>
       </section>
 
