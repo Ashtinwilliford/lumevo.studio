@@ -193,6 +193,32 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
   const [activeTab, setActiveTab] = useState<"file" | "text">("file");
   const [generated, setGenerated] = useState("");
   const [savedToast, setSavedToast] = useState(false);
+  const [gdriveUrl, setGdriveUrl] = useState("");
+  const [gdriveOpen, setGdriveOpen] = useState(false);
+  const [gdriveLoading, setGdriveLoading] = useState(false);
+  const [gdriveError, setGdriveError] = useState<string | null>(null);
+
+  async function handleGdriveImport() {
+    if (!gdriveUrl.trim()) return;
+    setGdriveLoading(true);
+    setGdriveError(null);
+    try {
+      const res = await fetch("/api/uploads/gdrive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: gdriveUrl.trim() }),
+      });
+      const data = await res.json() as { upload?: unknown; error?: string };
+      if (!res.ok) { setGdriveError(data.error || "Import failed"); return; }
+      setGdriveUrl("");
+      setGdriveOpen(false);
+      onRefresh();
+    } catch {
+      setGdriveError("Connection error — try again.");
+    } finally {
+      setGdriveLoading(false);
+    }
+  }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []).slice(0, 10);
@@ -304,6 +330,50 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
                 {uploading ? `Uploading ${uploadCount} file${uploadCount !== 1 ? "s" : ""}…` : "Click to upload files"}
               </div>
               <div style={{ fontSize: 13, color: "#7c7660" }}>Video, image, audio, text — anything that shows Lumevo your style</div>
+            </div>
+
+            {/* Google Drive import */}
+            <div style={{ marginTop: 12 }}>
+              <button onClick={() => { setGdriveOpen(o => !o); setGdriveError(null); }}
+                style={{ width: "100%", background: "#fff", border: "1.5px solid rgba(0,0,0,0.1)", borderRadius: 12, padding: "12px 18px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+                <svg width="20" height="20" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+                  <path d="M43.65 25L29.9 1.2C28.55 2 27.4 3.1 26.6 4.5L1.2 48.5C.4 49.9 0 51.45 0 53h27.5z" fill="#00ac47"/>
+                  <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.8l5.85 11.5z" fill="#ea4335"/>
+                  <path d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.4-4.5 1.2z" fill="#00832d"/>
+                  <path d="M59.8 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.4 4.5-1.2z" fill="#2684fc"/>
+                  <path d="M73.4 26.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25 59.8 53h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+                </svg>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>Import from Google Drive</div>
+                  <div style={{ fontSize: 11, color: "#7c7660" }}>Paste a share link from any shared Drive file</div>
+                </div>
+                <span style={{ fontSize: 18, color: "#b5b09a", transform: gdriveOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>⌄</span>
+              </button>
+
+              {gdriveOpen && (
+                <div style={{ background: "#fafaf4", border: "1.5px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: 16, marginTop: 8 }}>
+                  <div style={{ fontSize: 12, color: "#7c7660", marginBottom: 10, lineHeight: 1.5 }}>
+                    In Google Drive, right-click your file → <strong>Share</strong> → set to <strong>Anyone with the link</strong> → copy the link and paste it below.
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      value={gdriveUrl}
+                      onChange={e => { setGdriveUrl(e.target.value); setGdriveError(null); }}
+                      onKeyDown={e => e.key === "Enter" && handleGdriveImport()}
+                      placeholder="https://drive.google.com/file/d/..."
+                      style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 13, outline: "none", background: "#fff" }}
+                    />
+                    <button onClick={handleGdriveImport} disabled={gdriveLoading || !gdriveUrl.trim()}
+                      style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: gdriveLoading || !gdriveUrl.trim() ? "not-allowed" : "pointer", opacity: !gdriveUrl.trim() ? 0.5 : 1, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
+                      {gdriveLoading ? <><span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> Importing…</> : "Import"}
+                    </button>
+                  </div>
+                  {gdriveError && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: "#FF2D2D", fontWeight: 600 }}>{gdriveError}</div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -552,6 +622,35 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
   const [useVoiceClone, setUseVoiceClone] = useState(!!user.elevenlabs_voice_id);
   // Only block trial users who are starting a brand-new project — never block resuming an existing one
   const [trialBlocked, setTrialBlocked] = useState(user.subscription_tier === "trial" && projects.length >= TRIAL_LIMIT && !resumeDraftId);
+  const [gdriveUrl, setGdriveUrl] = useState("");
+  const [gdriveOpen, setGdriveOpen] = useState(false);
+  const [gdriveLoading, setGdriveLoading] = useState(false);
+  const [gdriveError, setGdriveError] = useState<string | null>(null);
+
+  async function handleGdriveImport() {
+    if (!gdriveUrl.trim()) return;
+    setGdriveLoading(true);
+    setGdriveError(null);
+    try {
+      const res = await fetch("/api/uploads/gdrive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: gdriveUrl.trim() }),
+      });
+      const data = await res.json() as { upload?: Upload; error?: string };
+      if (!res.ok) { setGdriveError(data.error || "Import failed"); setGdriveLoading(false); return; }
+      if (data.upload) {
+        setLocalUploads(prev => [data.upload!, ...prev]);
+        setSelectedIds(prev => [data.upload!.id, ...prev]);
+      }
+      setGdriveUrl("");
+      setGdriveOpen(false);
+    } catch {
+      setGdriveError("Connection error — try again.");
+    } finally {
+      setGdriveLoading(false);
+    }
+  }
   const [composing, setComposing] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const [includeMusic, setIncludeMusic] = useState(true);
@@ -1260,6 +1359,47 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
               </div>
               <input ref={fileRef} type="file" style={{ display: "none" }} onChange={handleFileUpload}
                 accept="video/*,image/*" multiple />
+
+              {/* Google Drive import */}
+              <div style={{ marginBottom: 12 }}>
+                <button onClick={() => { setGdriveOpen(o => !o); setGdriveError(null); }}
+                  style={{ width: "100%", background: "#fff", border: "1.5px solid rgba(0,0,0,0.1)", borderRadius: 12, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+                  <svg width="18" height="18" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+                    <path d="M43.65 25L29.9 1.2C28.55 2 27.4 3.1 26.6 4.5L1.2 48.5C.4 49.9 0 51.45 0 53h27.5z" fill="#00ac47"/>
+                    <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.8l5.85 11.5z" fill="#ea4335"/>
+                    <path d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.4-4.5 1.2z" fill="#00832d"/>
+                    <path d="M59.8 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.4 4.5-1.2z" fill="#2684fc"/>
+                    <path d="M73.4 26.5l-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25 59.8 53h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+                  </svg>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a1a" }}>Import from Google Drive</div>
+                    <div style={{ fontSize: 10, color: "#7c7660" }}>Paste a share link</div>
+                  </div>
+                  <span style={{ fontSize: 14, color: "#b5b09a", transform: gdriveOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>⌄</span>
+                </button>
+                {gdriveOpen && (
+                  <div style={{ background: "#fafaf4", border: "1.5px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: 12, marginTop: 6 }}>
+                    <div style={{ fontSize: 11, color: "#7c7660", marginBottom: 8, lineHeight: 1.5 }}>
+                      In Drive: right-click file → <strong>Share</strong> → <strong>Anyone with the link</strong> → copy link
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input
+                        value={gdriveUrl}
+                        onChange={e => { setGdriveUrl(e.target.value); setGdriveError(null); }}
+                        onKeyDown={e => e.key === "Enter" && handleGdriveImport()}
+                        placeholder="https://drive.google.com/file/d/..."
+                        style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 12, outline: "none", background: "#fff" }}
+                      />
+                      <button onClick={handleGdriveImport} disabled={gdriveLoading || !gdriveUrl.trim()}
+                        style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: gdriveLoading || !gdriveUrl.trim() ? "not-allowed" : "pointer", opacity: !gdriveUrl.trim() ? 0.5 : 1, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 5 }}>
+                        {gdriveLoading ? <><span style={{ display: "inline-block", width: 10, height: 10, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> Importing…</> : "Import"}
+                      </button>
+                    </div>
+                    {gdriveError && <div style={{ marginTop: 6, fontSize: 11, color: "#FF2D2D", fontWeight: 600 }}>{gdriveError}</div>}
+                  </div>
+                )}
+              </div>
 
               {/* Media thumbnail grid */}
               {localUploads.filter(u => u.file_type === "video" || u.file_type === "image").length > 0 && (
