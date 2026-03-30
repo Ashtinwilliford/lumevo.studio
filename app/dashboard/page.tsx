@@ -1131,20 +1131,55 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
             )}
 
             {!result.videoUrl && !composing && !composeError && (
-              <div style={{ textAlign: "center", padding: "28px 0" }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>🎬</div>
-                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.55)", lineHeight: 1.6, maxWidth: 280, margin: "0 auto" }}>
-                  {selectedIds.length > 0
-                    ? "Video compose is ready — your clips will be cut and assembled."
-                    : "No media was selected. Upload clips to get a real composed video, or use the script + voice above."}
-                </div>
-                {selectedIds.length > 0 && result.projectId && (
-                  <button
-                    onClick={() => composeVideo(result.projectId, result.script, result.audioBase64)}
-                    style={{ marginTop: 16, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 22px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                    ▶ Compose Video Now
-                  </button>
+              <div style={{ padding: "16px 0 4px" }}>
+                {selectedIds.length === 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>
+                      Pick clips to compose
+                    </div>
+                    {uploads.length === 0 ? (
+                      <div style={{ textAlign: "center", padding: "20px 0", color: "rgba(255,255,255,0.35)", fontSize: 13 }}>
+                        No uploads yet — go to your Media Library to add clips first.
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                        {uploads.filter(u => u.file_type === "video" || u.file_type === "image").slice(0, 12).map(u => {
+                          const sel = selectedIds.includes(u.id);
+                          const thumb = u.thumb_path ? `/${u.thumb_path}` : u.file_type === "image" && u.file_path ? `/${u.file_path}` : null;
+                          return (
+                            <div key={u.id} onClick={() => setSelectedIds(prev => sel ? prev.filter(x => x !== u.id) : [...prev, u.id])}
+                              style={{ position: "relative", borderRadius: 8, overflow: "hidden", aspectRatio: "9/16", background: "#2a2a2a", cursor: "pointer", border: `2px solid ${sel ? "#FF2D2D" : "transparent"}`, transition: "border-color 0.15s" }}>
+                              {thumb ? (
+                                <img src={thumb} alt={u.file_name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                              ) : (
+                                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
+                                  {u.file_type === "video" ? "▶" : "◻"}
+                                </div>
+                              )}
+                              {sel && (
+                                <div style={{ position: "absolute", top: 5, right: 5, width: 20, height: 20, borderRadius: "50%", background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 800 }}>✓</div>
+                              )}
+                              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.7))", padding: "14px 6px 5px", fontSize: 9, color: "rgba(255,255,255,0.75)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {u.file_name}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 )}
+                {selectedIds.length > 0 && (
+                  <div style={{ marginBottom: 12, fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
+                    {selectedIds.length} clip{selectedIds.length !== 1 ? "s" : ""} selected — AI will cut and assemble them
+                  </div>
+                )}
+                <button
+                  onClick={() => result.projectId && selectedIds.length > 0 && composeVideo(result.projectId, result.script, result.audioBase64)}
+                  disabled={selectedIds.length === 0}
+                  style={{ width: "100%", background: selectedIds.length > 0 ? "#FF2D2D" : "rgba(255,255,255,0.08)", color: selectedIds.length > 0 ? "#fff" : "rgba(255,255,255,0.25)", border: "none", borderRadius: 999, padding: "13px 22px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: selectedIds.length > 0 ? "pointer" : "default", transition: "all 0.2s" }}>
+                  {selectedIds.length > 0 ? "▶ Compose Video Now" : "Select clips above to compose"}
+                </button>
               </div>
             )}
 
