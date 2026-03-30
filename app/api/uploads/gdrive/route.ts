@@ -17,6 +17,10 @@ const ai = new OpenAI({
 
 export const maxDuration = 120;
 
+function isGDriveFolder(url: string): boolean {
+  return /\/drive\/folders\/|\/drive\/u\/\d+\/folders\//.test(url);
+}
+
 function extractGDriveId(url: string): string | null {
   // Handles:
   // https://drive.google.com/file/d/FILE_ID/view
@@ -154,9 +158,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No Google Drive URL provided" }, { status: 400 });
   }
 
+  // Detect folder links — can't download a whole folder, must be an individual file
+  if (isGDriveFolder(driveUrl)) {
+    return NextResponse.json({
+      error: "That's a folder link, not a file link. Open the folder in Google Drive, right-click on the specific video or photo you want → Share → copy that file's link instead.",
+    }, { status: 400 });
+  }
+
   const fileId = extractGDriveId(driveUrl);
   if (!fileId) {
-    return NextResponse.json({ error: "Could not extract a file ID from that URL. Copy the sharing link directly from Google Drive." }, { status: 400 });
+    return NextResponse.json({ error: "Couldn't find a file ID in that URL. Make sure you're copying the share link from a specific file, not a folder." }, { status: 400 });
   }
 
   try {

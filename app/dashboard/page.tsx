@@ -187,6 +187,7 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadCount, setUploadCount] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [textType, setTextType] = useState("caption");
@@ -220,16 +221,13 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
     }
   }
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || []).slice(0, 10);
+  async function uploadFiles(files: File[]) {
     if (!files.length) return;
     setUploading(true);
     setUploadError(null);
     setUploadCount(files.length);
-
     const formData = new FormData();
     files.forEach(f => formData.append("files", f));
-
     try {
       const res = await fetch("/api/uploads", { method: "POST", body: formData });
       if (!res.ok) {
@@ -248,6 +246,30 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
       setUploadCount(0);
       if (fileRef.current) fileRef.current.value = "";
     }
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    await uploadFiles(Array.from(e.target.files || []).slice(0, 10));
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files).slice(0, 10);
+    if (files.length) uploadFiles(files);
   }
 
   async function handleGenerate() {
@@ -322,12 +344,17 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
                 <button onClick={() => setUploadError(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#b5b09a", fontSize: 16, lineHeight: 1 }}>×</button>
               </div>
             )}
-            <div onClick={() => !uploading && fileRef.current?.click()}
-              style={{ border: `2px dashed ${uploadError ? "rgba(255,45,45,0.4)" : "rgba(255,45,45,0.25)"}`, borderRadius: 14, padding: "40px 24px", textAlign: "center", cursor: uploading ? "wait" : "pointer", transition: "all 0.2s" }}>
+            <div
+              onClick={() => !uploading && fileRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDragEnter={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              style={{ border: `2px dashed ${isDragging ? "#FF2D2D" : uploadError ? "rgba(255,45,45,0.4)" : "rgba(255,45,45,0.25)"}`, borderRadius: 14, padding: "40px 24px", textAlign: "center", cursor: uploading ? "wait" : "pointer", transition: "all 0.2s", background: isDragging ? "rgba(255,45,45,0.06)" : "transparent" }}>
               <input ref={fileRef} type="file" multiple style={{ display: "none" }} onChange={handleFile} accept="video/*,image/*,audio/*,.txt,.pdf" />
-              <div style={{ fontSize: 32, marginBottom: 12 }}>{uploading ? "⏳" : "↑"}</div>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>{uploading ? "⏳" : isDragging ? "⊕" : "↑"}</div>
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>
-                {uploading ? `Uploading ${uploadCount} file${uploadCount !== 1 ? "s" : ""}…` : "Click to upload files"}
+                {uploading ? `Uploading ${uploadCount} file${uploadCount !== 1 ? "s" : ""}…` : isDragging ? "Drop to upload" : "Drag & drop or click to upload"}
               </div>
               <div style={{ fontSize: 13, color: "#7c7660" }}>Video, image, audio, text — anything that shows Lumevo your style</div>
             </div>
@@ -354,7 +381,7 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
               {gdriveOpen && (
                 <div style={{ background: "#fafaf4", border: "1.5px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: 16, marginTop: 8 }}>
                   <div style={{ fontSize: 12, color: "#7c7660", marginBottom: 10, lineHeight: 1.5 }}>
-                    In Google Drive, right-click your file → <strong>Share</strong> → set to <strong>Anyone with the link</strong> → copy the link and paste it below.
+                    Open Google Drive, right-click a <strong>specific file</strong> (not a folder) → <strong>Share</strong> → change access to <strong>Anyone with the link</strong> → copy and paste below.
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <input
@@ -1381,7 +1408,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
                 {gdriveOpen && (
                   <div style={{ background: "#fafaf4", border: "1.5px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: 12, marginTop: 6 }}>
                     <div style={{ fontSize: 11, color: "#7c7660", marginBottom: 8, lineHeight: 1.5 }}>
-                      In Drive: right-click file → <strong>Share</strong> → <strong>Anyone with the link</strong> → copy link
+                      Right-click a <strong>specific file</strong> (not a folder) in Drive → <strong>Share</strong> → <strong>Anyone with the link</strong> → copy link
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
                       <input
