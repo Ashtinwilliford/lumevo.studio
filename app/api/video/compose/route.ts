@@ -19,7 +19,9 @@ const ai = new OpenAI({
 
 const VIDEO_W = 1080;
 const VIDEO_H = 1920;
-const SCALE_PAD = `scale=${VIDEO_W}:${VIDEO_H}:force_original_aspect_ratio=decrease,pad=${VIDEO_W}:${VIDEO_H}:(ow-iw)/2:(oh-ih)/2:color=black`;
+const FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf";
+// Scale to fill 9:16 frame, slight zoom-in punch (1.06x scale then crop)
+const SCALE_FILL = `scale=${Math.round(VIDEO_W * 1.06)}:${Math.round(VIDEO_H * 1.06)}:force_original_aspect_ratio=increase,crop=${VIDEO_W}:${VIDEO_H},fps=30`;
 
 interface UploadRow {
   id: string;
@@ -45,9 +47,9 @@ interface TimelineClip {
   uploadId: string;
   trimStart: number;
   trimEnd: number;
-  purpose: string;       // hook|build|peak|pattern_interrupt|cta|outro
-  emotionTag: string;    // what the viewer should feel during this clip
-  transitionStyle: string; // cut|fade|jump
+  purpose: string;
+  emotionTag: string;
+  transitionStyle: string;
 }
 
 interface MusicConfig {
@@ -69,6 +71,70 @@ async function getVideoDuration(filePath: string): Promise<number> {
   }
 }
 
+// ─── Title Card ────────────────────────────────────────────────────────────────
+async function renderTitleCard(
+  title: string,
+  subtitle: string,
+  outPath: string,
+  durationSec = 2.8
+): Promise<boolean> {
+  // Escape special FFmpeg drawtext characters
+  const esc = (s: string) =>
+    s.replace(/'/g, "\u2019").replace(/:/g, "\\:").replace(/,/g, "\\,").replace(/\[/g, "\\[").replace(/\]/g, "\\]");
+
+  const safeTitle = esc(title.slice(0, 50));
+  const safeSub = esc(subtitle.slice(0, 60));
+
+  // Split long titles into two lines at word boundary
+  const words = safeTitle.split(" ");
+  let line1 = safeTitle;
+  let line2 = "";
+  if (safeTitle.length > 22 && words.length > 1) {
+    const mid = Math.ceil(words.length / 2);
+    line1 = words.slice(0, mid).join(" ");
+    line2 = words.slice(mid).join(" ");
+  }
+
+  const fadeIn = 0.5;
+  const fadeOut = 0.45;
+  const fadeOutStart = durationSec - fadeOut;
+
+  const textFilters = [
+    // Faint lemon-yellow top stripe
+    `drawbox=x=0:y=0:w=${VIDEO_W}:h=8:color=0xF8F8A6@0.9:t=fill`,
+    // Big title line 1
+    `drawtext=fontfile='${FONT}':text='${line1}':fontsize=88:fontcolor=white:x=(w-text_w)/2:y=${line2 ? "(h-text_h)/2-60" : "(h-text_h)/2"}:alpha='if(lt(t,${fadeIn}),t/${fadeIn},if(gt(t,${fadeOutStart}),max(0,(${durationSec}-t)/${fadeOut}),1))'`,
+  ];
+  if (line2) {
+    textFilters.push(
+      `drawtext=fontfile='${FONT}':text='${line2}':fontsize=88:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2+50:alpha='if(lt(t,${fadeIn}),t/${fadeIn},if(gt(t,${fadeOutStart}),max(0,(${durationSec}-t)/${fadeOut}),1))'`
+    );
+  }
+  if (safeSub) {
+    textFilters.push(
+      `drawtext=fontfile='${FONT}':text='${safeSub}':fontsize=42:fontcolor=0xF8F8A6:x=(w-text_w)/2:y=h*0.62:alpha='if(lt(t,${fadeIn + 0.2}),(t-0.2)/${fadeIn},if(gt(t,${fadeOutStart}),max(0,(${durationSec}-t)/${fadeOut}),1))'`
+    );
+  }
+
+  // Fade video itself in/out from black
+  const videoFade = `fade=t=in:st=0:d=${fadeIn},fade=t=out:st=${fadeOutStart}:d=${fadeOut}`;
+  const vf = [videoFade, ...textFilters].join(",");
+
+  try {
+    await execAsync(
+      `ffmpeg -y -f lavfi -i "color=c=black:s=${VIDEO_W}x${VIDEO_H}:r=30" -t ${durationSec} ` +
+      `-vf "${vf}" ` +
+      `-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -an "${outPath}"`,
+      { timeout: 30000 }
+    );
+    return true;
+  } catch (err) {
+    console.error("Title card render failed:", err);
+    return false;
+  }
+}
+
+// ─── Clip Renderer ────────────────────────────────────────────────────────────
 async function renderClip(
   upload: UploadRow,
   trimStart: number,
@@ -84,22 +150,22 @@ async function renderClip(
 
   try {
     if (upload.file_type === "image") {
-      // Ken Burns — slow zoom creates life and movement in stills
+      // Ken Burns slow zoom for images — life and movement in stills
       const frames = Math.round(dur * 30);
       await execAsync(
         `ffmpeg -y -loop 1 -i "${absPath}" -t ${dur} ` +
-        `-vf "${SCALE_PAD},zoompan=z='min(zoom+0.0006,1.25)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${VIDEO_W}x${VIDEO_H},fps=30" ` +
+        `-vf "${SCALE_FILL},zoompan=z='min(zoom+0.0005,1.12)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${VIDEO_W}x${VIDEO_H},fps=30" ` +
         `-an -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p "${outPath}"`,
         { timeout: 60000 }
       );
     } else {
-      // Video — trim to selected segment
+      // Video — trim + punched-in zoom feel via slight upscale+crop
       const realDur = await getVideoDuration(absPath);
-      const safeStart = Math.min(trimStart, Math.max(0, realDur - 1));
-      const safeDur = Math.min(dur, realDur - safeStart);
+      const safeStart = Math.min(trimStart, Math.max(0, realDur - 0.5));
+      const safeDur = Math.min(Math.max(0.5, dur), realDur - safeStart);
       await execAsync(
         `ffmpeg -y -ss ${safeStart.toFixed(2)} -i "${absPath}" -t ${safeDur.toFixed(2)} ` +
-        `-vf "${SCALE_PAD},fps=30" ` +
+        `-vf "${SCALE_FILL}" ` +
         `-an -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p "${outPath}"`,
         { timeout: 60000 }
       );
@@ -111,9 +177,61 @@ async function renderClip(
   }
 }
 
+// ─── xFade chain ─────────────────────────────────────────────────────────────
+// Chains N clips together with smooth crossfade transitions using FFmpeg xfade
+async function chainWithXfade(
+  clips: { path: string; duration: number; transition: string }[],
+  outPath: string
+): Promise<void> {
+  if (clips.length === 0) throw new Error("No clips to chain");
+
+  if (clips.length === 1) {
+    // Single clip — just copy it
+    await execAsync(`ffmpeg -y -i "${clips[0].path}" -c:v copy -an "${outPath}"`, { timeout: 30000 });
+    return;
+  }
+
+  const XFADE_DUR = 0.35; // crossfade overlap duration in seconds
+
+  // Map transition style to FFmpeg xfade transition name
+  const xfadeType = (style: string) => {
+    if (style === "fade") return "fade";
+    if (style === "jump") return "fade"; // fast fade for jump cuts
+    return "fade"; // default
+  };
+
+  // Build inputs and filter_complex
+  const inputs = clips.map(c => `-i "${c.path}"`).join(" ");
+
+  // Build the xfade filter chain
+  let filterParts: string[] = [];
+  let currentLabel = "[0:v]";
+  let cumulativeDur = 0;
+
+  for (let i = 1; i < clips.length; i++) {
+    const prevDur = clips[i - 1].duration;
+    const xtype = xfadeType(clips[i].transition || "fade");
+    const offset = Math.max(0, cumulativeDur + prevDur - XFADE_DUR);
+    const nextLabel = i === clips.length - 1 ? "[vout]" : `[v${i}]`;
+    filterParts.push(`${currentLabel}[${i}:v]xfade=transition=${xtype}:duration=${XFADE_DUR}:offset=${offset.toFixed(3)}${nextLabel}`);
+    currentLabel = nextLabel;
+    cumulativeDur += prevDur - XFADE_DUR;
+  }
+
+  const filterComplex = filterParts.join(";");
+
+  await execAsync(
+    `ffmpeg -y ${inputs} ` +
+    `-filter_complex "${filterComplex}" ` +
+    `-map [vout] ` +
+    `-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p -an "${outPath}"`,
+    { timeout: 120000 }
+  );
+}
+
 async function downloadMusicTrack(url: string, destPath: string): Promise<boolean> {
   try {
-    await execAsync(`curl -sL --max-time 15 -o "${destPath}" "${url}"`, { timeout: 20000 });
+    await execAsync(`curl -sL --max-time 20 -o "${destPath}" "${url}"`, { timeout: 25000 });
     const { stdout } = await execAsync(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${destPath}"`);
     return parseFloat(stdout.trim()) > 0;
   } catch {
@@ -146,7 +264,7 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = session.id;
-  const targetDuration = duration || 30;
+  const targetDuration = typeof duration === "number" ? duration : (parseInt(String(duration), 10) || 30);
   const tmpDir = tmpdir();
   const jobId = `compose_${userId.slice(0, 8)}_${Date.now()}`;
   const tempFiles: string[] = [];
@@ -214,7 +332,7 @@ export async function POST(req: NextRequest) {
     // === 3. AI Creative Director — build emotional timeline ===
     const directorPrompt = `You are a world-class video editor and creative director for ${user?.name || "a creator"} on ${platform || "TikTok/Instagram"}.
 
-Your job: create a ${targetDuration}-second video that feels CRAFTED, not assembled. Every cut should be intentional.
+Your job: create a ${targetDuration}-second video body (EXCLUDING a 2.8s intro title card that is added automatically).
 
 === CREATOR'S LEARNED PERSONALITY ===
 ${personalityCtx}
@@ -226,33 +344,33 @@ ${learnedInsights || "Build from the vibe and content type."}
 Title: "${title}"
 Vibe: "${vibe || "engaging and authentic"}"
 Platform: ${platform || "TikTok/Instagram Reels"}
-Target duration: ${targetDuration} seconds
+Target body duration: ${targetDuration} seconds
 Script/narration: "${script.slice(0, 500)}"
 
 === AVAILABLE CLIPS ===
 ${clipDescriptions}
 
 === CREATIVE FRAMEWORK ===
-Use the emotional arc framework:
-1. HOOK (0-3s): The most visually arresting moment. No slow starts. Pattern interrupt from scroll.
-2. BUILD (3-40%): Establish the story, problem, or context. Match narrator energy.
-3. PEAK (40-70%): The payoff, revelation, or most emotional beat.
-4. RESOLUTION/CTA (70-100%): Land the message. Leave them wanting more or moved.
+Emotional arc:
+1. HOOK (0-3s): Most visually arresting moment. No slow starts.
+2. BUILD (3-40%): Establish story or context. Match narrator energy.
+3. PEAK (40-70%): Payoff, revelation, or most emotional beat.
+4. RESOLUTION/CTA (70-100%): Land the message.
 
 === EDITING RULES ===
 - First clip MUST be the highest-energy or most visually surprising clip (it's the hook)
-- Cut BEFORE the viewer gets bored (avg clip 2-4s for high-energy, 4-6s for emotional)  
-- Pattern interrupts: switch clip type (close-up → wide, indoor → outdoor) every 5-8 seconds
-- Match clip energy to script section being narrated
+- Cut BEFORE viewer gets bored (avg clip 2-4s for high-energy, 4-6s for emotional)
+- Pattern interrupts: switch clip type every 5-8 seconds
+- transitionStyle: use "fade" for smooth cinematic feel, "cut" for energy, "jump" for rhythm — be intentional
 - Total clip durations must sum to EXACTLY ${targetDuration} seconds
-- For images: set trimStart=0 and trimEnd to your desired hold duration
+- For images: trimStart=0, trimEnd = your desired hold duration
 - For videos: trimStart and trimEnd select which portion to use (stay within video duration)
-- You CAN reuse clips at different trim points for rhythm and emphasis
+- You CAN reuse clips at different trim points for rhythm
 
 Return ONLY this JSON:
 {
-  "editorialNote": "one sentence on your creative strategy for this video",
-  "emotionalArc": "brief description of the emotional journey",
+  "editorialNote": "one sentence creative strategy",
+  "emotionalArc": "brief emotional journey description",
   "hookAnalysis": "why the first clip is the strongest hook",
   "clips": [
     {
@@ -261,11 +379,11 @@ Return ONLY this JSON:
       "trimEnd": 3,
       "purpose": "hook",
       "emotionTag": "surprise",
-      "transitionStyle": "cut"
+      "transitionStyle": "fade"
     }
   ],
   "totalDuration": ${targetDuration},
-  "pacingNote": "describe the rhythm of cuts"
+  "pacingNote": "describe the rhythm"
 }`;
 
     const directorRes = await ai.chat.completions.create({
@@ -290,7 +408,6 @@ Return ONLY this JSON:
       timeline = JSON.parse(directorRes.choices[0]?.message?.content || "{}") as TimelineJSON;
       if (!timeline.clips?.length) throw new Error("No clips");
     } catch {
-      // Fallback: distribute evenly
       const perClip = targetDuration / uploads.length;
       timeline = {
         editorialNote: "Even distribution fallback",
@@ -300,16 +417,15 @@ Return ONLY this JSON:
         clips: uploads.map((u, i) => ({
           uploadId: u.id,
           trimStart: 0,
-          trimEnd: u.file_type === "image" ? perClip : Math.min(perClip, u.video_duration_sec || perClip),
+          trimEnd: u.file_type === "image" ? perClip : Math.min(perClip, parseFloat(String(u.video_duration_sec)) || perClip),
           purpose: i === 0 ? "hook" : i === uploads.length - 1 ? "outro" : "build",
           emotionTag: "engaged",
-          transitionStyle: "cut",
+          transitionStyle: "fade",
         })),
         totalDuration: targetDuration,
       };
     }
 
-    // Save timeline to project
     if (projectId) {
       await query(
         "UPDATE projects SET timeline = $1 WHERE id = $2 AND user_id = $3",
@@ -317,9 +433,21 @@ Return ONLY this JSON:
       );
     }
 
-    // === 4. Render individual clip segments ===
+    // === 4. Render title card ===
+    const titleCardPath = join(tmpDir, `${jobId}_title.mp4`);
+    const TITLE_DUR = 2.8;
+    tempFiles.push(titleCardPath);
+    const titleOk = await renderTitleCard(
+      title,
+      vibe || platform || "",
+      titleCardPath,
+      TITLE_DUR
+    );
+
+    // === 5. Render individual clip segments ===
     const uploadMap = new Map(uploads.map(u => [u.id, u]));
-    const clipPaths: string[] = [];
+    type RenderedClip = { path: string; duration: number; transition: string };
+    const renderedClips: RenderedClip[] = [];
 
     for (let i = 0; i < timeline.clips.length; i++) {
       const tc = timeline.clips[i];
@@ -330,27 +458,46 @@ Return ONLY this JSON:
       tempFiles.push(clipPath);
 
       const ok = await renderClip(upload, tc.trimStart, tc.trimEnd, clipPath);
-      if (ok) clipPaths.push(clipPath);
+      if (ok) {
+        renderedClips.push({
+          path: clipPath,
+          duration: Math.max(0.5, tc.trimEnd - tc.trimStart),
+          transition: tc.transitionStyle || "fade",
+        });
+      }
     }
 
-    if (!clipPaths.length) {
+    if (!renderedClips.length) {
       return NextResponse.json({
         error: "No clips could be rendered. Verify your files are valid videos or images.",
       }, { status: 422 });
     }
 
-    // === 5. Concatenate all clips ===
+    // === 6. Chain clips with xfade transitions ===
+    const chainedBodyPath = join(tmpDir, `${jobId}_body.mp4`);
+    tempFiles.push(chainedBodyPath);
+    await chainWithXfade(renderedClips, chainedBodyPath);
+
+    // === 7. Prepend title card ===
     const concatPath = join(tmpDir, `${jobId}_concat.mp4`);
-    const listPath = join(tmpDir, `${jobId}_list.txt`);
-    tempFiles.push(concatPath, listPath);
+    tempFiles.push(concatPath);
 
-    await writeFile(listPath, clipPaths.map(p => `file '${p}'`).join("\n"));
-    await execAsync(
-      `ffmpeg -y -f concat -safe 0 -i "${listPath}" -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p "${concatPath}"`,
-      { timeout: 90000 }
-    );
+    if (titleOk) {
+      // Crossfade title card into first clip (0.4s fade)
+      const TITLE_XFADE = 0.4;
+      const titleOffset = Math.max(0, TITLE_DUR - TITLE_XFADE);
+      await execAsync(
+        `ffmpeg -y -i "${titleCardPath}" -i "${chainedBodyPath}" ` +
+        `-filter_complex "[0:v][1:v]xfade=transition=fade:duration=${TITLE_XFADE}:offset=${titleOffset.toFixed(3)}[vout]" ` +
+        `-map [vout] -c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p -an "${concatPath}"`,
+        { timeout: 60000 }
+      );
+    } else {
+      // Title card failed — use body only
+      await execAsync(`ffmpeg -y -i "${chainedBodyPath}" -c:v copy -an "${concatPath}"`, { timeout: 30000 });
+    }
 
-    // === 6. Generate voice narration if needed ===
+    // === 8. Voice narration ===
     let narrationBase64 = audioBase64 || null;
     const voiceId = user?.elevenlabs_voice_id;
 
@@ -375,7 +522,7 @@ Return ONLY this JSON:
       }
     }
 
-    // === 7. Music selection + mixing ===
+    // === 9. Music selection ===
     let musicPath: string | null = null;
     let musicConfig: MusicConfig | null = null;
 
@@ -406,8 +553,8 @@ Return ONLY this JSON:
               musicConfig = {
                 url: musicData.track.url,
                 volumeUnderVoice: musicData.musicVolumeUnderVoice || 0.12,
-                volumeNoVoice: musicData.musicVolumeNoVoice || 0.35,
-                fadeInSec: musicData.introFadeInSec || 1.5,
+                volumeNoVoice: musicData.musicVolumeNoVoice || 0.38,
+                fadeInSec: musicData.introFadeInSec || 1.2,
                 fadeOutSec: musicData.outroFadeOutSec || 2.0,
               };
             }
@@ -418,56 +565,56 @@ Return ONLY this JSON:
       }
     }
 
-    // === 8. Final audio mix: voice + music with smart ducking ===
+    // Total video duration including title card
+    const totalVideoDur = TITLE_DUR + targetDuration;
+
+    // === 10. Final audio mix: voice + music ===
     const outputPath = join(tmpDir, `${jobId}_final.mp4`);
     tempFiles.push(outputPath);
 
     if (narrationBase64 && musicPath && musicConfig) {
-      // Full mix: voice narration + background music with ducking
       const narPath = join(tmpDir, `${jobId}_narration.mp3`);
       tempFiles.push(narPath);
       await writeFile(narPath, Buffer.from(narrationBase64, "base64"));
 
       const mc = musicConfig;
-      // Music: loop to fill duration, fade in/out, duck under voice
-      // Voice: normalize, ensure it's prominent
+      const totalDur = totalVideoDur;
       await execAsync(
         `ffmpeg -y ` +
-        `-i "${concatPath}" ` +           // [0] video
-        `-i "${narPath}" ` +              // [1] narration
-        `-stream_loop -1 -i "${musicPath}" ` + // [2] music (looped)
+        `-i "${concatPath}" ` +
+        `-i "${narPath}" ` +
+        `-stream_loop -1 -i "${musicPath}" ` +
         `-filter_complex "` +
-          `[1:a]aresample=44100,volume=1.1[nar];` +
-          `[2:a]atrim=0:${targetDuration + 2},aresample=44100,afade=t=in:ss=0:d=${mc.fadeInSec},afade=t=out:st=${Math.max(0, targetDuration - mc.fadeOutSec)}:d=${mc.fadeOutSec},volume=${mc.volumeUnderVoice}[bgm];` +
-          `[nar][bgm]amix=inputs=2:duration=first:dropout_transition=2[amix]` +
+          `[1:a]adelay=${Math.round(TITLE_DUR * 1000)}|${Math.round(TITLE_DUR * 1000)},aresample=44100,volume=1.1[nar];` +
+          `[2:a]atrim=0:${totalDur + 2},aresample=44100,afade=t=in:ss=0:d=${mc.fadeInSec},afade=t=out:st=${Math.max(0, totalDur - mc.fadeOutSec)}:d=${mc.fadeOutSec},volume=${mc.volumeUnderVoice}[bgm];` +
+          `[nar][bgm]amix=inputs=2:duration=longest:dropout_transition=2[amix]` +
         `" ` +
         `-map 0:v -map "[amix]" ` +
-        `-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p ` +
+        `-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p ` +
         `-c:a aac -b:a 192k -shortest "${outputPath}"`,
         { timeout: 90000 }
       );
     } else if (narrationBase64) {
-      // Voice only (no music downloaded or includeMusic=false)
       const narPath = join(tmpDir, `${jobId}_narration.mp3`);
       tempFiles.push(narPath);
       await writeFile(narPath, Buffer.from(narrationBase64, "base64"));
 
       await execAsync(
         `ffmpeg -y -i "${concatPath}" -i "${narPath}" ` +
-        `-filter_complex "[1:a]aresample=44100,volume=1.1[nar]" ` +
+        `-filter_complex "[1:a]adelay=${Math.round(TITLE_DUR * 1000)}|${Math.round(TITLE_DUR * 1000)},aresample=44100,volume=1.1[nar]" ` +
         `-map 0:v -map "[nar]" ` +
-        `-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p ` +
+        `-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p ` +
         `-c:a aac -b:a 192k -shortest "${outputPath}"`,
         { timeout: 90000 }
       );
     } else if (musicPath && musicConfig) {
-      // Music only (no voice narration)
       const mc = musicConfig;
+      const totalDur = totalVideoDur;
       await execAsync(
         `ffmpeg -y -i "${concatPath}" -stream_loop -1 -i "${musicPath}" ` +
-        `-filter_complex "[1:a]atrim=0:${targetDuration + 2},aresample=44100,afade=t=in:ss=0:d=${mc.fadeInSec},afade=t=out:st=${Math.max(0, targetDuration - mc.fadeOutSec)}:d=${mc.fadeOutSec},volume=${mc.volumeNoVoice}[bgm]" ` +
+        `-filter_complex "[1:a]atrim=0:${totalDur + 2},aresample=44100,afade=t=in:ss=0:d=${mc.fadeInSec},afade=t=out:st=${Math.max(0, totalDur - mc.fadeOutSec)}:d=${mc.fadeOutSec},volume=${mc.volumeNoVoice}[bgm]" ` +
         `-map 0:v -map "[bgm]" ` +
-        `-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p ` +
+        `-c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p ` +
         `-c:a aac -b:a 192k -shortest "${outputPath}"`,
         { timeout: 90000 }
       );
@@ -480,7 +627,7 @@ Return ONLY this JSON:
       );
     }
 
-    // === 9. Save final video ===
+    // === 11. Save final video ===
     const userDir = join(process.cwd(), "public", "media", userId);
     await mkdir(userDir, { recursive: true });
 
@@ -497,7 +644,6 @@ Return ONLY this JSON:
       );
     }
 
-    // Log voice narration creation
     if (narrationBase64 && !audioBase64 && projectId && voiceId) {
       await query(
         `INSERT INTO voiceovers (user_id, project_id, script_content, provider, provider_voice_id, status)
@@ -506,14 +652,11 @@ Return ONLY this JSON:
       ).catch(() => null);
     }
 
-    // Update brand profile generation count
     await query(
-      `UPDATE brand_profiles SET generation_count = generation_count + 1, updated_at = now()
-       WHERE user_id = $1`,
+      `UPDATE brand_profiles SET generation_count = generation_count + 1, updated_at = now() WHERE user_id = $1`,
       [userId]
     ).catch(() => null);
 
-    // Trigger brand learning if generation count is a milestone
     const genRows = await query(
       "SELECT generation_count FROM brand_profiles WHERE user_id = $1",
       [userId]
@@ -533,7 +676,7 @@ Return ONLY this JSON:
       timeline,
       narrationGenerated: !!narrationBase64,
       musicIncluded: !!musicPath,
-      clipCount: clipPaths.length,
+      clipCount: renderedClips.length,
       editorialNote: timeline.editorialNote,
       emotionalArc: timeline.emotionalArc,
     });

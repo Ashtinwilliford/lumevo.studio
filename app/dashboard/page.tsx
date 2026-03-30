@@ -1103,8 +1103,8 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
             {composing && (
               <div style={{ textAlign: "center", padding: "32px 0" }}>
                 <div style={{ width: 44, height: 44, border: "3px solid rgba(255,45,45,0.25)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.9s linear infinite", margin: "0 auto 16px" }} />
-                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", fontWeight: 600, marginBottom: 6 }}>Assembling your clips…</div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>AI is selecting and cutting your footage. Takes 30–90 seconds.</div>
+                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", fontWeight: 600, marginBottom: 6 }}>Creating your video…</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>Title card → smooth transitions → music mix. Takes 30–90 seconds.</div>
               </div>
             )}
 
