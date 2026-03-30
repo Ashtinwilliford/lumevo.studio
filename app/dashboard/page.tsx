@@ -827,7 +827,11 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
           newState.platforms = Array.isArray(p) ? p : typeof p === "string" ? [p] : newState.platforms;
         }
         if (data.extracted.vibe) newState.vibe = data.extracted.vibe;
-        if (data.extracted.duration) newState.duration = data.extracted.duration;
+        if (data.extracted.duration) {
+          const raw = data.extracted.duration;
+          const parsed = typeof raw === "number" ? raw : parseInt(String(raw), 10);
+          if (!isNaN(parsed) && parsed > 0) newState.duration = parsed;
+        }
         if (!newState.mediaType) newState.mediaType = "both";
       }
       setProjectState(newState);

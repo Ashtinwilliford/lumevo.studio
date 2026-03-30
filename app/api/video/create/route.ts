@@ -13,8 +13,9 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { title, uploadIds, platform, duration, vibe, useVoiceClone, draftProjectId } = await req.json();
+  const { title, uploadIds, platform, duration: rawDuration, vibe, useVoiceClone, draftProjectId } = await req.json();
   if (!title?.trim()) return NextResponse.json({ error: "Title required" }, { status: 400 });
+  const duration = typeof rawDuration === "number" ? rawDuration : (parseInt(String(rawDuration), 10) || 30);
 
   const userId = session.id;
 
