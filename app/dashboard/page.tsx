@@ -696,7 +696,10 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
       const newState = { ...projectState };
       if (data.extracted) {
         if (data.extracted.title) newState.title = data.extracted.title;
-        if (data.extracted.platforms) newState.platforms = data.extracted.platforms;
+        if (data.extracted.platforms) {
+          const p = data.extracted.platforms;
+          newState.platforms = Array.isArray(p) ? p : typeof p === "string" ? [p] : newState.platforms;
+        }
         if (data.extracted.vibe) newState.vibe = data.extracted.vibe;
         if (data.extracted.duration) newState.duration = data.extracted.duration;
         if (!newState.mediaType) newState.mediaType = "both";

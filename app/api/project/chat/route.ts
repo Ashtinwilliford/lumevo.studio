@@ -22,10 +22,22 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { messages, projectState, userName } = await req.json() as {
+  const body = await req.json() as {
     messages: { role: string; content: string }[];
     projectState: ProjectState;
     userName: string;
+  };
+
+  const { messages, userName } = body;
+  // Normalize projectState — platforms may arrive as a string from restored draft state
+  const rawState = body.projectState;
+  const projectState: ProjectState = {
+    ...rawState,
+    platforms: Array.isArray(rawState.platforms)
+      ? rawState.platforms
+      : typeof rawState.platforms === "string" && rawState.platforms
+      ? [rawState.platforms]
+      : rawState.platforms,
   };
 
   const brandRows = await query(
@@ -82,7 +94,7 @@ Reply ONLY with JSON (no markdown):
     );
   }
 
-  const raw = completion.choices[0]?.message?.content || "{}";
+  const aiContent = completion.choices[0]?.message?.content || "{}";
   let parsed: {
     message: string;
     extracted: Partial<ProjectState>;
@@ -91,7 +103,7 @@ Reply ONLY with JSON (no markdown):
   };
 
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(aiContent);
   } catch {
     parsed = {
       message: "Got a bit lost — what were we saying?",
