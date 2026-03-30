@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
       .map(u => {
         const a = u.ai_analysis || {};
         const dur = u.video_duration_sec
-          ? `${u.video_duration_sec.toFixed(1)}s video`
+          ? `${parseFloat(String(u.video_duration_sec)).toFixed(1)}s video`
           : "image (duration you control)";
         return [
           `ID: ${u.id}`,
