@@ -13,17 +13,17 @@ interface Voiceover { id: string; script_content: string; provider_voice_id?: st
 interface BrandProfile { user_id: string; tone_summary: string; personality_summary: string; audience_summary: string; pacing_style: string; cta_style: string; visual_style_summary?: string; voice_preferences?: string; hook_style?: string; pattern_interrupt_style?: string; emotional_arc_preference?: string; music_genre_preference?: string; creator_archetype?: string; confidence_score: number; learning_progress_percent: number; upload_count: number; generation_count: number; last_learned_at?: string; }
 
 const NAV: { id: Section; icon: string; label: string; group?: string; elite?: boolean }[] = [
-  { id: "overview", icon: "⌂", label: "Overview" },
-  { id: "uploads", icon: "↑", label: "Uploads", group: "Create" },
-  { id: "create", icon: "✦", label: "Create Content", group: "Create" },
-  { id: "video", icon: "▶", label: "New Project", group: "Create" },
-  { id: "brand", icon: "◉", label: "Brand Profile", group: "Learn" },
-  { id: "projects", icon: "◻", label: "Projects", group: "Learn" },
-  { id: "plan", icon: "◆", label: "Content Plan", group: "Learn" },
-  { id: "aimanager", icon: "✧", label: "AI Manager", group: "Learn", elite: true },
-  { id: "analytics", icon: "▲", label: "Analytics", group: "Learn" },
-  { id: "billing", icon: "◈", label: "Billing", group: "Account" },
-  { id: "settings", icon: "⚙", label: "Settings", group: "Account" },
+  { id: "overview", icon: "âŒ‚", label: "Overview" },
+  { id: "uploads", icon: "â†‘", label: "Uploads", group: "Create" },
+  { id: "create", icon: "âœ¦", label: "Create Content", group: "Create" },
+  { id: "video", icon: "â–¶", label: "New Project", group: "Create" },
+  { id: "brand", icon: "â—‰", label: "Brand Profile", group: "Learn" },
+  { id: "projects", icon: "â—»", label: "Projects", group: "Learn" },
+  { id: "plan", icon: "â—†", label: "Content Plan", group: "Learn" },
+  { id: "aimanager", icon: "âœ§", label: "AI Manager", group: "Learn", elite: true },
+  { id: "analytics", icon: "â–²", label: "Analytics", group: "Learn" },
+  { id: "billing", icon: "â—ˆ", label: "Billing", group: "Account" },
+  { id: "settings", icon: "âš™", label: "Settings", group: "Account" },
 ];
 
 const TIER_LABELS: Record<string, string> = { trial: "Free Trial", creator: "Creator", pro: "Pro", elite: "Elite" };
@@ -45,7 +45,7 @@ function fmtDate(d: string) {
   return `${months[dt.getUTCMonth()]} ${dt.getUTCDate()}, ${dt.getUTCFullYear()}`;
 }
 
-// ── OVERVIEW ──────────────────────────────────────────────────────────────────
+// â”€â”€ OVERVIEW â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Overview({ user, uploads, projects, brand, onNav }: {
   user: User; uploads: Upload[]; projects: Project[]; brand: BrandProfile | null; onNav: (s: Section, projectId?: string) => void;
 }) {
@@ -72,14 +72,14 @@ function Overview({ user, uploads, projects, brand, onNav }: {
             <div style={{ flex: 1, minWidth: 180 }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>Free Trial</div>
               <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 17, fontWeight: 800, color: "#fff", marginBottom: 4 }}>
-                {projectsLeft === 0 ? "You've used both trial projects" : `${projectsLeft} project${projectsLeft !== 1 ? "s" : ""} left · ${daysLeft} day${daysLeft !== 1 ? "s" : ""} remaining`}
+                {projectsLeft === 0 ? "You've used both trial projects" : `${projectsLeft} project${projectsLeft !== 1 ? "s" : ""} left Â· ${daysLeft} day${daysLeft !== 1 ? "s" : ""} remaining`}
               </div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
-                {trialEndDate ? `Trial ends ${trialEndDate} — then auto-renews to Creator ($29/mo). Cancel anytime.` : "Auto-renews to Creator ($29/mo) after trial. Cancel anytime."}
+                {trialEndDate ? `Trial ends ${trialEndDate} â€” then auto-renews to Creator ($29/mo). Cancel anytime.` : "Auto-renews to Creator ($29/mo) after trial. Cancel anytime."}
               </div>
             </div>
             <button onClick={() => onNav("billing")} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 22px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
-              Upgrade now →
+              Upgrade now â†’
             </button>
           </div>
         );
@@ -107,9 +107,9 @@ function Overview({ user, uploads, projects, brand, onNav }: {
           </div>
           <div style={{ textAlign: "right", fontSize: 13, color: "#7c7660", maxWidth: 220 }}>
             {prog < 20 ? "Upload your first content to start training." :
-             prog < 50 ? "Good start — keep uploading to sharpen your profile." :
-             prog < 80 ? "Strong foundation — your style is emerging." :
-             "Well-trained — Lumevo knows your brand."}
+             prog < 50 ? "Good start â€” keep uploading to sharpen your profile." :
+             prog < 80 ? "Strong foundation â€” your style is emerging." :
+             "Well-trained â€” Lumevo knows your brand."}
           </div>
         </div>
         <div style={{ height: 8, background: "#F8F8A6", borderRadius: 999, overflow: "hidden" }}>
@@ -122,14 +122,14 @@ function Overview({ user, uploads, projects, brand, onNav }: {
         onMouseOver={e => (e.currentTarget.style.opacity = "0.88")}
         onMouseOut={e => (e.currentTarget.style.opacity = "1")}>
         <span>Create Content</span>
-        <span style={{ fontSize: 20 }}>→</span>
+        <span style={{ fontSize: 20 }}>â†’</span>
       </button>
 
       {projects.length > 0 && (
         <>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 700 }}>Recent Projects</div>
-            <button onClick={() => onNav("projects")} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: "#FF2D2D", cursor: "pointer", fontFamily: "inherit" }}>View all →</button>
+            <button onClick={() => onNav("projects")} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: "#FF2D2D", cursor: "pointer", fontFamily: "inherit" }}>View all â†’</button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {projects.slice(0, 4).map(p => (
@@ -142,7 +142,7 @@ function Overview({ user, uploads, projects, brand, onNav }: {
                 >
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>{p.title}</div>
-                    <div style={{ fontSize: 12, color: "#7c7660" }}>{TYPE_LABELS[p.project_type]} · {PLATFORM_LABELS[p.target_platform]}</div>
+                    <div style={{ fontSize: 12, color: "#7c7660" }}>{TYPE_LABELS[p.project_type]} Â· {PLATFORM_LABELS[p.target_platform]}</div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: `${STATUS_COLORS[p.status]}20`, color: STATUS_COLORS[p.status] }}>
@@ -151,15 +151,15 @@ function Overview({ user, uploads, projects, brand, onNav }: {
                     <button
                       onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === p.id ? null : p.id); }}
                       style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#7c7660", padding: "0 4px", lineHeight: 1 }}>
-                      ···
+                      Â·Â·Â·
                     </button>
                   </div>
                 </div>
                 {menuOpen === p.id && (
                   <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.12)", border: "1px solid rgba(0,0,0,0.08)", zIndex: 50, minWidth: 180, overflow: "hidden" }}>
                     {[
-                      { label: "Open project", icon: "↗", action: () => { onNav("projects", p.id); setMenuOpen(null); } },
-                      { label: "Use as template", icon: "◻", action: () => { onNav("video"); setMenuOpen(null); } },
+                      { label: "Open project", icon: "â†—", action: () => { onNav("projects", p.id); setMenuOpen(null); } },
+                      { label: "Use as template", icon: "â—»", action: () => { onNav("video"); setMenuOpen(null); } },
                       { label: "New project", icon: "+", action: () => { onNav("video"); setMenuOpen(null); } },
                     ].map(item => (
                       <button key={item.label} onClick={item.action}
@@ -181,7 +181,7 @@ function Overview({ user, uploads, projects, brand, onNav }: {
   );
 }
 
-// ── UPLOADS ───────────────────────────────────────────────────────────────────
+// â”€â”€ UPLOADS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -215,7 +215,7 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
       setGdriveOpen(false);
       onRefresh();
     } catch {
-      setGdriveError("Connection error — try again.");
+      setGdriveError("Connection error â€” try again.");
     } finally {
       setGdriveLoading(false);
     }
@@ -239,7 +239,7 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
         onRefresh();
       }
     } catch (err) {
-      setUploadError("Connection error — check your internet and try again.");
+      setUploadError("Connection error â€” check your internet and try again.");
       console.error("Upload error:", err);
     } finally {
       setUploading(false);
@@ -302,12 +302,12 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
     onRefresh();
   }
 
-  const TYPE_ICON: Record<string, string> = { video: "▶", image: "◻", audio: "◉", caption: "✦", script: "≡", text: "T" };
+  const TYPE_ICON: Record<string, string> = { video: "â–¶", image: "â—»", audio: "â—‰", caption: "âœ¦", script: "â‰¡", text: "T" };
 
   const placeholders: Record<string, string> = {
-    caption: "Write me a caption for a morning routine video… or paste one that already sounds like you.",
-    script: "Write me a 30-second day in the life voiceover script… or paste a script you've used before.",
-    text: "Describe what you want, or paste any text that reflects your voice…",
+    caption: "Write me a caption for a morning routine videoâ€¦ or paste one that already sounds like you.",
+    script: "Write me a 30-second day in the life voiceover scriptâ€¦ or paste a script you've used before.",
+    text: "Describe what you want, or paste any text that reflects your voiceâ€¦",
   };
 
   return (
@@ -336,12 +336,12 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
           <div>
             {uploadError && (
               <div style={{ background: "#fff0f0", border: "1.5px solid rgba(255,45,45,0.25)", borderRadius: 12, padding: "12px 16px", marginBottom: 10, display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 16 }}>⚠</span>
+                <span style={{ fontSize: 16 }}>âš </span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#FF2D2D", marginBottom: 2 }}>Upload failed</div>
                   <div style={{ fontSize: 12, color: "#7c7660" }}>{uploadError}</div>
                 </div>
-                <button onClick={() => setUploadError(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#b5b09a", fontSize: 16, lineHeight: 1 }}>×</button>
+                <button onClick={() => setUploadError(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#b5b09a", fontSize: 16, lineHeight: 1 }}>Ã—</button>
               </div>
             )}
             <div
@@ -352,11 +352,11 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
               onDrop={handleDrop}
               style={{ border: `2px dashed ${isDragging ? "#FF2D2D" : uploadError ? "rgba(255,45,45,0.4)" : "rgba(255,45,45,0.25)"}`, borderRadius: 14, padding: "40px 24px", textAlign: "center", cursor: uploading ? "wait" : "pointer", transition: "all 0.2s", background: isDragging ? "rgba(255,45,45,0.06)" : "transparent" }}>
               <input ref={fileRef} type="file" multiple style={{ display: "none" }} onChange={handleFile} accept="video/*,image/*,audio/*,.txt,.pdf" />
-              <div style={{ fontSize: 32, marginBottom: 12 }}>{uploading ? "⏳" : isDragging ? "⊕" : "↑"}</div>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>{uploading ? "â³" : isDragging ? "âŠ•" : "â†‘"}</div>
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>
-                {uploading ? `Uploading ${uploadCount} file${uploadCount !== 1 ? "s" : ""}…` : isDragging ? "Drop to upload" : "Drag & drop or click to upload"}
+                {uploading ? `Uploading ${uploadCount} file${uploadCount !== 1 ? "s" : ""}â€¦` : isDragging ? "Drop to upload" : "Drag & drop or click to upload"}
               </div>
-              <div style={{ fontSize: 13, color: "#7c7660" }}>Video, image, audio, text — anything that shows Lumevo your style</div>
+              <div style={{ fontSize: 13, color: "#7c7660" }}>Video, image, audio, text â€” anything that shows Lumevo your style</div>
             </div>
 
             {/* Google Drive import */}
@@ -375,13 +375,13 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
                   <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>Import from Google Drive</div>
                   <div style={{ fontSize: 11, color: "#7c7660" }}>Paste a share link from any shared Drive file</div>
                 </div>
-                <span style={{ fontSize: 18, color: "#b5b09a", transform: gdriveOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>⌄</span>
+                <span style={{ fontSize: 18, color: "#b5b09a", transform: gdriveOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>âŒ„</span>
               </button>
 
               {gdriveOpen && (
                 <div style={{ background: "#fafaf4", border: "1.5px solid rgba(0,0,0,0.08)", borderRadius: 12, padding: 16, marginTop: 8 }}>
                   <div style={{ fontSize: 12, color: "#7c7660", marginBottom: 10, lineHeight: 1.5 }}>
-                    Open Google Drive, right-click a <strong>specific file</strong> (not a folder) → <strong>Share</strong> → change access to <strong>Anyone with the link</strong> → copy and paste below.
+                    Open Google Drive, right-click a <strong>specific file</strong> (not a folder) â†’ <strong>Share</strong> â†’ change access to <strong>Anyone with the link</strong> â†’ copy and paste below.
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <input
@@ -393,7 +393,7 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
                     />
                     <button onClick={handleGdriveImport} disabled={gdriveLoading || !gdriveUrl.trim()}
                       style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: gdriveLoading || !gdriveUrl.trim() ? "not-allowed" : "pointer", opacity: !gdriveUrl.trim() ? 0.5 : 1, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
-                      {gdriveLoading ? <><span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> Importing…</> : "Import"}
+                      {gdriveLoading ? <><span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> Importingâ€¦</> : "Import"}
                     </button>
                   </div>
                   {gdriveError && (
@@ -427,21 +427,21 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
                 {generating ? (
                   <>
                     <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                    Generating…
+                    Generatingâ€¦
                   </>
-                ) : "✦ Generate with AI"}
+                ) : "âœ¦ Generate with AI"}
               </button>
               <button onClick={() => handleSave(textInput)} disabled={uploading || !textInput.trim()}
                 style={{ background: "transparent", color: "#7c7660", border: "1.5px solid rgba(0,0,0,0.12)", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: !textInput.trim() ? 0.4 : 1 }}>
-                {uploading ? "Saving…" : "Save as-is"}
+                {uploading ? "Savingâ€¦" : "Save as-is"}
               </button>
             </div>
 
             {generated && (
               <div style={{ marginTop: 20, background: "#fafaf4", border: "1.5px solid rgba(255,45,45,0.2)", borderRadius: 16, padding: 20 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#FF2D2D" }}>✦ Generated {textType}</span>
-                  <button onClick={() => setGenerated("")} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#bbb", lineHeight: 1 }}>×</button>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#FF2D2D" }}>âœ¦ Generated {textType}</span>
+                  <button onClick={() => setGenerated("")} style={{ background: "none", border: "none", fontSize: 18, cursor: "pointer", color: "#bbb", lineHeight: 1 }}>Ã—</button>
                 </div>
                 <textarea
                   value={generated}
@@ -451,7 +451,7 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
                 <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
                   <button onClick={() => handleSave(generated)} disabled={uploading}
                     style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 24px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                    {uploading ? "Saving…" : "Save to Library"}
+                    {uploading ? "Savingâ€¦" : "Save to Library"}
                   </button>
                   <button onClick={handleGenerate} disabled={generating}
                     style={{ background: "transparent", color: "#7c7660", border: "1.5px solid rgba(0,0,0,0.12)", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
@@ -470,11 +470,11 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
           {uploads.map(u => (
             <div key={u.id} style={{ background: "#fff", borderRadius: 14, padding: "14px 18px", border: "1px solid rgba(0,0,0,0.07)", display: "flex", alignItems: "center", gap: 14 }}>
               <div style={{ width: 38, height: 38, borderRadius: 10, background: "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: "#FF2D2D", flexShrink: 0 }}>
-                {TYPE_ICON[u.file_type] || "◻"}
+                {TYPE_ICON[u.file_type] || "â—»"}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.file_name}</div>
-                <div style={{ fontSize: 12, color: "#7c7660" }}>{u.file_type} · {u.file_size > 0 ? fmt(u.file_size) : "text"} · {fmtDate(u.created_at)}</div>
+                <div style={{ fontSize: 12, color: "#7c7660" }}>{u.file_type} Â· {u.file_size > 0 ? fmt(u.file_size) : "text"} Â· {fmtDate(u.created_at)}</div>
               </div>
               <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: u.analysis_status === "complete" ? "#2da44e20" : "#F8F8A6", color: u.analysis_status === "complete" ? "#2da44e" : "#7c7660" }}>
                 {u.analysis_status === "complete" ? "Analyzed" : "Processing"}
@@ -484,7 +484,7 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
         </div>
       ) : (
         <div style={{ textAlign: "center", padding: "60px 0", color: "#7c7660" }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>↑</div>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>â†‘</div>
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No uploads yet</div>
           <div style={{ fontSize: 14 }}>Add your first file or caption to start training Lumevo.</div>
         </div>
@@ -493,7 +493,7 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
   );
 }
 
-// ── CREATE CONTENT ────────────────────────────────────────────────────────────
+// â”€â”€ CREATE CONTENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function CreateContent({ brand }: { brand: BrandProfile | null }) {
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -538,13 +538,13 @@ function CreateContent({ brand }: { brand: BrandProfile | null }) {
     <div>
       <div style={{ marginBottom: 36 }}>
         <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Create Content</h2>
-        <p style={{ fontSize: 15, color: "#7c7660" }}>Generate captions, hooks, scripts, and posts — in your voice.</p>
+        <p style={{ fontSize: 15, color: "#7c7660" }}>Generate captions, hooks, scripts, and posts â€” in your voice.</p>
       </div>
 
       {brand && brand.tone_summary && (
         <div style={{ background: "#F8F8A6", borderRadius: 14, padding: "14px 18px", marginBottom: 24, border: "1px solid rgba(0,0,0,0.06)" }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 6 }}>Your Brand Voice</div>
-          <div style={{ fontSize: 14, color: "#1a1a1a" }}>{brand.tone_summary} · {brand.personality_summary}</div>
+          <div style={{ fontSize: 14, color: "#1a1a1a" }}>{brand.tone_summary} Â· {brand.personality_summary}</div>
         </div>
       )}
 
@@ -579,19 +579,19 @@ function CreateContent({ brand }: { brand: BrandProfile | null }) {
         <div style={{ marginBottom: 20 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Topic / Prompt</label>
           <textarea value={prompt} onChange={e => setPrompt(e.target.value)}
-            placeholder="What is this content about? Be as specific as you want…"
+            placeholder="What is this content about? Be as specific as you wantâ€¦"
             style={{ width: "100%", minHeight: 100, padding: "13px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, resize: "vertical", outline: "none", background: "#fafaf4", boxSizing: "border-box" }} />
         </div>
 
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>Project Title (optional)</label>
-          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Give this project a name…"
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Give this project a nameâ€¦"
             style={{ width: "100%", padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, background: "#fafaf4", outline: "none", boxSizing: "border-box" }} />
         </div>
 
         <button onClick={handleGenerate} disabled={loading || !prompt.trim()}
           style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 32px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: loading || !prompt.trim() ? "not-allowed" : "pointer", opacity: !prompt.trim() ? 0.5 : 1 }}>
-          {loading ? "Generating…" : `Generate ${TYPE_LABELS[contentType]}`}
+          {loading ? "Generatingâ€¦" : `Generate ${TYPE_LABELS[contentType]}`}
         </button>
       </div>
 
@@ -617,7 +617,7 @@ function CreateContent({ brand }: { brand: BrandProfile | null }) {
   );
 }
 
-// ── NEW PROJECT (AGENTIC) ─────────────────────────────────────────────────────
+// â”€â”€ NEW PROJECT (AGENTIC) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface ChatMessage { role: "ai" | "user"; content: string; id: number; }
 interface ProjectState {
   title: string | null; platforms: string[] | null;
@@ -629,7 +629,7 @@ type ChatStep = "title" | "platform" | "vibe" | "duration" | "upload" | null;
 function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed }: { uploads: Upload[]; user: User; projects: Project[]; resumeDraftId?: string | null; onResumeConsumed?: () => void }) {
   const firstName = user.name.split(" ")[0];
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "ai", content: `What's the content about, ${firstName}? Tell me the actual topic — a trip, a product launch, a morning routine, something that happened. The more specific, the better.`, id: 0 }
+    { role: "ai", content: `What's the content about, ${firstName}? Tell me the actual topic â€” a trip, a product launch, a morning routine, something that happened. The more specific, the better.`, id: 0 }
   ]);
   const [projectState, setProjectState] = useState<ProjectState>({ title: null, platforms: null, mediaType: null, vibe: null, duration: null });
   const [phase, setPhase] = useState<"chat" | "generating" | "done">("chat");
@@ -647,7 +647,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
   const [uploadProgress, setUploadProgress] = useState<{ name: string; done: boolean }[]>([]);
   const [localUploads, setLocalUploads] = useState<Upload[]>(uploads);
   const [useVoiceClone, setUseVoiceClone] = useState(!!user.elevenlabs_voice_id);
-  // Only block trial users who are starting a brand-new project — never block resuming an existing one
+  // Only block trial users who are starting a brand-new project â€” never block resuming an existing one
   const [trialBlocked, setTrialBlocked] = useState(user.subscription_tier === "trial" && projects.length >= TRIAL_LIMIT && !resumeDraftId);
   const [gdriveUrl, setGdriveUrl] = useState("");
   const [gdriveOpen, setGdriveOpen] = useState(false);
@@ -673,7 +673,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
       setGdriveUrl("");
       setGdriveOpen(false);
     } catch {
-      setGdriveError("Connection error — try again.");
+      setGdriveError("Connection error â€” try again.");
     } finally {
       setGdriveLoading(false);
     }
@@ -775,7 +775,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isTyping]);
 
   const media = localUploads.filter(u => u.file_type === "video" || u.file_type === "image" || u.file_type === "audio");
-  const MEDIA_ICON: Record<string, string> = { video: "▶", image: "◻", audio: "◉" };
+  const MEDIA_ICON: Record<string, string> = { video: "â–¶", image: "â—»", audio: "â—‰" };
   const STEPS = [
     "Reading your media",
     "Writing your script",
@@ -805,12 +805,12 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
 
       if (res.status === 401) {
         setIsTyping(false);
-        setMessages(prev => [...prev, { role: "ai", content: "Your session has expired. Please refresh the page and log back in — your conversation will still be here.", id: msgCounter + 1 }]);
+        setMessages(prev => [...prev, { role: "ai", content: "Your session has expired. Please refresh the page and log back in â€” your conversation will still be here.", id: msgCounter + 1 }]);
         return;
       }
 
       if (!res.ok) {
-        let errMsg = "I'm having trouble right now — please try again in a moment.";
+        let errMsg = "I'm having trouble right now â€” please try again in a moment.";
         try { const e = await res.json() as { message?: string }; if (e.message) errMsg = e.message; } catch { /* ignore */ }
         setIsTyping(false);
         setMessages(prev => [...prev, { role: "ai", content: errMsg, id: msgCounter + 1 }]);
@@ -870,7 +870,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
     } catch (err) {
       console.error("Chat fetch error:", err);
       setIsTyping(false);
-      setMessages(prev => [...prev, { role: "ai", content: "Network hiccup — hit send again and it'll go through.", id: msgCounter + 1 }]);
+      setMessages(prev => [...prev, { role: "ai", content: "Network hiccup â€” hit send again and it'll go through.", id: msgCounter + 1 }]);
     }
   }
 
@@ -915,7 +915,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
       }
 
       if (!data.script) {
-        throw new Error("No script was generated — please try again.");
+        throw new Error("No script was generated â€” please try again.");
       }
 
       // Step 2: If media files selected, compose actual video from clips
@@ -981,7 +981,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
 
   // Quick replies tied exactly to what the AI just asked about
   const quickReplies: string[] =
-    currentStep === "platform" ? ["Instagram", "TikTok", "Both — Instagram & TikTok"] :
+    currentStep === "platform" ? ["Instagram", "TikTok", "Both â€” Instagram & TikTok"] :
     currentStep === "duration" ? ["15 seconds", "30 seconds", "60 seconds"] :
     [];
 
@@ -999,11 +999,11 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
 
           {draftProjectId && (
             <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "16px 20px", maxWidth: 480, margin: "0 auto 16px", border: "1px solid rgba(0,0,0,0.07)", display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 20 }}>💾</span>
+              <span style={{ fontSize: 20 }}>ðŸ’¾</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>Your project is saved</div>
                 <div style={{ fontSize: 13, color: "#7c7660" }}>
-                  {projectState.title ? `"${projectState.title}"` : "Your project"} is safe in your Projects tab — pick up where you left off anytime.
+                  {projectState.title ? `"${projectState.title}"` : "Your project"} is safe in your Projects tab â€” pick up where you left off anytime.
                 </div>
               </div>
             </div>
@@ -1034,10 +1034,10 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
           <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 26, fontWeight: 800, marginBottom: 8 }}>
             Creating{projectState.title ? ` "${projectState.title}"` : " your video"}...
           </h2>
-          <p style={{ fontSize: 15, color: "#7c7660" }}>Sit tight — this is where the magic happens.</p>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Sit tight â€” this is where the magic happens.</p>
           {draftProjectId && (
             <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 10, background: "rgba(248,248,166,0.6)", borderRadius: 999, padding: "5px 14px", fontSize: 12, color: "#7c7660", fontWeight: 600 }}>
-              <span>💾</span> Auto-saved — you can always resume from Projects
+              <span>ðŸ’¾</span> Auto-saved â€” you can always resume from Projects
             </div>
           )}
         </div>
@@ -1048,7 +1048,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
             return (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 0", borderBottom: i < STEPS.length - 1 ? "1px solid rgba(0,0,0,0.05)" : "none", opacity: i > stepIdx ? 0.3 : 1, transition: "opacity 0.5s" }}>
                 <div style={{ width: 38, height: 38, borderRadius: "50%", flexShrink: 0, background: done ? "#FF2D2D" : active ? "rgba(255,45,45,0.1)" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, color: done ? "#fff" : active ? "#FF2D2D" : "#b5b09a", transition: "all 0.4s" }}>
-                  {done ? "✓" : active ? <span style={{ display: "inline-block", width: 15, height: 15, border: "2.5px solid rgba(255,45,45,0.25)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.75s linear infinite" }} /> : i + 1}
+                  {done ? "âœ“" : active ? <span style={{ display: "inline-block", width: 15, height: 15, border: "2.5px solid rgba(255,45,45,0.25)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.75s linear infinite" }} /> : i + 1}
                 </div>
                 <span style={{ fontSize: 15, fontWeight: done || active ? 700 : 400, color: active ? "#FF2D2D" : done ? "#1a1a1a" : "#b5b09a" }}>{step}</span>
               </div>
@@ -1068,9 +1068,9 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>✦ Content ready</div>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>âœ¦ Content ready</div>
             <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 24, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 4, lineHeight: 1.2 }}>{projectState.title}</h2>
-            <p style={{ fontSize: 13, color: "#7c7660" }}>{platforms} · {projectState.duration || 30}s{projectState.vibe ? ` · ${projectState.vibe.slice(0, 40)}` : ""}</p>
+            <p style={{ fontSize: 13, color: "#7c7660" }}>{platforms} Â· {projectState.duration || 30}s{projectState.vibe ? ` Â· ${projectState.vibe.slice(0, 40)}` : ""}</p>
           </div>
           <button onClick={handleReset} style={{ background: "#111", color: "#fff", border: "none", borderRadius: 999, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
             + New
@@ -1090,11 +1090,11 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
           <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 3 }}>Your Video</div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>9:16 · From your actual clips · MP4</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>9:16 Â· From your actual clips Â· MP4</div>
             </div>
             {result.videoUrl && (
               <button onClick={() => downloadVideo(result.videoUrl!)} style={{ background: "#F8F8A6", color: "#1a1a1a", border: "none", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-                ↓ Download MP4
+                â†“ Download MP4
               </button>
             )}
           </div>
@@ -1103,14 +1103,14 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
             {composing && (
               <div style={{ textAlign: "center", padding: "32px 0" }}>
                 <div style={{ width: 44, height: 44, border: "3px solid rgba(255,45,45,0.25)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.9s linear infinite", margin: "0 auto 16px" }} />
-                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", fontWeight: 600, marginBottom: 6 }}>Creating your video…</div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>Title card → smooth transitions → music mix. Takes 30–90 seconds.</div>
+                <div style={{ fontSize: 14, color: "rgba(255,255,255,0.7)", fontWeight: 600, marginBottom: 6 }}>Creating your videoâ€¦</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>Title card â†’ smooth transitions â†’ music mix. Takes 30â€“90 seconds.</div>
               </div>
             )}
 
             {composeError && !composing && !result.videoUrl && (
               <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", background: "rgba(255,45,45,0.08)", borderRadius: 12 }}>
-                <div style={{ fontSize: 18 }}>⚠</div>
+                <div style={{ fontSize: 18 }}>âš </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, color: "#FF2D2D", fontWeight: 700, marginBottom: 2 }}>Compose failed</div>
                   <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{composeError}</div>
@@ -1139,7 +1139,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
                     </div>
                     {uploads.length === 0 ? (
                       <div style={{ textAlign: "center", padding: "20px 0", color: "rgba(255,255,255,0.35)", fontSize: 13 }}>
-                        No uploads yet — go to your Media Library to add clips first.
+                        No uploads yet â€” go to your Media Library to add clips first.
                       </div>
                     ) : (
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
@@ -1153,11 +1153,11 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
                                 <img src={thumb} alt={u.file_name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                               ) : (
                                 <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>
-                                  {u.file_type === "video" ? "▶" : "◻"}
+                                  {u.file_type === "video" ? "â–¶" : "â—»"}
                                 </div>
                               )}
                               {sel && (
-                                <div style={{ position: "absolute", top: 5, right: 5, width: 20, height: 20, borderRadius: "50%", background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 800 }}>✓</div>
+                                <div style={{ position: "absolute", top: 5, right: 5, width: 20, height: 20, borderRadius: "50%", background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 800 }}>âœ“</div>
                               )}
                               <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(transparent, rgba(0,0,0,0.7))", padding: "14px 6px 5px", fontSize: 9, color: "rgba(255,255,255,0.75)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                 {u.file_name}
@@ -1171,14 +1171,14 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
                 )}
                 {selectedIds.length > 0 && (
                   <div style={{ marginBottom: 12, fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
-                    {selectedIds.length} clip{selectedIds.length !== 1 ? "s" : ""} selected — AI will cut and assemble them
+                    {selectedIds.length} clip{selectedIds.length !== 1 ? "s" : ""} selected â€” AI will cut and assemble them
                   </div>
                 )}
                 <button
                   onClick={() => result.projectId && selectedIds.length > 0 && composeVideo(result.projectId, result.script, result.audioBase64)}
                   disabled={selectedIds.length === 0}
                   style={{ width: "100%", background: selectedIds.length > 0 ? "#FF2D2D" : "rgba(255,255,255,0.08)", color: selectedIds.length > 0 ? "#fff" : "rgba(255,255,255,0.25)", border: "none", borderRadius: 999, padding: "13px 22px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: selectedIds.length > 0 ? "pointer" : "default", transition: "all 0.2s" }}>
-                  {selectedIds.length > 0 ? "▶ Compose Video Now" : "Select clips above to compose"}
+                  {selectedIds.length > 0 ? "â–¶ Compose Video Now" : "Select clips above to compose"}
                 </button>
               </div>
             )}
@@ -1196,7 +1196,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
             {scriptLines.map((line, i) => (
               <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                 <div style={{ width: 24, height: 24, borderRadius: 6, background: i === 0 ? "#FF2D2D" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: i === 0 ? "#fff" : "#7c7660", flexShrink: 0, marginTop: 2 }}>
-                  {i === 0 ? "▶" : i + 1}
+                  {i === 0 ? "â–¶" : i + 1}
                 </div>
                 <p style={{ fontSize: 14, lineHeight: 1.7, color: "#1a1a1a", margin: 0, flex: 1 }}>{line}</p>
               </div>
@@ -1220,15 +1220,15 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
         {/* Voice upsell */}
         {!result.hasVoice && (
           <div style={{ background: "#F8F8A6", borderRadius: 16, padding: "16px 20px", display: "flex", gap: 14, alignItems: "center", marginBottom: 14 }}>
-            <div style={{ fontSize: 24, flexShrink: 0 }}>🎙</div>
+            <div style={{ fontSize: 24, flexShrink: 0 }}>ðŸŽ™</div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>
                 {user.subscription_tier === "elite" ? "Set up your Voice Clone" : "Upgrade to hear your voice"}
               </div>
               <div style={{ fontSize: 12, color: "#7c7660" }}>
                 {user.subscription_tier === "elite"
-                  ? "Go to Settings → Voice Clone Studio and upload 1–5 clips of yourself talking. Lumevo will clone your voice and narrate every project in your actual voice."
-                  : "Elite plan includes Voice Clone Studio — upload your videos, Lumevo clones your voice, and every script gets narrated in your actual voice."}
+                  ? "Go to Settings â†’ Voice Clone Studio and upload 1â€“5 clips of yourself talking. Lumevo will clone your voice and narrate every project in your actual voice."
+                  : "Elite plan includes Voice Clone Studio â€” upload your videos, Lumevo clones your voice, and every script gets narrated in your actual voice."}
               </div>
             </div>
           </div>
@@ -1240,7 +1240,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 10 }}>Lumevo&apos;s Edit</div>
             {composeResult.editorialNote && (
               <div style={{ display: "flex", gap: 10, marginBottom: 8, alignItems: "flex-start" }}>
-                <div style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>◈</div>
+                <div style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>â—ˆ</div>
                 <div style={{ fontSize: 13, color: "#1a1a1a", lineHeight: 1.6 }}>
                   <span style={{ fontWeight: 700, color: "#FF2D2D" }}>Edit strategy: </span>
                   {composeResult.editorialNote}
@@ -1249,7 +1249,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
             )}
             {composeResult.emotionalArc && (
               <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                <div style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>◉</div>
+                <div style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>â—‰</div>
                 <div style={{ fontSize: 13, color: "#1a1a1a", lineHeight: 1.6 }}>
                   <span style={{ fontWeight: 700, color: "#FF2D2D" }}>Emotional arc: </span>
                   {composeResult.emotionalArc}
@@ -1264,9 +1264,9 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 12 }}>How did this land?</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {[
-              { action: "thumbs_up", label: "✓ Loved it", bg: feedbackSent === "thumbs_up" ? "#FF2D2D" : "#fafaf4", color: feedbackSent === "thumbs_up" ? "#fff" : "#1a1a1a", border: feedbackSent === "thumbs_up" ? "#FF2D2D" : "rgba(0,0,0,0.1)" },
-              { action: "thumbs_down", label: "✕ Not quite", bg: feedbackSent === "thumbs_down" ? "#1a1a1a" : "#fafaf4", color: feedbackSent === "thumbs_down" ? "#fff" : "#1a1a1a", border: feedbackSent === "thumbs_down" ? "#1a1a1a" : "rgba(0,0,0,0.1)" },
-              { action: "regenerate", label: "↻ Regenerate", bg: "#fafaf4", color: "#1a1a1a", border: "rgba(0,0,0,0.1)" },
+              { action: "thumbs_up", label: "âœ“ Loved it", bg: feedbackSent === "thumbs_up" ? "#FF2D2D" : "#fafaf4", color: feedbackSent === "thumbs_up" ? "#fff" : "#1a1a1a", border: feedbackSent === "thumbs_up" ? "#FF2D2D" : "rgba(0,0,0,0.1)" },
+              { action: "thumbs_down", label: "âœ• Not quite", bg: feedbackSent === "thumbs_down" ? "#1a1a1a" : "#fafaf4", color: feedbackSent === "thumbs_down" ? "#fff" : "#1a1a1a", border: feedbackSent === "thumbs_down" ? "#1a1a1a" : "rgba(0,0,0,0.1)" },
+              { action: "regenerate", label: "â†» Regenerate", bg: "#fafaf4", color: "#1a1a1a", border: "rgba(0,0,0,0.1)" },
             ].map(btn => (
               <button
                 key={btn.action}
@@ -1288,8 +1288,8 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
               <div style={{ width: 6, height: 6, background: "#FF2D2D", borderRadius: "50%", flexShrink: 0 }} />
               <div style={{ fontSize: 12, color: "#7c7660" }}>
                 {feedbackSent === "thumbs_up"
-                  ? "Got it — Lumevo will make more content like this."
-                  : "Noted — Lumevo is adjusting your style profile to create better content next time."}
+                  ? "Got it â€” Lumevo will make more content like this."
+                  : "Noted â€” Lumevo is adjusting your style profile to create better content next time."}
               </div>
             </div>
           )}
@@ -1305,19 +1305,19 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
           <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 4 }}>New Project</h2>
         </div>
         <div style={{ background: "#1a1a1a", borderRadius: 20, padding: "48px 40px", textAlign: "center" }}>
-          <div style={{ fontSize: 40, marginBottom: 16 }}>◆</div>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>â—†</div>
           <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 24, fontWeight: 800, color: "#fff", marginBottom: 12 }}>You&apos;ve used both trial projects</div>
           <div style={{ fontSize: 15, color: "rgba(255,255,255,0.55)", maxWidth: 440, margin: "0 auto 32px", lineHeight: 1.7 }}>
-            Your free trial includes 2 projects. To keep creating, pick a plan — your work is saved and you can keep going instantly.
+            Your free trial includes 2 projects. To keep creating, pick a plan â€” your work is saved and you can keep going instantly.
           </div>
           <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
             {[{ name: "Creator", price: "$29/mo" }, { name: "Pro", price: "$79/mo" }, { name: "Elite", price: "$149/mo" }].map(p => (
               <button key={p.name} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 28px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
-                {p.name} — {p.price}
+                {p.name} â€” {p.price}
               </button>
             ))}
           </div>
-          <div style={{ marginTop: 20, fontSize: 12, color: "rgba(255,255,255,0.3)" }}>Cancel anytime · No hidden fees</div>
+          <div style={{ marginTop: 20, fontSize: 12, color: "rgba(255,255,255,0.3)" }}>Cancel anytime Â· No hidden fees</div>
         </div>
       </div>
     );
@@ -1327,7 +1327,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
     setPhase("chat");
     setResult(null);
     setProjectState({ title: null, platforms: null, mediaType: null, vibe: null, duration: null });
-    setMessages([{ role: "ai", content: `What's the content about, ${firstName}? Tell me the actual topic — a trip, a product launch, a morning routine, something that happened. The more specific, the better.`, id: 0 }]);
+    setMessages([{ role: "ai", content: `What's the content about, ${firstName}? Tell me the actual topic â€” a trip, a product launch, a morning routine, something that happened. The more specific, the better.`, id: 0 }]);
     setMsgCounter(1);
     setSelectedIds([]);
     setCurrentStep(null);
@@ -1343,7 +1343,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
             <div>
               <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(123,97,255,0.1)", borderRadius: 999, padding: "4px 12px", fontSize: 11, fontWeight: 700, color: "#7B61FF", marginBottom: 8, letterSpacing: 0.5 }}>
-                ↩ Resuming saved project
+                â†© Resuming saved project
               </div>
               <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 4 }}>{projectState.title}</h2>
               <p style={{ fontSize: 14, color: "#7c7660" }}>Pick up exactly where you left off.</p>
@@ -1412,14 +1412,14 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
                 {uploadingFiles ? (
                   <div>
                     <div style={{ width: 32, height: 32, border: "3px solid rgba(255,45,45,0.2)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 10px" }} />
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#FF2D2D" }}>Uploading & analyzing…</div>
-                    <div style={{ fontSize: 11, color: "#7c7660", marginTop: 4 }}>{uploadProgress.length} file{uploadProgress.length !== 1 ? "s" : ""} · AI vision analysis running</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#FF2D2D" }}>Uploading & analyzingâ€¦</div>
+                    <div style={{ fontSize: 11, color: "#7c7660", marginTop: 4 }}>{uploadProgress.length} file{uploadProgress.length !== 1 ? "s" : ""} Â· AI vision analysis running</div>
                   </div>
                 ) : (
                   <div>
-                    <div style={{ fontSize: 28, marginBottom: 6 }}>⊕</div>
+                    <div style={{ fontSize: 28, marginBottom: 6 }}>âŠ•</div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", marginBottom: 2 }}>Drop videos &amp; photos here</div>
-                    <div style={{ fontSize: 11, color: "#7c7660" }}>or click to browse · up to 10 files · MP4, MOV, JPG, PNG</div>
+                    <div style={{ fontSize: 11, color: "#7c7660" }}>or click to browse Â· up to 10 files Â· MP4, MOV, JPG, PNG</div>
                   </div>
                 )}
               </div>
@@ -1442,12 +1442,12 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a1a" }}>Import from Google Drive</div>
                     <div style={{ fontSize: 10, color: "#7c7660" }}>Paste a share link</div>
                   </div>
-                  <span style={{ fontSize: 14, color: "#b5b09a", transform: gdriveOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>⌄</span>
+                  <span style={{ fontSize: 14, color: "#b5b09a", transform: gdriveOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>âŒ„</span>
                 </button>
                 {gdriveOpen && (
                   <div style={{ background: "#fafaf4", border: "1.5px solid rgba(0,0,0,0.08)", borderRadius: 10, padding: 12, marginTop: 6 }}>
                     <div style={{ fontSize: 11, color: "#7c7660", marginBottom: 8, lineHeight: 1.5 }}>
-                      Right-click a <strong>specific file</strong> (not a folder) in Drive → <strong>Share</strong> → <strong>Anyone with the link</strong> → copy link
+                      Right-click a <strong>specific file</strong> (not a folder) in Drive â†’ <strong>Share</strong> â†’ <strong>Anyone with the link</strong> â†’ copy link
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
                       <input
@@ -1459,7 +1459,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
                       />
                       <button onClick={handleGdriveImport} disabled={gdriveLoading || !gdriveUrl.trim()}
                         style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: gdriveLoading || !gdriveUrl.trim() ? "not-allowed" : "pointer", opacity: !gdriveUrl.trim() ? 0.5 : 1, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 5 }}>
-                        {gdriveLoading ? <><span style={{ display: "inline-block", width: 10, height: 10, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> Importing…</> : "Import"}
+                        {gdriveLoading ? <><span style={{ display: "inline-block", width: 10, height: 10, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> Importingâ€¦</> : "Import"}
                       </button>
                     </div>
                     {gdriveError && <div style={{ marginTop: 6, fontSize: 11, color: "#FF2D2D", fontWeight: 600 }}>{gdriveError}</div>}
@@ -1471,7 +1471,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
               {localUploads.filter(u => u.file_type === "video" || u.file_type === "image").length > 0 && (
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#7c7660", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>
-                    Your Media Library · tap to select
+                    Your Media Library Â· tap to select
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
                     {localUploads.filter(u => u.file_type === "video" || u.file_type === "image").slice(0, 12).map(u => {
@@ -1484,21 +1484,21 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
                             <img src={u.thumb_path} alt={u.file_name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                           ) : (
                             <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, color: "rgba(255,255,255,0.3)" }}>
-                              {u.file_type === "video" ? "▶" : "◻"}
+                              {u.file_type === "video" ? "â–¶" : "â—»"}
                             </div>
                           )}
                           {/* Selection check */}
                           {sel && (
-                            <div style={{ position: "absolute", top: 6, right: 6, width: 22, height: 22, background: "#FF2D2D", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#fff", fontWeight: 800 }}>✓</div>
+                            <div style={{ position: "absolute", top: 6, right: 6, width: 22, height: 22, background: "#FF2D2D", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#fff", fontWeight: 800 }}>âœ“</div>
                           )}
                           {/* Analysis badge */}
                           {analysis?.energy && (
                             <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 6px", background: "linear-gradient(transparent, rgba(0,0,0,0.8))", fontSize: 9, color: "rgba(255,255,255,0.8)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                              {analysis.energy} energy · {analysis.bestUse || u.file_type}
+                              {analysis.energy} energy Â· {analysis.bestUse || u.file_type}
                             </div>
                           )}
                           {u.analysis_status === "processing" && (
-                            <div style={{ position: "absolute", top: 6, left: 6, background: "rgba(0,0,0,0.7)", borderRadius: 4, padding: "2px 6px", fontSize: 9, color: "rgba(255,255,255,0.7)" }}>analyzing…</div>
+                            <div style={{ position: "absolute", top: 6, left: 6, background: "rgba(0,0,0,0.7)", borderRadius: 4, padding: "2px 6px", fontSize: 9, color: "rgba(255,255,255,0.7)" }}>analyzingâ€¦</div>
                           )}
                         </div>
                       );
@@ -1515,13 +1515,13 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
                     <div style={{ width: 16, height: 16, background: "#fff", borderRadius: "50%", position: "absolute", top: 2, left: useVoiceClone ? 18 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>🎙 Narrate in my voice</div>
-                    <div style={{ fontSize: 11, color: "#7c7660" }}>{user.voice_clone_name || "Your voice clone"} · AI will mix this into the video</div>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>ðŸŽ™ Narrate in my voice</div>
+                    <div style={{ fontSize: 11, color: "#7c7660" }}>{user.voice_clone_name || "Your voice clone"} Â· AI will mix this into the video</div>
                   </div>
                 </div>
               ) : user.subscription_tier === "elite" ? (
                 <div style={{ background: "#F8F8A6", borderRadius: 12, padding: "12px 14px", marginBottom: 10, fontSize: 12, color: "#7c7660" }}>
-                  🎙 Set up your Voice Clone in Settings to narrate this video in your actual voice.
+                  ðŸŽ™ Set up your Voice Clone in Settings to narrate this video in your actual voice.
                 </div>
               ) : null}
 
@@ -1532,8 +1532,8 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
                   <div style={{ width: 16, height: 16, background: "#fff", borderRadius: "50%", position: "absolute", top: 2, left: includeMusic ? 18 : 2, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>♪ AI music selection</div>
-                  <div style={{ fontSize: 11, color: "#7c7660" }}>Lumevo picks background music that matches your vibe · smart ducking under voice</div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>â™ª AI music selection</div>
+                  <div style={{ fontSize: 11, color: "#7c7660" }}>Lumevo picks background music that matches your vibe Â· smart ducking under voice</div>
                 </div>
               </div>
 
@@ -1541,8 +1541,8 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
                 <button onClick={handleConfirmUploads}
                   style={{ flex: 1, background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 18px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
                   {selectedIds.length > 0
-                    ? `✦ Create video with ${selectedIds.length} clip${selectedIds.length !== 1 ? "s" : ""}`
-                    : "Create from brand voice only →"}
+                    ? `âœ¦ Create video with ${selectedIds.length} clip${selectedIds.length !== 1 ? "s" : ""}`
+                    : "Create from brand voice only â†’"}
                 </button>
               </div>
             </div>
@@ -1568,9 +1568,9 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
             placeholder={
-              currentStep === "title" ? "e.g. My trip to Bali, launching my skincare line, my morning routine…" :
-              currentStep === "vibe" ? "e.g. raw and emotional, fun and fast-paced, calm and aesthetic…" :
-              "Type anything…"
+              currentStep === "title" ? "e.g. My trip to Bali, launching my skincare line, my morning routineâ€¦" :
+              currentStep === "vibe" ? "e.g. raw and emotional, fun and fast-paced, calm and aestheticâ€¦" :
+              "Type anythingâ€¦"
             }
             disabled={isTyping || needsUpload}
             rows={1}
@@ -1578,7 +1578,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
           />
           <button onClick={() => sendMessage()} disabled={!input.trim() || isTyping || needsUpload}
             style={{ width: 42, height: 42, borderRadius: 12, background: input.trim() && !isTyping ? "#FF2D2D" : "rgba(0,0,0,0.08)", border: "none", cursor: input.trim() && !isTyping ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: input.trim() && !isTyping ? "#fff" : "#b5b09a", transition: "all 0.15s", flexShrink: 0 }}>
-            →
+            â†’
           </button>
         </div>
       </div>
@@ -1593,7 +1593,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
   );
 }
 
-// ── BRAND PROFILE ─────────────────────────────────────────────────────────────
+// â”€â”€ BRAND PROFILE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function BrandSection({ brand, onRefresh }: { brand: BrandProfile | null; onRefresh: () => void }) {
   const [learning, setLearning] = useState(false);
   const [learnResult, setLearnResult] = useState<{ keyInsight?: string; archetype?: string } | null>(null);
@@ -1627,22 +1627,22 @@ function BrandSection({ brand, onRefresh }: { brand: BrandProfile | null; onRefr
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 }}>
         <div>
           <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Creator DNA</h2>
-          <p style={{ fontSize: 15, color: "#7c7660" }}>Lumevo builds a living model of your style — it sharpens with every upload, project, and piece of feedback.</p>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Lumevo builds a living model of your style â€” it sharpens with every upload, project, and piece of feedback.</p>
         </div>
         <button onClick={runDeepLearning} disabled={learning}
           style={{ background: learning ? "rgba(255,45,45,0.08)" : "#FF2D2D", border: "none", color: learning ? "#FF2D2D" : "#fff", borderRadius: 999, padding: "10px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: learning ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}>
           {learning ? (
             <>
               <span style={{ display: "inline-block", width: 13, height: 13, border: "2px solid rgba(255,45,45,0.2)", borderTopColor: "#FF2D2D", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-              Learning…
+              Learningâ€¦
             </>
-          ) : "◈ Run Deep Learning"}
+          ) : "â—ˆ Run Deep Learning"}
         </button>
       </div>
 
       {learnResult?.keyInsight && (
         <div style={{ background: "#1a1a1a", borderRadius: 14, padding: "16px 20px", marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-start" }}>
-          <div style={{ fontSize: 18, flexShrink: 0, marginTop: 2 }}>✦</div>
+          <div style={{ fontSize: 18, flexShrink: 0, marginTop: 2 }}>âœ¦</div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>What Lumevo just learned</div>
             <div style={{ fontSize: 14, color: "#fff", lineHeight: 1.7 }}>{learnResult.keyInsight}</div>
@@ -1664,8 +1664,8 @@ function BrandSection({ brand, onRefresh }: { brand: BrandProfile | null; onRefr
               </div>
             )}
             <div style={{ fontSize: 14, color: "#7c7660", lineHeight: 1.7, marginBottom: 10 }}>
-              {prog < 20 ? "Just getting started — upload 3+ videos and generate your first project to begin training." :
-               prog < 50 ? "Good foundation. Keep uploading and generating — your patterns are becoming clear." :
+              {prog < 20 ? "Just getting started â€” upload 3+ videos and generate your first project to begin training." :
+               prog < 50 ? "Good foundation. Keep uploading and generating â€” your patterns are becoming clear." :
                prog < 80 ? "Strong profile. Lumevo understands your style. Feedback sharpens it further." :
                "Deeply trained. Every generation is personalized to your exact voice."}
             </div>
@@ -1712,9 +1712,9 @@ function BrandSection({ brand, onRefresh }: { brand: BrandProfile | null; onRefr
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 12 }}>Creative Intelligence</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
             {[
-              { label: "Hook Style", value: brand?.hook_style, icon: "◀" },
-              { label: "Emotional Arc", value: brand?.emotional_arc_preference, icon: "◉" },
-              { label: "Pattern Interrupt", value: brand?.pattern_interrupt_style, icon: "◈" },
+              { label: "Hook Style", value: brand?.hook_style, icon: "â—€" },
+              { label: "Emotional Arc", value: brand?.emotional_arc_preference, icon: "â—‰" },
+              { label: "Pattern Interrupt", value: brand?.pattern_interrupt_style, icon: "â—ˆ" },
             ].filter(i => i.value).map(item => (
               <div key={item.label} style={{ background: "#1a1a1a", borderRadius: 12, padding: "16px 18px", display: "flex", gap: 12, alignItems: "flex-start" }}>
                 <div style={{ fontSize: 16, color: "#FF2D2D", flexShrink: 0, marginTop: 2 }}>{item.icon}</div>
@@ -1757,7 +1757,7 @@ function BrandSection({ brand, onRefresh }: { brand: BrandProfile | null; onRefr
   );
 }
 
-// ── PROJECTS ──────────────────────────────────────────────────────────────────
+// â”€â”€ PROJECTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ProjectDetail({ project, voiceover, onBack, onRecreate }: {
   project: FullProject; voiceover: Voiceover | null; onBack: () => void; onRecreate: () => void;
 }) {
@@ -1797,12 +1797,12 @@ function ProjectDetail({ project, voiceover, onBack, onRecreate }: {
       {/* Back + header */}
       <div style={{ marginBottom: 28 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#7c7660", fontFamily: "inherit", padding: 0, marginBottom: 18, display: "flex", alignItems: "center", gap: 6 }}>
-          ← All Projects
+          â† All Projects
         </button>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>
-              ✦ {project.status}
+              âœ¦ {project.status}
             </div>
             <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 26, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6, lineHeight: 1.2 }}>{project.title}</h2>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -1839,7 +1839,7 @@ function ProjectDetail({ project, voiceover, onBack, onRecreate }: {
               />
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button onClick={() => saveField("script")} disabled={saving} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "8px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                  {saving ? "Saving…" : "Save"}
+                  {saving ? "Savingâ€¦" : "Save"}
                 </button>
                 <button onClick={() => setEditingScript(false)} style={{ background: "none", border: "1.5px solid rgba(0,0,0,0.1)", borderRadius: 999, padding: "8px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#7c7660" }}>
                   Cancel
@@ -1851,7 +1851,7 @@ function ProjectDetail({ project, voiceover, onBack, onRecreate }: {
               {scriptLines.map((line, i) => (
                 <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                   <div style={{ width: 24, height: 24, borderRadius: 6, background: i === 0 ? "#FF2D2D" : "#F8F8A6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: i === 0 ? "#fff" : "#7c7660", flexShrink: 0, marginTop: 2 }}>
-                    {i === 0 ? "▶" : i + 1}
+                    {i === 0 ? "â–¶" : i + 1}
                   </div>
                   <p style={{ fontSize: 14, lineHeight: 1.7, color: "#1a1a1a", margin: 0, flex: 1 }}>{line}</p>
                 </div>
@@ -1885,7 +1885,7 @@ function ProjectDetail({ project, voiceover, onBack, onRecreate }: {
             />
             <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
               <button onClick={() => saveField("caption")} disabled={saving} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "8px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                {saving ? "Saving…" : "Save"}
+                {saving ? "Savingâ€¦" : "Save"}
               </button>
               <button onClick={() => setEditingCaption(false)} style={{ background: "none", border: "1.5px solid rgba(0,0,0,0.1)", borderRadius: 999, padding: "8px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#7c7660" }}>
                 Cancel
@@ -1909,7 +1909,7 @@ function ProjectDetail({ project, voiceover, onBack, onRecreate }: {
       {voiceover && (
         <div style={{ background: "#1a1a1a", borderRadius: 20, padding: "18px 22px", marginBottom: 14 }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 8 }}>Voice Clone Used</div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>Narrated with voice ID: {voiceover.provider_voice_id || "your clone"} · {fmtDate(voiceover.created_at)}</div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>Narrated with voice ID: {voiceover.provider_voice_id || "your clone"} Â· {fmtDate(voiceover.created_at)}</div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 4 }}>Re-create this project to generate fresh narration audio.</div>
         </div>
       )}
@@ -2006,14 +2006,14 @@ function ProjectsSection({ projects, onNav, initialProjectId, onClearInitial }: 
                         onClick={() => onNav("video", p.id)}
                         style={{ background: "#7B61FF", color: "#fff", border: "none", borderRadius: 999, padding: "8px 16px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
                       >
-                        Resume →
+                        Resume â†’
                       </button>
                     </>
                   ) : (
                     <button onClick={() => openProject(p.id)} disabled={!!loadingId}
                       style={{ background: "none", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 999, padding: "7px 14px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: isLoading ? "wait" : "pointer", color: "#1a1a1a", whiteSpace: "nowrap" }}
                     >
-                      {isLoading ? "…" : "View →"}
+                      {isLoading ? "â€¦" : "View â†’"}
                     </button>
                   )}
                 </div>
@@ -2023,7 +2023,7 @@ function ProjectsSection({ projects, onNav, initialProjectId, onClearInitial }: 
         </div>
       ) : (
         <div style={{ textAlign: "center", padding: "80px 0", color: "#7c7660" }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>◻</div>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>â—»</div>
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No projects yet</div>
           <div style={{ fontSize: 14, marginBottom: 20 }}>Create your first piece of content to get started.</div>
           <button onClick={() => onNav("video")}
@@ -2036,7 +2036,7 @@ function ProjectsSection({ projects, onNav, initialProjectId, onClearInitial }: 
   );
 }
 
-// ── ANALYTICS ─────────────────────────────────────────────────────────────────
+// â”€â”€ ANALYTICS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Analytics() {
   return (
     <div>
@@ -2062,7 +2062,7 @@ function Analytics() {
   );
 }
 
-// ── BILLING ───────────────────────────────────────────────────────────────────
+// â”€â”€ BILLING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Billing({ user }: { user: User }) {
   const isTrial = user.subscription_tier === "trial";
   const daysLeft = trialDaysLeft(user.trial_started_at);
@@ -2072,7 +2072,7 @@ function Billing({ user }: { user: User }) {
   const PLANS = [
     { id: "creator", name: "Creator", price: "$29", period: "/mo", features: ["50 uploads/month", "100 AI generations", "Full brand learning", "All content types", "Weekly content ideas", "Cancel anytime"] },
     { id: "pro", name: "Pro", price: "$79", period: "/mo", features: ["Unlimited uploads", "Unlimited generations", "Full personality profile", "Multi-platform content", "Advanced project history", "Cancel anytime"] },
-    { id: "elite", name: "Elite", price: "$149", period: "/mo", features: ["Everything in Pro", "AI Video Creation", "Voice Clone Studio — sounds exactly like you", "Agentic creative director", "Advanced creative briefs", "Priority support", "Cancel anytime"] },
+    { id: "elite", name: "Elite", price: "$149", period: "/mo", features: ["Everything in Pro", "AI Video Creation", "Voice Clone Studio â€” sounds exactly like you", "Agentic creative director", "Advanced creative briefs", "Priority support", "Cancel anytime"] },
   ];
 
   return (
@@ -2080,7 +2080,7 @@ function Billing({ user }: { user: User }) {
       <div style={{ marginBottom: 36 }}>
         <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Billing</h2>
         <p style={{ fontSize: 15, color: "#7c7660" }}>
-          {isTrial ? "You're on a free trial — choose a plan to keep going after your trial ends." : `You are on the ${TIER_LABELS[user.subscription_tier]} plan.`}
+          {isTrial ? "You're on a free trial â€” choose a plan to keep going after your trial ends." : `You are on the ${TIER_LABELS[user.subscription_tier]} plan.`}
         </p>
       </div>
 
@@ -2088,14 +2088,14 @@ function Billing({ user }: { user: User }) {
         <div style={{ background: "#1a1a1a", borderRadius: 20, padding: "28px", marginBottom: 24, position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", top: 0, right: 0, width: 180, height: 180, borderRadius: "50%", background: "rgba(255,45,45,0.08)", transform: "translate(40px,-60px)" }} />
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 10 }}>Your Free Trial</div>
-          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 8 }}>2 projects · 14 days · Full access</div>
+          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 8 }}>2 projects Â· 14 days Â· Full access</div>
           <div style={{ display: "flex", gap: 32, marginBottom: 16, flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 28, fontWeight: 800, color: "#FF2D2D", fontFamily: "'Syne', sans-serif" }}>{daysLeft}</div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>days left</div>
             </div>
             <div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: "#fff", fontFamily: "'Syne', sans-serif" }}>{trialEndDate || "—"}</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#fff", fontFamily: "'Syne', sans-serif" }}>{trialEndDate || "â€”"}</div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>trial ends</div>
             </div>
           </div>
@@ -2121,7 +2121,7 @@ function Billing({ user }: { user: User }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
                 {plan.features.map(f => (
                   <div key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: current ? "rgba(255,255,255,0.8)" : "#7c7660" }}>
-                    <span style={{ color: "#FF2D2D", flexShrink: 0 }}>✓</span>{f}
+                    <span style={{ color: "#FF2D2D", flexShrink: 0 }}>âœ“</span>{f}
                   </div>
                 ))}
               </div>
@@ -2140,7 +2140,7 @@ function Billing({ user }: { user: User }) {
   );
 }
 
-// ── SETTINGS ──────────────────────────────────────────────────────────────────
+// â”€â”€ SETTINGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated: (voiceId: string, name: string) => void }) {
   const isElite = user.subscription_tier === "elite";
   const hasClone = !!user.elevenlabs_voice_id;
@@ -2233,7 +2233,7 @@ function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated
     return (
       <div style={{ background: "#fff", borderRadius: 20, padding: 28, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>🎙 Voice Clone</div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>ðŸŽ™ Voice Clone</div>
           {user.elevenlabs_voice_id && <span style={{ fontSize: 11, fontWeight: 700, background: "#F8F8A6", padding: "3px 10px", borderRadius: 999, color: "#7c7660" }}>Connected</span>}
         </div>
         <p style={{ fontSize: 13, color: "#7c7660", marginBottom: 16, lineHeight: 1.6 }}>
@@ -2244,14 +2244,14 @@ function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated
             style={{ flex: 1, padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "monospace", fontSize: 13, outline: "none", background: "#fafaf4" }} />
           <button onClick={saveVoiceId} disabled={savingVoice || !voiceId.trim()}
             style={{ background: voiceSaved ? "#2da44e" : "#FF2D2D", color: "#fff", border: "none", borderRadius: 10, padding: "11px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-            {voiceSaved ? "Saved ✓" : savingVoice ? "Saving…" : "Save"}
+            {voiceSaved ? "Saved âœ“" : savingVoice ? "Savingâ€¦" : "Save"}
           </button>
         </div>
         <div style={{ background: "#F8F8A6", borderRadius: 12, padding: "14px 16px", display: "flex", gap: 12, alignItems: "flex-start" }}>
-          <div style={{ fontSize: 18, flexShrink: 0 }}>✦</div>
+          <div style={{ fontSize: 18, flexShrink: 0 }}>âœ¦</div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 3 }}>Upgrade to Elite for Voice Clone Studio</div>
-            <div style={{ fontSize: 12, color: "#7c7660", lineHeight: 1.5 }}>Upload your videos, Lumevo extracts your voice and creates a full clone — no ElevenLabs account needed. Your content sounds exactly like you.</div>
+            <div style={{ fontSize: 12, color: "#7c7660", lineHeight: 1.5 }}>Upload your videos, Lumevo extracts your voice and creates a full clone â€” no ElevenLabs account needed. Your content sounds exactly like you.</div>
           </div>
         </div>
       </div>
@@ -2264,11 +2264,11 @@ function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>Elite Feature</div>
-            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 2 }}>🎙 Voice Clone Studio</div>
+            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 2 }}>ðŸŽ™ Voice Clone Studio</div>
             <div style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>Upload your videos. Lumevo clones your voice. Every script sounds exactly like you.</div>
           </div>
           {hasClone && (
-            <div style={{ background: "#2da44e", color: "#fff", fontSize: 11, fontWeight: 800, letterSpacing: 1, padding: "4px 12px", borderRadius: 999 }}>● Active</div>
+            <div style={{ background: "#2da44e", color: "#fff", fontSize: 11, fontWeight: 800, letterSpacing: 1, padding: "4px 12px", borderRadius: 999 }}>â— Active</div>
           )}
         </div>
       </div>
@@ -2277,14 +2277,14 @@ function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated
         {hasClone ? (
           <>
             <div style={{ background: "#fafaf4", borderRadius: 14, padding: "18px 20px", marginBottom: 20, display: "flex", gap: 16, alignItems: "center" }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🎙</div>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>ðŸŽ™</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>{user.voice_clone_name || "Your Voice Clone"}</div>
-                <div style={{ fontSize: 12, color: "#7c7660", fontFamily: "monospace" }}>ID: {user.elevenlabs_voice_id?.slice(0, 18)}…</div>
+                <div style={{ fontSize: 12, color: "#7c7660", fontFamily: "monospace" }}>ID: {user.elevenlabs_voice_id?.slice(0, 18)}â€¦</div>
               </div>
               <button onClick={removeClone} disabled={removing}
                 style={{ background: "none", border: "1px solid rgba(255,45,45,0.2)", color: "#FF2D2D", fontSize: 12, fontWeight: 600, padding: "6px 14px", borderRadius: 999, cursor: "pointer", fontFamily: "inherit" }}>
-                {removing ? "Removing…" : "Remove"}
+                {removing ? "Removingâ€¦" : "Remove"}
               </button>
             </div>
 
@@ -2295,7 +2295,7 @@ function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <button onClick={testVoice} disabled={testing || !testText.trim()}
                   style={{ background: "#1a1a1a", color: "#fff", border: "none", borderRadius: 999, padding: "10px 22px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                  {testing ? "Generating…" : "▶ Play my voice"}
+                  {testing ? "Generatingâ€¦" : "â–¶ Play my voice"}
                 </button>
                 {testAudioSrc && (
                   <audio controls autoPlay src={testAudioSrc} style={{ height: 36, flex: 1, accentColor: "#FF2D2D" }} />
@@ -2307,7 +2307,7 @@ function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated
               <div style={{ fontSize: 12, fontWeight: 700, color: "#7c7660", marginBottom: 10 }}>Recalibrate your clone</div>
               <p style={{ fontSize: 12, color: "#7c7660", marginBottom: 12, lineHeight: 1.6 }}>Upload new samples to replace your current voice clone with an updated version.</p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", marginBottom: 12 }}>
-                <input value={cloneName} onChange={e => setCloneName(e.target.value)} placeholder="Clone name…"
+                <input value={cloneName} onChange={e => setCloneName(e.target.value)} placeholder="Clone nameâ€¦"
                   style={{ padding: "10px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 13, outline: "none", background: "#fafaf4" }} />
                 <button onClick={() => sampleRef.current?.click()}
                   style={{ background: "#F8F8A6", color: "#1a1a1a", border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
@@ -2321,7 +2321,7 @@ function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, background: "#fafaf4", fontSize: 12 }}>
                       <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
                       <span style={{ color: "#7c7660" }}>{s.sizeMB} MB</span>
-                      <button onClick={() => setSamples(p => p.filter((_, j) => j !== i))} style={{ color: "#FF2D2D", background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 0 }}>×</button>
+                      <button onClick={() => setSamples(p => p.filter((_, j) => j !== i))} style={{ color: "#FF2D2D", background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: 0 }}>Ã—</button>
                     </div>
                   ))}
                 </div>
@@ -2330,7 +2330,7 @@ function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated
               {samples.length > 0 && (
                 <button onClick={createClone} disabled={cloning || !cloneName.trim()}
                   style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "10px 22px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-                  {cloning ? "Cloning…" : "Recalibrate clone →"}
+                  {cloning ? "Cloningâ€¦" : "Recalibrate clone â†’"}
                 </button>
               )}
             </div>
@@ -2339,14 +2339,14 @@ function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated
           <>
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 13, color: "#7c7660", lineHeight: 1.7, marginBottom: 18 }}>
-                Upload 1–5 videos or voice recordings of yourself talking naturally. The more natural and varied the better — aim for at least 1 minute of total audio.
+                Upload 1â€“5 videos or voice recordings of yourself talking naturally. The more natural and varied the better â€” aim for at least 1 minute of total audio.
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", marginBottom: 14 }}>
                 <input value={cloneName} onChange={e => setCloneName(e.target.value)} placeholder="Name your clone (e.g. Taylor's Voice)"
                   style={{ padding: "11px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 13, outline: "none", background: "#fafaf4" }} />
                 <button onClick={() => sampleRef.current?.click()}
                   style={{ background: "#F8F8A6", color: "#1a1a1a", border: "none", borderRadius: 10, padding: "11px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-                  ↑ Upload samples
+                  â†‘ Upload samples
                 </button>
               </div>
               <input ref={sampleRef} type="file" multiple style={{ display: "none" }} onChange={handleSampleUpload} accept="video/*,audio/*" />
@@ -2355,18 +2355,18 @@ function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
                   {samples.map((s, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, background: "#fafaf4", border: "1.5px solid rgba(0,0,0,0.06)" }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#fff", flexShrink: 0, fontWeight: 700 }}>▶</div>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#fff", flexShrink: 0, fontWeight: 700 }}>â–¶</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
                         <div style={{ fontSize: 11, color: "#7c7660" }}>{s.sizeMB} MB</div>
                       </div>
-                      <button onClick={() => setSamples(p => p.filter((_, j) => j !== i))} style={{ color: "#7c7660", background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>×</button>
+                      <button onClick={() => setSamples(p => p.filter((_, j) => j !== i))} style={{ color: "#7c7660", background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "0 4px" }}>Ã—</button>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div style={{ background: "#fafaf4", borderRadius: 12, padding: "22px", textAlign: "center", marginBottom: 16, border: "1.5px dashed rgba(0,0,0,0.1)" }}>
-                  <div style={{ fontSize: 24, marginBottom: 8 }}>🎙</div>
+                  <div style={{ fontSize: 24, marginBottom: 8 }}>ðŸŽ™</div>
                   <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>No samples yet</div>
                   <div style={{ fontSize: 12, color: "#7c7660" }}>Upload videos or audio clips of yourself talking naturally</div>
                 </div>
@@ -2376,18 +2376,18 @@ function VoiceCloneStudio({ user, onCloneCreated }: { user: User; onCloneCreated
 
               <button onClick={createClone} disabled={cloning || !cloneName.trim() || !samples.length}
                 style={{ width: "100%", background: samples.length && cloneName.trim() ? "#FF2D2D" : "rgba(0,0,0,0.08)", color: samples.length && cloneName.trim() ? "#fff" : "#7c7660", border: "none", borderRadius: 12, padding: "14px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: samples.length && cloneName.trim() ? "pointer" : "default", transition: "all 0.2s" }}>
-                {cloning ? "Cloning your voice… this may take 30s" : "🎙 Clone my voice →"}
+                {cloning ? "Cloning your voiceâ€¦ this may take 30s" : "ðŸŽ™ Clone my voice â†’"}
               </button>
             </div>
 
             <div style={{ borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 18 }}>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 10 }}>Or paste an existing Voice ID</div>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <input value={voiceId} onChange={e => setVoiceId(e.target.value)} placeholder="ElevenLabs Voice ID…"
+                <input value={voiceId} onChange={e => setVoiceId(e.target.value)} placeholder="ElevenLabs Voice IDâ€¦"
                   style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "monospace", fontSize: 13, outline: "none", background: "#fafaf4" }} />
                 <button onClick={saveVoiceId} disabled={savingVoice || !voiceId.trim()}
                   style={{ background: voiceSaved ? "#2da44e" : "#1a1a1a", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-                  {voiceSaved ? "Saved ✓" : "Save"}
+                  {voiceSaved ? "Saved âœ“" : "Save"}
                 </button>
               </div>
             </div>
@@ -2438,7 +2438,7 @@ function Settings({ user, onLogout, onUserUpdate }: { user: User; onLogout: () =
   );
 }
 
-// ── CONTENT PLAN ─────────────────────────────────────────────────────────────
+// â”€â”€ CONTENT PLAN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface ContentIdea { type: string; title: string; why: string; platform: string; duration: string; }
 
 function ContentPlan({ user, onNav }: { user: User; onNav: (s: Section) => void }) {
@@ -2447,7 +2447,7 @@ function ContentPlan({ user, onNav }: { user: User; onNav: (s: Section) => void 
   const [generated, setGenerated] = useState(false);
   const isLocked = false;
 
-  const PLATFORM_ICON: Record<string, string> = { instagram: "◉", tiktok: "▶", youtube: "▲", general: "✦" };
+  const PLATFORM_ICON: Record<string, string> = { instagram: "â—‰", tiktok: "â–¶", youtube: "â–²", general: "âœ¦" };
 
   async function generatePlan() {
     setLoading(true);
@@ -2464,11 +2464,11 @@ function ContentPlan({ user, onNav }: { user: User; onNav: (s: Section) => void 
           <p style={{ fontSize: 15, color: "#7c7660" }}>Your AI-generated posting strategy based on your brand and recent work.</p>
         </div>
         <div style={{ background: "#fff", borderRadius: 20, padding: "48px 40px", border: "1px solid rgba(0,0,0,0.07)", textAlign: "center" }}>
-          <div style={{ fontSize: 32, marginBottom: 16 }}>◆</div>
+          <div style={{ fontSize: 32, marginBottom: 16 }}>â—†</div>
           <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 10 }}>Upgrade to unlock Content Plan</div>
-          <div style={{ fontSize: 15, color: "#7c7660", marginBottom: 28, maxWidth: 400, margin: "0 auto 28px" }}>Your AI content strategist recommends exactly what to post next, and why — based on what works for your style and audience.</div>
+          <div style={{ fontSize: 15, color: "#7c7660", marginBottom: 28, maxWidth: 400, margin: "0 auto 28px" }}>Your AI content strategist recommends exactly what to post next, and why â€” based on what works for your style and audience.</div>
           <button onClick={() => onNav("billing")} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "13px 32px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
-            See Plans →
+            See Plans â†’
           </button>
         </div>
       </div>
@@ -2480,17 +2480,17 @@ function ContentPlan({ user, onNav }: { user: User; onNav: (s: Section) => void 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 36 }}>
         <div>
           <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 6 }}>Content Plan</h2>
-          <p style={{ fontSize: 15, color: "#7c7660" }}>Your AI strategist recommends what to create next — based on your brand and what performs.</p>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Your AI strategist recommends what to create next â€” based on your brand and what performs.</p>
         </div>
         <button onClick={generatePlan} disabled={loading}
           style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "11px 22px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
-          {loading ? "Generating…" : generated ? "Refresh Plan" : "Generate Plan"}
+          {loading ? "Generatingâ€¦" : generated ? "Refresh Plan" : "Generate Plan"}
         </button>
       </div>
 
       {!generated && !loading && (
         <div style={{ background: "#fff", borderRadius: 20, padding: "56px 40px", border: "1px solid rgba(0,0,0,0.07)", textAlign: "center" }}>
-          <div style={{ fontSize: 36, marginBottom: 16 }}>◆</div>
+          <div style={{ fontSize: 36, marginBottom: 16 }}>â—†</div>
           <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, marginBottom: 10 }}>Ready to plan your next week</div>
           <div style={{ fontSize: 15, color: "#7c7660", marginBottom: 28 }}>Click &ldquo;Generate Plan&rdquo; and Lumevo will analyze your brand and create personalized content recommendations.</div>
         </div>
@@ -2526,7 +2526,7 @@ function ContentPlan({ user, onNav }: { user: User; onNav: (s: Section) => void 
               </div>
               <button onClick={() => onNav("create")}
                 style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "9px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
-                Create →
+                Create â†’
               </button>
             </div>
           ))}
@@ -2536,7 +2536,7 @@ function ContentPlan({ user, onNav }: { user: User; onNav: (s: Section) => void 
   );
 }
 
-// ── AI MANAGER ────────────────────────────────────────────────────────────────
+// â”€â”€ AI MANAGER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface AIMgrMessage { role: "user" | "assistant"; content: string; }
 
 const QUICK_COMMANDS = [
@@ -2587,10 +2587,10 @@ function AIManagerSection({ user, brand, onNav }: { user: User; brand: BrandProf
           <p style={{ fontSize: 15, color: "#7c7660" }}>Your personal creative director. Available on Elite.</p>
         </div>
         <div style={{ background: "#1a1a1a", borderRadius: 24, padding: "56px 40px", textAlign: "center" }}>
-          <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 20, color: "#FF2D2D", marginBottom: 20 }}>✧ AI Manager</div>
+          <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 20, color: "#FF2D2D", marginBottom: 20 }}>âœ§ AI Manager</div>
           <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#fff", marginBottom: 12 }}>Your creative director, on demand</div>
           <div style={{ fontSize: 15, color: "rgba(255,255,255,0.55)", marginBottom: 32, maxWidth: 440, margin: "0 auto 32px", lineHeight: 1.7 }}>
-            Tell Lumevo what you want to make. It thinks like a creative director — strategy, scripting, voiceover direction, multi-version creation, and more.
+            Tell Lumevo what you want to make. It thinks like a creative director â€” strategy, scripting, voiceover direction, multi-version creation, and more.
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32, maxWidth: 360, margin: "0 auto 32px" }}>
             {QUICK_COMMANDS.slice(0, 3).map(c => (
@@ -2600,7 +2600,7 @@ function AIManagerSection({ user, brand, onNav }: { user: User; brand: BrandProf
             ))}
           </div>
           <button onClick={() => onNav("billing")} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "14px 36px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
-            Upgrade to Elite →
+            Upgrade to Elite â†’
           </button>
         </div>
       </div>
@@ -2623,7 +2623,7 @@ function AIManagerSection({ user, brand, onNav }: { user: User; brand: BrandProf
         <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px", display: "flex", flexDirection: "column", gap: 16 }}>
           {messages.length === 0 && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", textAlign: "center" }}>
-              <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: "#FF2D2D", marginBottom: 8 }}>✧ AI Manager</div>
+              <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: "#FF2D2D", marginBottom: 8 }}>âœ§ AI Manager</div>
               <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Ready to create</div>
               <div style={{ fontSize: 14, color: "#7c7660", marginBottom: 28 }}>Tell your creative director what you want.</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 520 }}>
@@ -2657,7 +2657,7 @@ function AIManagerSection({ user, brand, onNav }: { user: User; brand: BrandProf
           {thinking && (
             <div style={{ display: "flex", justifyContent: "flex-start" }}>
               <div style={{ background: "#F8F8A6", borderRadius: "18px 18px 18px 4px", padding: "14px 18px", fontSize: 18, letterSpacing: 4 }}>
-                ···
+                Â·Â·Â·
               </div>
             </div>
           )}
@@ -2669,7 +2669,7 @@ function AIManagerSection({ user, brand, onNav }: { user: User; brand: BrandProf
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder="Tell your AI Manager what you want to create…"
+            placeholder="Tell your AI Manager what you want to createâ€¦"
             style={{ flex: 1, padding: "13px 18px", borderRadius: 999, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, background: "#fafaf4", outline: "none", boxSizing: "border-box" }}
           />
           <button onClick={() => send()} disabled={!input.trim() || thinking}
@@ -2682,7 +2682,7 @@ function AIManagerSection({ user, brand, onNav }: { user: User; brand: BrandProf
   );
 }
 
-// ── ROOT ──────────────────────────────────────────────────────────────────────
+// â”€â”€ ROOT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -2776,7 +2776,7 @@ export default function DashboardPage() {
       <div className="page-shell">
       <div className="topbar">
         <span style={{ fontFamily: "'Fredoka One', cursive", fontSize: 20, color: "#FF2D2D" }}>LUMEVO</span>
-        <button onClick={() => setSidebarOpen(o => !o)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#1a1a1a", lineHeight: 1 }}>☰</button>
+        <button onClick={() => setSidebarOpen(o => !o)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#1a1a1a", lineHeight: 1 }}>â˜°</button>
       </div>
       <div className={sidebarOpen ? "overlay overlay-show" : "overlay"} onClick={() => setSidebarOpen(false)} />
 
