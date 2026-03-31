@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { query } from "@/lib/db";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+});
 
 export const maxDuration = 60;
-
-const ai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY!,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
 
 interface BrandProfile {
   tone_summary: string | null;
@@ -37,7 +36,6 @@ export async function POST(req: NextRequest) {
   const { trigger } = await req.json().catch(() => ({ trigger: "manual" })) as { trigger?: string };
   const userId = session.id;
 
-  // Gather all learning data sources
   const [
     uploadsRows,
     projectsRows,
@@ -79,7 +77,6 @@ export async function POST(req: NextRequest) {
   const feedbackSummary = feedbackRows.rows as { action: string; cnt: string }[];
   const insights = insightsRows.rows as Record<string, unknown>[];
 
-  // Summarize clip analysis from uploads
   const clipAnalyses = uploads
     .filter(u => u.ai_analysis)
     .map(u => {
@@ -100,9 +97,7 @@ export async function POST(req: NextRequest) {
     })
     .join("\n");
 
-  const feedbackStr = feedbackSummary
-    .map(f => `${f.action}: ${f.cnt} times`)
-    .join(", ");
+  const feedbackStr = feedbackSummary.map(f => `${f.action}: ${f.cnt} times`).join(", ");
 
   const positiveInsights = insights
     .filter(i => i.insight_type === "positive_style_signal")
@@ -121,12 +116,13 @@ export async function POST(req: NextRequest) {
     .join("; ");
 
   const dataRichness =
-    uploads.length + projects.length + feedbackSummary.reduce((a, f) => a + parseInt(f.cnt), 0);
+    uploads.length +
+    projects.length +
+    feedbackSummary.reduce((a, f) => a + parseInt(f.cnt), 0);
 
-  // === Run deep personality analysis with GPT-4o ===
   const learnPrompt = `You are a master creator coach and AI learning system for a content creator named ${user?.name || "Creator"}.
 
-Your job: analyze ALL of their uploaded content, generated videos, and feedback patterns to build a deep, specific personality profile that will make every future video feel EXACTLY like their authentic style.
+Analyze ALL of their uploaded content, generated videos, and feedback patterns to build a deep, specific personality profile that will make every future video feel EXACTLY like their authentic style.
 
 === THEIR UPLOADED CONTENT ===
 ${clipAnalyses || "No clips analyzed yet."}
@@ -154,59 +150,60 @@ Hook style: ${currentBrand?.hook_style || "unknown"}
 Pacing: ${currentBrand?.pacing_style || "unknown"}
 Archetype: ${currentBrand?.creator_archetype || "unknown"}
 
-Based on ALL this evidence, return a JSON object with these exact fields:
+Based on ALL this evidence, return ONLY a JSON object with these exact fields (no markdown, no extra text):
 
 {
   "tone_summary": "3-sentence description of their specific communication tone — how they actually talk, not generic labels",
-  "personality_summary": "3 specific personality traits with HOW they show up in content (e.g. 'self-deprecating humor — makes jokes at their own expense before delivering the value')",
+  "personality_summary": "3 specific personality traits with HOW they show up in content",
   "audience_summary": "Specific audience description with what they care about, age range estimate, what keeps them watching",
-  "visual_style_summary": "Their visual aesthetic — lighting preference, shooting style, pace of cuts, what their content looks like",
-  "pacing_style": "Specific pacing description — how fast do cuts happen, do they build slowly or jump into action, average clip length that feels right",
-  "voice_preferences": "How they write narration — sentence length, vocabulary level, use of slang, phrases they repeat",
-  "hook_style": "SPECIFIC first-3-seconds hook pattern they use or should use (e.g. 'open with a shocking statement then immediately cut to evidence', 'start mid-action with no intro')",
-  "pattern_interrupt_style": "Techniques to break viewer autopilot — what visual or audio changes work for their content",
-  "emotional_arc_preference": "The emotional journey their best content takes — what feeling does it start with, where does it peak, how does it end",
-  "music_genre_preference": "Which music style fits their content best and why (be specific: 'lo-fi hip hop at 85-90 BPM because their content is reflective and personal')",
+  "visual_style_summary": "Their visual aesthetic — lighting preference, shooting style, pace of cuts",
+  "pacing_style": "Specific pacing description — how fast cuts happen, do they build slowly or jump into action",
+  "voice_preferences": "How they write narration — sentence length, vocabulary level, use of slang",
+  "hook_style": "SPECIFIC first-3-seconds hook pattern they use or should use",
+  "pattern_interrupt_style": "Techniques to break viewer autopilot that work for their content",
+  "emotional_arc_preference": "The emotional journey their best content takes",
+  "music_genre_preference": "Which music style fits their content best and why — be specific with BPM if possible",
   "creator_archetype": "One of: educator|entertainer|inspirational|storyteller|documenter|provocateur",
-  "confidence_score": <integer 0-100 based on how much data you have — increase with more uploads, projects, and feedback>,
-  "learning_progress_percent": <integer 0-100>,
+  "confidence_score": 0,
+  "learning_progress_percent": 0,
   "key_insight": "The single most important thing you learned about how to make their videos better"
 }
 
-Be SPECIFIC. Do not use generic phrases like "engaging content" or "authentic voice." Give real, actionable descriptions based on evidence.`;
+Be SPECIFIC. Do not use generic phrases like "engaging content" or "authentic voice." Give real, actionable descriptions based on evidence. Set confidence_score and learning_progress_percent as integers 0-100 based on how much data you have.`;
 
   let learned: Record<string, unknown> = {};
   try {
-    const res = await ai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-5",
       max_tokens: 1200,
-      temperature: 0.4,
       messages: [{ role: "user", content: learnPrompt }],
-      response_format: { type: "json_object" },
     });
-    learned = JSON.parse(res.choices[0]?.message?.content || "{}") as Record<string, unknown>;
+
+    const text =
+      response.content[0]?.type === "text" ? response.content[0].text : "";
+    // Strip any markdown code fences Claude might add
+    const clean = text.replace(/```json|```/g, "").trim();
+    learned = JSON.parse(clean) as Record<string, unknown>;
   } catch (err) {
-    console.error("Brand learning GPT error:", err);
+    console.error("Claude brand learning error:", err);
   }
 
   if (!learned.tone_summary) {
     return NextResponse.json({ updated: false, reason: "Not enough data to learn yet" });
   }
 
-  // Compute confidence based on data richness
   const rawConfidence = Math.min(
     100,
     Math.round(
       (typeof learned.confidence_score === "number" ? learned.confidence_score : 30) +
-      Math.min(20, uploads.length * 2) +
-      Math.min(15, projects.length * 3) +
-      Math.min(15, dataRichness)
+        Math.min(20, uploads.length * 2) +
+        Math.min(15, projects.length * 3) +
+        Math.min(15, dataRichness)
     )
   );
   const confidence = Math.min(100, rawConfidence);
   const progress = Math.min(100, Math.round(confidence * 0.9 + (projects.length >= 5 ? 10 : 0)));
 
-  // Save insight record
   if (learned.key_insight) {
     await query(
       `INSERT INTO learning_insights (user_id, insight_type, insight_data, confidence, source)
@@ -215,7 +212,6 @@ Be SPECIFIC. Do not use generic phrases like "engaging content" or "authentic vo
     );
   }
 
-  // Upsert brand profile with all learned data
   await query(
     `INSERT INTO brand_profiles (
        user_id, tone_summary, personality_summary, audience_summary,
@@ -248,7 +244,7 @@ Be SPECIFIC. Do not use generic phrases like "engaging content" or "authentic vo
       userId,
       learned.tone_summary, learned.personality_summary, learned.audience_summary,
       learned.visual_style_summary, learned.pacing_style, learned.voice_preferences,
-      learned.music_genre_preference, // music_preferences
+      learned.music_genre_preference,
       learned.hook_style, learned.pattern_interrupt_style, learned.emotional_arc_preference,
       learned.music_genre_preference,
       learned.creator_archetype || "creator",
