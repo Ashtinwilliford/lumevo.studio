@@ -125,7 +125,7 @@ async function analyzeWithVision(uploadId: string, filePath: string, thumbPath: 
       }],
     });
 
-    const raw = completion.choices[0]?.message?.content || "{}";
+    const raw = (completion.content[0]?.type === "text" ? completion.content[0].text : "{}");
     let analysis: Record<string, string> = {};
     try { analysis = JSON.parse(raw.replace(/```json\n?|\n?```/g, "")); } catch { analysis = {}; }
 
@@ -248,6 +248,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
 
 
 
