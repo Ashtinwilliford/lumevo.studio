@@ -17,8 +17,8 @@ export async function POST() {
   const uploads = await query(`SELECT COUNT(*) as cnt FROM uploads WHERE user_id = $1`, [session.id]);
   const generations = await query(`SELECT COUNT(*) as cnt FROM generated_contents WHERE user_id = $1`, [session.id]);
 
-  const uploadCount = parseInt(uploads.rows[0].cnt);
-  const generationCount = parseInt(generations.rows[0].cnt);
+  const uploadCount = parseInt(uploads.rows[0].cnt as string);
+  const generationCount = parseInt(generations.rows[0].cnt as string);
 
   const progress = Math.min(100, uploadCount * 5 + generationCount * 3);
   const confidence = Math.min(100, uploadCount * 4 + generationCount * 2);
