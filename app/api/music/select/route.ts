@@ -3,10 +3,7 @@ import { getSession } from "@/lib/session";
 import { query } from "@/lib/db";
 import OpenAI from "openai";
 
-const ai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY!,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+const ai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 interface MusicTrack {
   id: string;
@@ -118,3 +115,4 @@ export async function GET() {
   const tracks = await query("SELECT * FROM music_tracks ORDER BY genre, name");
   return NextResponse.json({ tracks: tracks.rows });
 }
+
