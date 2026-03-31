@@ -368,6 +368,46 @@ function VideoSection({ user, uploads, onRefresh }: { user: User; uploads: Uploa
     }
   }
 
+    if (step === "name") {
+    return (
+      <div style={{ maxWidth: 560 }}>
+        <div style={{ marginBottom: 48 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 12 }}>New Project</div>
+          <h2 style={{ fontFamily: "Syne, sans-serif", fontSize: 36, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 8 }}>What are we making?</h2>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Give your project a name to get started.</p>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 16, padding: "32px", border: "1px solid rgba(0,0,0,0.07)" }}>
+          <input
+            autoFocus
+            value={projectName}
+            onChange={e => setProjectName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter" && projectName.trim()) {
+                setMessages([{ id: "0", role: "ai", content: `Love it. Tell me everything about "${projectName}" - what happened, what you want people to feel, and who this is for.` }]);
+                setProjectState({ title: projectName.trim() });
+                setStep("chat");
+              }
+            }}
+            placeholder="e.g. My Bali Trip, Product Launch, Morning Routine..."
+            style={{ width: "100%", padding: "16px 20px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.12)", fontFamily: "inherit", fontSize: 16, outline: "none", boxSizing: "border-box", marginBottom: 16 }}
+          />
+          <button
+            onClick={() => {
+              if (!projectName.trim()) return;
+              setMessages([{ id: "0", role: "ai", content: `Love it. Tell me everything about "${projectName}" - what happened, what you want people to feel, and who this is for.` }]);
+              setProjectState({ title: projectName.trim() });
+              setStep("chat");
+            }}
+            disabled={!projectName.trim()}
+            style={{ width: "100%", background: projectName.trim() ? "#FF2D2D" : "#f5f5f0", color: projectName.trim() ? "#fff" : "#b5b09a", border: "none", borderRadius: 12, padding: "14px 20px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: projectName.trim() ? "pointer" : "default" }}
+          >
+            Start Creating
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (trialBlocked) {
     return (
       <div>
