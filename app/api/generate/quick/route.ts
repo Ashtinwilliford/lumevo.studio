@@ -42,10 +42,8 @@ Rules:
 
   const completion = await ai.messages.create({
     model: "claude-sonnet-4-5",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: prompt },
-    ],
+    system: systemPrompt,
+    messages: [{ role: "user", content: prompt }],,
     max_tokens: 600,
     temperature: 0.85,
   });
@@ -53,5 +51,6 @@ Rules:
   const generated = completion.content[0]?.type === "text" ? completion.content[0].text : ""?.trim() || "";
   return NextResponse.json({ generated });
 }
+
 
 
