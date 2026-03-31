@@ -165,14 +165,14 @@ Rules:
 Respond with ONLY the caption text and hashtags. No labels, no quotes around it.`;
 
   const [completion, captionCompletion] = await Promise.all([
-    client.chat.completions.create({
-      model: "gpt-4o-mini",
+    anthropic.messages.create({
+      model: "claude-sonnet-4-5",
       messages: [{ role: "user", content: scriptPrompt }],
       max_tokens: 600,
       temperature: 0.82,
     }),
-    client.chat.completions.create({
-      model: "gpt-4o-mini",
+    anthropic.messages.create({
+      model: "claude-sonnet-4-5",
       messages: [{ role: "user", content: captionPrompt }],
       max_tokens: 180,
       temperature: 0.87,
@@ -232,3 +232,4 @@ Respond with ONLY the caption text and hashtags. No labels, no quotes around it.
 
   return NextResponse.json({ projectId, script, caption, audioBase64, hasVoice: !!voiceId });
 }
+
