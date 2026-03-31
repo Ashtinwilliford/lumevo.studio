@@ -13,17 +13,17 @@ interface Voiceover { id: string; script_content: string; provider_voice_id?: st
 interface BrandProfile { user_id: string; tone_summary: string; personality_summary: string; audience_summary: string; pacing_style: string; cta_style: string; visual_style_summary?: string; voice_preferences?: string; hook_style?: string; pattern_interrupt_style?: string; emotional_arc_preference?: string; music_genre_preference?: string; creator_archetype?: string; confidence_score: number; learning_progress_percent: number; upload_count: number; generation_count: number; last_learned_at?: string; }
 
 const NAV: { id: Section; icon: string; label: string; group?: string; elite?: boolean }[] = [
-  { id: "overview", icon: "âŒ‚", label: "Overview" },
-  { id: "uploads", icon: "â†‘", label: "Uploads", group: "Create" },
-  { id: "create", icon: "âœ¦", label: "Create Content", group: "Create" },
-  { id: "video", icon: "â–¶", label: "New Project", group: "Create" },
-  { id: "brand", icon: "â—‰", label: "Brand Profile", group: "Learn" },
-  { id: "projects", icon: "â—»", label: "Projects", group: "Learn" },
-  { id: "plan", icon: "â—†", label: "Content Plan", group: "Learn" },
-  { id: "aimanager", icon: "âœ§", label: "AI Manager", group: "Learn", elite: true },
-  { id: "analytics", icon: "â–²", label: "Analytics", group: "Learn" },
-  { id: "billing", icon: "â—ˆ", label: "Billing", group: "Account" },
-  { id: "settings", icon: "âš™", label: "Settings", group: "Account" },
+  { id: "overview", icon: "", label: "Overview" },
+  { id: "uploads", icon: "", label: "Uploads", group: "Create" },
+  { id: "create", icon: "", label: "Create Content", group: "Create" },
+  { id: "video", icon: "", label: "New Project", group: "Create" },
+  { id: "brand", icon: "", label: "Brand Profile", group: "Learn" },
+  { id: "projects", icon: "", label: "Projects", group: "Learn" },
+  { id: "plan", icon: "", label: "Content Plan", group: "Learn" },
+  { id: "aimanager", icon: "", label: "AI Manager", group: "Learn", elite: true },
+  { id: "analytics", icon: "", label: "Analytics", group: "Learn" },
+  { id: "billing", icon: "", label: "Billing", group: "Account" },
+  { id: "settings", icon: "", label: "Settings", group: "Account" },
 ];
 
 const TIER_LABELS: Record<string, string> = { trial: "Free Trial", creator: "Creator", pro: "Pro", elite: "Elite" };
