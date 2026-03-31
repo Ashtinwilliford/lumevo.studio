@@ -5,7 +5,7 @@ import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { readFile } from "fs/promises";
 
 const execAsync = promisify(exec);
@@ -251,3 +251,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
