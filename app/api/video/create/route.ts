@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { query } from "@/lib/db";
-import OpenAI from "openai";
-import { ReplitConnectors } from "@replit/connectors-sdk";
+import Anthropic from "@anthropic-ai/sdk";
+
 
 const client = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY!,
