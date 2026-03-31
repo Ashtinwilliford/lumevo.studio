@@ -1,173 +1,98 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getProject, deleteProject } from "../../../lib/projectStore";
-import type { Project } from "../../../lib/types";
-import { VIBE_LABELS, TONE_LABELS, AUDIENCE_GOAL_LABELS } from "../../../lib/types";
-
-const STATUS_STYLE: Record<Project["status"], { bg: string; text: string; label: string }> = {
-  draft:      { bg: "rgba(0,0,0,0.06)", text: "#78716c", label: "Draft" },
-  generating: { bg: "rgba(255,45,45,0.1)",  text: "#FF2D2D", label: "Generating…" },
-  ready:      { bg: "rgba(22,163,74,0.1)", text: "#16a34a", label: "Ready" },
-};
-
-interface NavCard {
-  title: string;
-  description: string;
-  icon: string;
-  href: string;
-  ready: boolean;
-}
 
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject] = useState<Record<string,unknown>|null>(null);
+  const [uploads, setUploads] = useState<Record<string,unknown>[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string|null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const p = getProject(id);
-    if (!p) { router.push("/dashboard"); return; }
-    setProject(p);
+    async function load() {
+      const res = await fetch(`/api/projects/${id}`);
+      if (!res.ok) { router.push("/dashboard"); return; }
+      const data = await res.json();
+      setProject(data.project);
+      const gc = data.project?.generated_content;
+      if (gc?.videoUrl) setVideoUrl(gc.videoUrl);
+      const uRes = await fetch(`/api/uploads?projectId=${id}`);
+      if (uRes.ok) { const uData = await uRes.json(); setUploads(uData.uploads || []); }
+      setLoading(false);
+    }
+    load();
   }, [id, router]);
 
-  function handleDelete() {
-    if (!confirm("Delete this project? This can't be undone.")) return;
-    deleteProject(id);
-    router.push("/dashboard");
+  async function generateVideo() {
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/video/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: id }),
+      });
+      const data = await res.json();
+      if (data.error) { alert(data.error); setGenerating(false); return; }
+      alert("Video is being generated! Check back in 60 seconds.");
+    } catch (err) {
+      alert("Generation failed. Try again.");
+    }
+    setGenerating(false);
   }
 
-  if (!project) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F8F8A6" }}>
-        <div style={{ width: 8, height: 8, background: "#FF2D2D", borderRadius: "50%" }} />
-      </div>
-    );
-  }
-
-  const st = STATUS_STYLE[project.status];
-  const fileCount = project.uploadedFiles.length;
-
-  const navCards: NavCard[] = [
-    {
-      title: "Content Brief",
-      description: "Set vibe, tone, audience goal — then generate captions, titles & structure.",
-      icon: "✦",
-      href: `/project/${id}/script`,
-      ready: true,
-    },
-    {
-      title: "Upload Media",
-      description: "Add images and videos for your project.",
-      icon: "📁",
-      href: `/project/${id}/upload`,
-      ready: true,
-    },
-    {
-      title: "Voice Clone",
-      description: "Clone your voice and hear generated captions read back in your own voice.",
-      icon: "🎙",
-      href: `/project/${id}/voice`,
-      ready: true,
-    },
-    {
-      title: "Brand Style",
-      description: "Set your color palette, fonts, and visual identity.",
-      icon: "🎨",
-      href: `/project/${id}/brand`,
-      ready: false,
-    },
-    {
-      title: "Export & Publish",
-      description: "Render final video and publish to platforms.",
-      icon: "🚀",
-      href: `/project/${id}/export`,
-      ready: false,
-    },
-  ];
+  if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8F8A6"}}><div style={{width:8,height:8,background:"#FF2D2D",borderRadius:"50%"}} /></div>;
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap');
-        :root { --bg:#F8F8A6; --surface:#ffffff; --surface2:#F2F29A; --border:rgba(0,0,0,0.08); --accent:#FF2D2D; --accent2:#FF2D2D; --text:#1a1a1a; --muted:#78716c; --radius:14px; }
-        * { box-sizing:border-box; margin:0; padding:0; }
-        body { background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,sans-serif; min-height:100vh; }
+    <div style={{maxWidth:900,margin:"0 auto",padding:"48px 24px 100px",background:"#F8F8A6",minHeight:"100vh"}}>
+      <button onClick={()=>router.push("/dashboard")} style={{background:"none",border:"none",cursor:"pointer",marginBottom:32,fontSize:14,color:"#78716c"}}>Back to Dashboard</button>
+      <h1 style={{fontSize:32,fontWeight:800,marginBottom:8}}>{String(project?.title || "Project")}</h1>
+      <p style={{color:"#78716c",marginBottom:40}}>{String(project?.vibe || "")} {project?.target_platform ? `· ${String(project.target_platform)}` : ""} {project?.target_duration ? `· ${String(project.target_duration)}s` : ""}</p>
 
-        .page-wrap { max-width:900px; margin:0 auto; padding:48px 24px 100px; }
-
-        .back-btn { display:flex; align-items:center; gap:6px; color:var(--muted); background:none; border:none; cursor:pointer; font-size:14px; font-family:inherit; transition:color 0.2s; margin-bottom:40px; }
-        .back-btn:hover { color:var(--text); }
-
-        .project-header { margin-bottom:48px; }
-        .project-status { display:inline-block; font-size:11px; font-weight:600; padding:4px 12px; border-radius:999px; margin-bottom:12px; }
-        .project-title { font-family:'Syne',sans-serif; font-size:34px; font-weight:800; letter-spacing:-0.5px; margin-bottom:8px; }
-        .project-desc { font-size:15px; color:var(--muted); line-height:1.6; margin-bottom:16px; max-width:600px; }
-        .project-meta { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
-        .meta-chip { font-size:12px; color:var(--muted); background:var(--surface); border:1px solid var(--border); padding:4px 12px; border-radius:999px; }
-
-        .action-row { display:flex; gap:10px; flex-wrap:wrap; }
-        .btn-delete { display:flex; align-items:center; gap:6px; background:transparent; color:var(--muted); font-family:inherit; font-size:13px; font-weight:500; border:1px solid var(--border); border-radius:999px; padding:8px 18px; cursor:pointer; transition:all 0.15s; }
-        .btn-delete:hover { border-color:rgba(255,45,45,0.4); color:var(--accent); }
-
-        .divider { border:none; border-top:1px solid var(--border); margin:0 0 40px; }
-
-        .section-title { font-family:'Syne',sans-serif; font-size:20px; font-weight:700; margin-bottom:20px; }
-
-        .nav-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
-
-        .nav-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:22px 24px; cursor:pointer; transition:border-color 0.2s,transform 0.2s,box-shadow 0.2s; text-decoration:none; display:block; position:relative; }
-        .nav-card:hover { border-color:rgba(255,45,45,0.3); transform:translateY(-2px); box-shadow:0 4px 20px rgba(0,0,0,0.06); }
-        .nav-card-disabled { opacity:0.45; cursor:default; pointer-events:none; }
-
-        .nav-icon { font-size:24px; margin-bottom:12px; display:block; }
-        .nav-title { font-size:15px; font-weight:600; color:var(--text); margin-bottom:6px; }
-        .nav-desc { font-size:13px; color:var(--muted); line-height:1.5; }
-
-        .coming-badge { position:absolute; top:14px; right:14px; font-size:10px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:var(--muted); background:var(--surface2); padding:3px 10px; border-radius:999px; }
-      `}</style>
-
-      <div className="page-wrap">
-        <button className="back-btn" onClick={() => router.push("/dashboard")}>← Dashboard</button>
-
-        <div className="project-header">
-          <span className="project-status" style={{ background: st.bg, color: st.text }}>{st.label}</span>
-          <h1 className="project-title">{project.title}</h1>
-          {project.description && <p className="project-desc">{project.description}</p>}
-
-          <div className="project-meta">
-            {project.vibe && <span className="meta-chip">{VIBE_LABELS[project.vibe as keyof typeof VIBE_LABELS]}</span>}
-            {project.tone && <span className="meta-chip">{TONE_LABELS[project.tone as keyof typeof TONE_LABELS]}</span>}
-            {project.audienceGoal && <span className="meta-chip">{AUDIENCE_GOAL_LABELS[project.audienceGoal as keyof typeof AUDIENCE_GOAL_LABELS]}</span>}
-            {fileCount > 0 && <span className="meta-chip">📁 {fileCount} file{fileCount > 1 ? "s" : ""}</span>}
-          </div>
-
-          <div className="action-row">
-            <button className="btn-delete" onClick={handleDelete}>🗑 Delete Project</button>
-          </div>
+      {videoUrl && (
+        <div style={{marginBottom:40}}>
+          <h2 style={{fontSize:20,fontWeight:700,marginBottom:16}}>Your Video</h2>
+          <video src={videoUrl} controls style={{width:"100%",maxWidth:400,borderRadius:14}} />
+          <div style={{marginTop:12}}><a href={videoUrl} download style={{background:"#FF2D2D",color:"#fff",padding:"10px 20px",borderRadius:999,textDecoration:"none",fontWeight:600}}>Download</a></div>
         </div>
+      )}
 
-        <hr className="divider" />
-
-        <h2 className="section-title">Project Steps</h2>
-        <div className="nav-grid">
-          {navCards.map((card) => (
-            <a
-              key={card.title}
-              className={`nav-card ${!card.ready ? "nav-card-disabled" : ""}`}
-              href={card.ready ? card.href : undefined}
-              onClick={(e) => {
-                if (card.ready) { e.preventDefault(); router.push(card.href); }
-              }}
-            >
-              {!card.ready && <span className="coming-badge">Coming Soon</span>}
-              <span className="nav-icon">{card.icon}</span>
-              <p className="nav-title">{card.title}</p>
-              <p className="nav-desc">{card.description}</p>
-            </a>
-          ))}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:40}}>
+        <div onClick={()=>router.push(`/project/${id}/upload`)} style={{background:"#fff",borderRadius:14,padding:24,cursor:"pointer",border:"1px solid rgba(0,0,0,0.08)"}}>
+          <div style={{fontSize:24,marginBottom:8}}>📁</div>
+          <div style={{fontWeight:700,marginBottom:4}}>Upload Media</div>
+          <div style={{fontSize:13,color:"#78716c"}}>{uploads.length > 0 ? `${uploads.length} file${uploads.length!==1?"s":""} uploaded` : "Add photos and videos"}</div>
+        </div>
+        <div onClick={()=>router.push(`/project/${id}/voice`)} style={{background:"#fff",borderRadius:14,padding:24,cursor:"pointer",border:"1px solid rgba(0,0,0,0.08)"}}>
+          <div style={{fontSize:24,marginBottom:8}}>🎙</div>
+          <div style={{fontWeight:700,marginBottom:4}}>Voice Clone</div>
+          <div style={{fontSize:13,color:"#78716c"}}>Set up your voice for narration</div>
         </div>
       </div>
-    </>
+
+      {uploads.length > 0 && (
+        <div style={{marginBottom:40}}>
+          <h2 style={{fontSize:20,fontWeight:700,marginBottom:16}}>Your Uploads ({uploads.length})</h2>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:12}}>
+            {uploads.map((u,i)=>(
+              <div key={i} style={{background:"#fff",borderRadius:12,overflow:"hidden",border:"1px solid #eee"}}>
+                {String(u.file_type)==="image"?<img src={String(u.file_path)} style={{width:"100%",height:100,objectFit:"cover"}} alt=""/>:<div style={{height:100,background:"#f5f5f5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#78716c"}}>VIDEO</div>}
+                <div style={{padding:"6px 8px",fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{String(u.file_name)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button
+        onClick={generateVideo}
+        disabled={generating || uploads.length === 0}
+        style={{background:uploads.length===0?"#ccc":"#FF2D2D",color:"#fff",border:"none",borderRadius:999,padding:"16px 40px",fontWeight:700,fontSize:16,cursor:uploads.length===0?"not-allowed":"pointer",width:"100%"}}
+      >
+        {generating ? "Generating your video..." : uploads.length===0 ? "Upload media first" : "Generate My Video with AI"}
+      </button>
+    </div>
   );
 }
