@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { query } from "@/lib/db";
 import Anthropic from "@anthropic-ai/sdk";
@@ -31,14 +31,14 @@ export async function POST(req: NextRequest) {
   let claudeMessages: { role: "user" | "assistant"; content: string }[] = [];
   if (body.messages && Array.isArray(body.messages)) {
     claudeMessages = body.messages.map((m: { role: string; content: string }) => ({
-      role: m.role as "user" | "assistant",
+      role: (m.role === "ai" ? "assistant" : m.role) as "user" | "assistant",
       content: m.content,
     }));
   } else if (body.message) {
     const history = body.history || [];
     claudeMessages = [
       ...history.slice(-8).map((m: { role: string; content: string }) => ({
-        role: m.role as "user" | "assistant",
+        role: (m.role === "ai" ? "assistant" : m.role) as "user" | "assistant",
         content: m.content,
       })),
       { role: "user" as const, content: body.message },
