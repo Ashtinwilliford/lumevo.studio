@@ -972,12 +972,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
       onRefresh();
     } catch (err) {
       setUploadError("Upload failed. Please try again.");
-    } finally {
-      setUploading(false);
-    } finally {
-      setUploadingFiles(false);
-      setUploadProgress([]);
-      if (fileRef.current) fileRef.current.value = "";
+    }rent.value = "";
     }
   }
 
