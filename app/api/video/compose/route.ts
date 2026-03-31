@@ -401,7 +401,7 @@ Return ONLY this JSON:
 
     let timeline: TimelineJSON;
     try {
-      timeline = JSON.parse(directorRes.content[0]?.type === "text" ? directorRes.content[0].text : "" || "{}") as TimelineJSON;
+      timeline = JSON.parse(directorRes.content[0]?.type === "text" ? directorRes.content[0].text : "{}") as TimelineJSON;
       if (!timeline.clips?.length) throw new Error("No clips");
     } catch {
       const perClip = targetDuration / uploads.length;
@@ -688,6 +688,7 @@ Return ONLY this JSON:
     }
   }
 }
+
 
 
 
