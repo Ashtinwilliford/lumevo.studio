@@ -113,8 +113,8 @@ async function analyzeWithVision(uploadId: string, filePath: string, thumbPath: 
     const mimeMap: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
     const mime = mimeMap[ext || "jpg"] || "image/jpeg";
 
-    const completion = await ai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await ai.messages.create({
+      model: "claude-sonnet-4-5",
       max_tokens: 300,
       messages: [{
         role: "user",
@@ -248,5 +248,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
 
 
