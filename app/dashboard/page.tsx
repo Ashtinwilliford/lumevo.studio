@@ -244,6 +244,8 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
 
 function VideoSection({ user, uploads, onRefresh }: { user: User; uploads: Upload[]; onRefresh: () => void }) {
   const router = useRouter();
+  const [step, setStep] = useState<"name" | "chat">("name");
+  const [projectName, setProjectName] = useState("");
   const [messages, setMessages] = useState<{ id: string; role: "user" | "ai"; content: string }[]>([
     { id: "0", role: "ai", content: "What are we creating today? Tell me the topic - a trip, a product, a moment, a routine. The more specific the better." }
   ]);
