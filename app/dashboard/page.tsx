@@ -229,7 +229,7 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
     const formData = new FormData();
     files.forEach(f => formData.append("files", f));
     try {
-      const res = await fetch("/api/uploads", { method: "POST", body: formData });
+      const res = await fetch("/api/uploads/sign").then(r=>r.json()).then(async sig=>{for(const file of files){const form=new FormData();form.append("file",file);form.append("signature",sig.signature);form.append("timestamp",String(sig.timestamp));form.append("folder",sig.folder);form.append("api_key",sig.apiKey);const r=await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`,{method:"POST",body:form});const d=await r.json();if(!r.ok)throw new Error(d.error?.message);await fetch("/api/uploads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fileName:file.name,fileType:file.type.startsWith("video/")?"video":"image",mimeType:file.type,fileSize:file.size,filePath:d.secure_url})});}});
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Upload failed" })) as { error?: string };
         setUploadError(err.error || `Upload failed (${res.status})`);
@@ -953,7 +953,7 @@ function CreateVideo({ uploads, user, projects, resumeDraftId, onResumeConsumed 
     files.forEach(f => formData.append("files", f));
 
     try {
-      const res = await fetch("/api/uploads", { method: "POST", body: formData });
+      const res = await fetch("/api/uploads/sign").then(r=>r.json()).then(async sig=>{for(const file of files){const form=new FormData();form.append("file",file);form.append("signature",sig.signature);form.append("timestamp",String(sig.timestamp));form.append("folder",sig.folder);form.append("api_key",sig.apiKey);const r=await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`,{method:"POST",body:form});const d=await r.json();if(!r.ok)throw new Error(d.error?.message);await fetch("/api/uploads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fileName:file.name,fileType:file.type.startsWith("video/")?"video":"image",mimeType:file.type,fileSize:file.size,filePath:d.secure_url})});}});
       const data = await res.json() as { uploads?: Upload[] };
       if (data.uploads?.length) {
         setLocalUploads(prev => [...data.uploads!, ...prev]);
