@@ -245,7 +245,7 @@ async function analyzeWithVision(
       ],
     });
 
-    const raw = response.content[0]?.type === "text" ? .content[0].text : ""?.trim() || "{}";
+    const raw = response.content[0]?.type === "text" ? completion.content[0].text : ""?.trim() || "{}";
     let analysis: Record<string, string> = {};
     try {
       const cleaned = raw.replace(/```json\n?/g, "").replace(/```/g, "").trim();
@@ -266,4 +266,5 @@ async function analyzeWithVision(
     );
   }
 }
+
 

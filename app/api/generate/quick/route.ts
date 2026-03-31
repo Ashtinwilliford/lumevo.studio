@@ -50,7 +50,8 @@ Rules:
     temperature: 0.85,
   });
 
-  const generated = completion.content[0]?.type === "text" ? .content[0].text : ""?.trim() || "";
+  const generated = completion.content[0]?.type === "text" ? completion.content[0].text : ""?.trim() || "";
   return NextResponse.json({ generated });
 }
+
 
