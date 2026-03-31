@@ -91,7 +91,6 @@ Return JSON only:
       max_tokens: 200,
       temperature: 0.5,
       messages: [{ role: "user", content: selectionPrompt }],
-      response_format: { type: "json_object" },
     });
     const parsed = JSON.parse((res.content[0]?.type === "text" ? res.content[0].text : "{}")) as typeof selection;
     if (parsed.trackIndex) selection = parsed;
@@ -115,5 +114,6 @@ export async function GET() {
   const tracks = await query("SELECT * FROM music_tracks ORDER BY genre, name");
   return NextResponse.json({ tracks: tracks.rows });
 }
+
 
 
