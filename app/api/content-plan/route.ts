@@ -28,7 +28,7 @@ export async function GET() {
 
   const recentWork =
     recentProjects.rows.length > 0
-      ? `Recent content: ${recentProjects.rows.map((p: { title: string; project_type: string }) => `${p.title} (${p.project_type})`).join(", ")}.`
+      ? `Recent content: ${recentProjects.rows.map((p: Record<string, unknown>) => `${p.title} (${p.project_type})`).join(", ")}.`
       : "No projects created yet.";
 
   const prompt = `You are a social media content strategist for a creator using Lumevo Studio.
