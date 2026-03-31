@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY!,
 });
 
 interface GenerateRequest {
@@ -31,28 +30,39 @@ Given this content brief:
 - Tone: ${tone}
 - Audience goal: ${audienceGoal.replace(/_/g, " ")}
 
-Generate the following in JSON format:
-1. "captions" - array of 4 engaging social media captions (include relevant emojis and 2-3 hashtags each)
-2. "titleIdeas" - array of 4 punchy video title ideas suited for the vibe and tone
-3. "contentStructure" - array of 4 objects, each with:
-   - "label": the section name (Hook, Context, Value Drop, CTA)
-   - "suggestion": a specific, actionable suggestion for this creator's content
-   - "duration": suggested screen time (e.g. "0-3s")
+Generate the following and return ONLY valid JSON with these three keys (no markdown, no extra text):
 
-Return only valid JSON with those three keys, no markdown or extra text.`;
+{
+  "captions": ["caption1", "caption2", "caption3", "caption4"],
+  "titleIdeas": ["title1", "title2", "title3", "title4"],
+  "contentStructure": [
+    { "label": "Hook", "suggestion": "specific suggestion here", "duration": "0-3s" },
+    { "label": "Context", "suggestion": "specific suggestion here", "duration": "3-10s" },
+    { "label": "Value Drop", "suggestion": "specific suggestion here", "duration": "10-25s" },
+    { "label": "CTA", "suggestion": "specific suggestion here", "duration": "25-30s" }
+  ]
+}
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-5-mini",
-    messages: [{ role: "user", content: prompt }],
-    response_format: { type: "json_object" },
-    max_completion_tokens: 8192,
-  });
+Rules:
+- captions: 4 engaging social media captions with relevant emojis and 2-3 hashtags each
+- titleIdeas: 4 punchy video title ideas suited for the vibe and tone
+- contentStructure: specific, actionable suggestions for this creator's exact content — not generic advice`;
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) {
-    return NextResponse.json({ error: "No content generated" }, { status: 500 });
+  try {
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 1200,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const text =
+      response.content[0]?.type === "text" ? response.content[0].text : "";
+    const clean = text.replace(/```json|```/g, "").trim();
+    const result = JSON.parse(clean);
+
+    return NextResponse.json(result);
+  } catch (err) {
+    console.error("Claude captions/titles generation error:", err);
+    return NextResponse.json({ error: "Generation failed" }, { status: 500 });
   }
-
-  const result = JSON.parse(content);
-  return NextResponse.json(result);
 }
