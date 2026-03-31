@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     query("SELECT name, created_at FROM users WHERE id = $1", [userId]),
   ]);
 
-  const currentBrand = brandRows.rows[0] as BrandProfile | undefined;
+  const currentBrand = brandRows.rows[0] as unknown as BrandProfile | undefined;
   const user = userRows.rows[0] as { name: string; created_at: string } | undefined;
   const uploads = uploadsRows.rows as Record<string, unknown>[];
   const projects = projectsRows.rows as Record<string, unknown>[];
