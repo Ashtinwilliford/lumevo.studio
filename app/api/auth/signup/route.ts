@@ -35,13 +35,13 @@ export async function POST(req: NextRequest) {
     );
 
     await createSession({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      subscription_tier: user.subscription_tier,
+      id: user.id as string,
+      email: user.email as string,
+      name: user.name as string,
+      subscription_tier: user.subscription_tier as string,
     });
 
-    return NextResponse.json({ user: { id: user.id, name: user.name, email: user.email, subscription_tier: user.subscription_tier } });
+    return NextResponse.json({ user: { id: user.id as string, name: user.name as string, email: user.email as string, subscription_tier: user.subscription_tier } });
   } catch (err) {
     console.error("Signup error:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
