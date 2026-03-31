@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "This reset link has already been used. Please request a new one." }, { status: 400 });
     }
 
-    if (new Date(tokenRow.expires_at) < new Date()) {
+    if (new Date(tokenRow.expires_at as string) < new Date()) {
       return NextResponse.json({ error: "This reset link has expired. Please request a new one." }, { status: 400 });
     }
 
