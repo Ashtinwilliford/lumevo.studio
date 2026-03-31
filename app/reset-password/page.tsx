@@ -1,4 +1,6 @@
-"use client";
+"use client"
+
+import { Suspense } from "react";
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -132,7 +134,7 @@ export default function ResetPasswordPage() {
           </div>
         </nav>
         <main className="main">
-          <ResetPasswordContent />
+          <Suspense fallback={null}><ResetPasswordContent /></Suspense>
         </main>
       </div>
     </>
