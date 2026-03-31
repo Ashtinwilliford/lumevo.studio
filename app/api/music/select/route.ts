@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { query } from "@/lib/db";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
-const ai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 interface MusicTrack {
   id: string;
@@ -86,14 +86,14 @@ Return JSON only:
   let selection = { trackIndex: 1, musicVolumeUnderVoice: 0.12, musicVolumeNoVoice: 0.35, introFadeInSec: 1.5, outroFadeOutSec: 2.0, reason: "Default selection" };
 
   try {
-    const res = await ai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const res = await ai.messages.create({
+      model: "claude-sonnet-4-5",
       max_tokens: 200,
       temperature: 0.5,
       messages: [{ role: "user", content: selectionPrompt }],
       response_format: { type: "json_object" },
     });
-    const parsed = JSON.parse(res.choices[0]?.message?.content || "{}") as typeof selection;
+    const parsed = JSON.parse((res.content[0]?.type === "text" ? res.content[0].text : "{}")) as typeof selection;
     if (parsed.trackIndex) selection = parsed;
   } catch (err) {
     console.error("Music selection AI error:", err);
@@ -115,4 +115,5 @@ export async function GET() {
   const tracks = await query("SELECT * FROM music_tracks ORDER BY genre, name");
   return NextResponse.json({ tracks: tracks.rows });
 }
+
 
