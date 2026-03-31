@@ -179,8 +179,8 @@ Respond with ONLY the caption text and hashtags. No labels, no quotes around it.
     }),
   ]);
 
-  const script = completion.choices[0]?.message?.content?.trim() || "";
-  const caption = captionCompletion.choices[0]?.message?.content?.trim() || "";
+  const script = completion.content[0]?.type === "text" ? completion.content[0].text.trim() : "" || "";
+  const caption = captioncompletion.content[0]?.type === "text" ? completion.content[0].text.trim() : "" || "";
 
   const projectRows = await query(
     `INSERT INTO projects (user_id, title, project_type, target_platform, target_duration, prompt_text, status, generated_content)
@@ -232,4 +232,5 @@ Respond with ONLY the caption text and hashtags. No labels, no quotes around it.
 
   return NextResponse.json({ projectId, script, caption, audioBase64, hasVoice: !!voiceId });
 }
+
 
