@@ -120,7 +120,7 @@ async function analyzeWithVision(uploadId: string, filePath: string, thumbPath: 
         role: "user",
         content: [
           { type: "text", text: `Analyze this ${fileType === "video" ? "video frame" : "image"} for social content creation. Return JSON only: {"energy":"high|medium|low","mood":"[adjective]","setting":"[where]","subjects":"[what/who]","bestUse":"[hook|broll|transition|closeup]","colorPalette":"[dominant colors]","lighting":"[natural|studio|outdoor|indoor]","transcript":"[any visible text or spoken content]"}` },
-          { type: "image_url", image_url: { url: `data:${mime};base64,${base64}`, detail: "low" } },
+          { type: "image", source: { type: "base64", media_type: mime as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: base64 } },
         ],
       }],
     });
@@ -248,6 +248,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
 
 
 
