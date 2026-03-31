@@ -223,10 +223,7 @@ async function analyzeWithVision(
         {
           role: "user",
           content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:image/jpeg;base64,${imgBase64}`, detail: "low" },
-            },
+            { type: "image", source: { type: "base64", media_type: "image/jpeg" as const, data: imgBase64 } },
             {
               type: "text",
               text: `Analyze this media frame for social media video editing. File: "${fileName}". Respond with ONLY this JSON:
@@ -266,6 +263,7 @@ async function analyzeWithVision(
     );
   }
 }
+
 
 
 
