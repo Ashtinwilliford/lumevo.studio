@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
     query("SELECT music_genre_preference, creator_archetype, emotional_arc_preference, pacing_style FROM brand_profiles WHERE user_id = $1", [userId]),
   ]);
 
-  const tracks = tracksRows.rows as MusicTrack[];
-  const brand = brandRows.rows[0] as BrandProfile | undefined;
+  const tracks = tracksRows.rows as unknown as MusicTrack[];
+  const brand = brandRows.rows[0] as unknown as BrandProfile | undefined;
 
   if (!tracks.length) {
     return NextResponse.json({ track: null, reason: "No music library" });
