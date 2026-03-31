@@ -19,27 +19,45 @@ export async function POST(req: NextRequest) {
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { messages, userName } = body;
+
+  // Handle both old format (message/history) and new format (messages/projectState)
+  const userName = body.userName || session.id;
   const rawState = body.projectState || {};
   const projectState: ProjectState = {
-    ...rawState,
-    platforms: Array.isArray(rawState.platforms)
-      ? rawState.platforms
-      : typeof rawState.platforms === "string" && rawState.platforms
-      ? [rawState.platforms]
-      : rawState.platforms,
+    title: rawState.title || null,
+    platforms: Array.isArray(rawState.platforms) ? rawState.platforms : rawState.platforms ? [rawState.platforms] : null,
+    vibe: rawState.vibe || null,
+    duration: rawState.duration || null,
   };
+
+  // Build messages array from either format
+  let claudeMessages: { role: "user" | "assistant"; content: string }[] = [];
+  if (body.messages && Array.isArray(body.messages)) {
+    claudeMessages = body.messages.map((m: { role: string; content: string }) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
+  } else if (body.message) {
+    const history = body.history || [];
+    claudeMessages = [
+      ...history.slice(-8).map((m: { role: string; content: string }) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+      { role: "user" as const, content: body.message },
+    ];
+  }
+
+  if (claudeMessages.length === 0) {
+    claudeMessages = [{ role: "user", content: "Hello" }];
+  }
 
   const brandRows = await query(
     "SELECT tone_summary, personality_summary FROM brand_profiles WHERE user_id = $1",
     [session.id]
   );
   const brand = brandRows.rows[0];
-  const brandContext = brand?.tone_summary
-    ? `Brand voice: ${brand.tone_summary}.`
-    : brand?.personality_summary
-    ? `Style: ${brand.personality_summary}.`
-    : "";
+  const brandContext = brand?.tone_summary ? `Brand voice: ${brand.tone_summary}.` : "";
 
   const hasTitle = !!projectState.title;
   const hasPlatform = !!(projectState.platforms?.length);
@@ -57,10 +75,10 @@ export async function POST(req: NextRequest) {
     ? "Get the DURATION (15/30/60s). currentStep: duration"
     : "All done — tell them you are ready to build. currentStep: upload, needsUpload: true";
 
-  const systemPrompt = `You are Lumevo, a sharp creative director helping ${userName || "the creator"} plan a video. Be direct and warm. 1-2 sentences max per reply.
+  const systemPrompt = `You are Lumevo, a sharp creative director helping ${userName} plan a video. Be direct and warm. 1-2 sentences max per reply.
 ${brandContext}
 
-Collect in order: TOPIC (specific moment/story, not vague) -> PLATFORM -> VIBE (phrase not single word) -> DURATION.
+Collect in order: TOPIC -> PLATFORM -> VIBE (phrase not single word) -> DURATION.
 Status: title=${projectState.title ?? "needed"} | platforms=${projectState.platforms?.join(",") ?? "needed"} | vibe=${projectState.vibe ?? "needed"} | duration=${projectState.duration ?? "needed"}
 
 Next: ${nextStep}
@@ -68,18 +86,13 @@ Next: ${nextStep}
 Reply ONLY with JSON (no markdown):
 {"message":"...","extracted":{"title":null,"platforms":null,"vibe":null,"duration":null},"currentStep":"title|platform|vibe|duration|upload","needsUpload":false}`;
 
-  const claudeMessages = (messages || []).map((m: { role: string; content: string }) => ({
-    role: m.role as "user" | "assistant",
-    content: m.content,
-  }));
-
   let completion;
   try {
     completion = await client.messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 300,
       system: systemPrompt,
-      messages: claudeMessages.length > 0 ? claudeMessages : [{ role: "user", content: "Hello" }],
+      messages: claudeMessages,
     });
   } catch (err) {
     console.error("Claude chat error:", err);
@@ -93,9 +106,10 @@ Reply ONLY with JSON (no markdown):
 
   let parsed: { message: string; extracted: Partial<ProjectState>; currentStep: string; needsUpload: boolean };
   try {
-    parsed = JSON.parse(aiContent);
+    const clean = aiContent.replace(/```json|```/g, "").trim();
+    parsed = JSON.parse(clean);
   } catch {
-    parsed = { message: "Got a bit lost — what were we saying?", extracted: {}, currentStep: "title", needsUpload: false };
+    parsed = { message: aiContent || "Got a bit lost — what were we saying?", extracted: {}, currentStep: "title", needsUpload: false };
   }
 
   if (!parsed.message) parsed.message = "Got a bit lost — try again?";
@@ -104,5 +118,6 @@ Reply ONLY with JSON (no markdown):
     parsed.currentStep = "upload";
   }
 
-  return NextResponse.json(parsed);
+  // Also return in old format for backward compatibility
+  return NextResponse.json({ ...parsed, reply: parsed.message });
 }
