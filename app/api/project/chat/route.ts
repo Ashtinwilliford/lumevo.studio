@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+ï»¿import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { query } from "@/lib/db";
 import Anthropic from "@anthropic-ai/sdk";
@@ -19,9 +19,7 @@ export async function POST(req: NextRequest) {
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-
-  // Handle both old format (message/history) and new format (messages/projectState)
-  const userName = body.userName || session.id;
+  const userName = body.userName || "creator";
   const rawState = body.projectState || {};
   const projectState: ProjectState = {
     title: rawState.title || null,
@@ -30,7 +28,6 @@ export async function POST(req: NextRequest) {
     duration: rawState.duration || null,
   };
 
-  // Build messages array from either format
   let claudeMessages: { role: "user" | "assistant"; content: string }[] = [];
   if (body.messages && Array.isArray(body.messages)) {
     claudeMessages = body.messages.map((m: { role: string; content: string }) => ({
@@ -70,21 +67,17 @@ export async function POST(req: NextRequest) {
     : !hasPlatform
     ? "Get the PLATFORM (Instagram/TikTok/both). currentStep: platform"
     : !hasVibe
-    ? "Get the VIBE — must be a phrase, not one word. currentStep: vibe"
+    ? "Get the VIBE. currentStep: vibe"
     : !hasDuration
     ? "Get the DURATION (15/30/60s). currentStep: duration"
-    : "All done — tell them you are ready to build. currentStep: upload, needsUpload: true";
+    : "All done. currentStep: upload, needsUpload: true";
 
-  const systemPrompt = `You are Lumevo, a sharp creative director helping ${userName} plan a video. Be direct and warm. 1-2 sentences max per reply.
+  const systemPrompt = `You are Lumevo, a sharp creative director helping ${userName} plan a video. Be direct and warm. 1-2 sentences max.
 ${brandContext}
-
-Collect in order: TOPIC -> PLATFORM -> VIBE (phrase not single word) -> DURATION.
+Collect: TOPIC -> PLATFORM -> VIBE -> DURATION.
 Status: title=${projectState.title ?? "needed"} | platforms=${projectState.platforms?.join(",") ?? "needed"} | vibe=${projectState.vibe ?? "needed"} | duration=${projectState.duration ?? "needed"}
-
 Next: ${nextStep}
-
-Reply ONLY with JSON (no markdown):
-{"message":"...","extracted":{"title":null,"platforms":null,"vibe":null,"duration":null},"currentStep":"title|platform|vibe|duration|upload","needsUpload":false}`;
+Reply ONLY with JSON: {"message":"...","extracted":{"title":null,"platforms":null,"vibe":null,"duration":null},"currentStep":"title|platform|vibe|duration|upload","needsUpload":false}`;
 
   let completion;
   try {
@@ -97,7 +90,7 @@ Reply ONLY with JSON (no markdown):
   } catch (err) {
     console.error("Claude chat error:", err);
     return NextResponse.json(
-      { error: "ai_unavailable", message: "I am having trouble connecting right now. Give me a second and try again." },
+      { error: "ai_unavailable", message: "Having trouble connecting. Try again in a moment." },
       { status: 503 }
     );
   }
@@ -109,15 +102,14 @@ Reply ONLY with JSON (no markdown):
     const clean = aiContent.replace(/```json|```/g, "").trim();
     parsed = JSON.parse(clean);
   } catch {
-    parsed = { message: aiContent || "Got a bit lost — what were we saying?", extracted: {}, currentStep: "title", needsUpload: false };
+    parsed = { message: aiContent || "Got a bit lost. What were we saying?", extracted: {}, currentStep: "title", needsUpload: false };
   }
 
-  if (!parsed.message) parsed.message = "Got a bit lost — try again?";
+  if (!parsed.message) parsed.message = "Got a bit lost. Try again?";
   if (allCollected && !parsed.needsUpload) {
     parsed.needsUpload = true;
     parsed.currentStep = "upload";
   }
 
-  // Also return in old format for backward compatibility
   return NextResponse.json({ ...parsed, reply: parsed.message });
 }
