@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { query } from "@/lib/db";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
-const client = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY!,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -43,8 +40,8 @@ Rules:
 - Never use em-dashes (—), replace with commas or periods
 - Never say "I cannot" — always write the content`;
 
-  const completion = await client.chat.completions.create({
-    model: "gpt-4o-mini",
+  const completion = await ai.messages.create({
+    model: "claude-sonnet-4-5",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: prompt },
@@ -53,6 +50,7 @@ Rules:
     temperature: 0.85,
   });
 
-  const generated = completion.choices[0]?.message?.content?.trim() || "";
+  const generated = completion.content[0]?.type === "text" ? .content[0].text : ""?.trim() || "";
   return NextResponse.json({ generated });
 }
+

@@ -7,14 +7,11 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import busboy from "busboy";
 import { Readable } from "stream";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
 const execAsync = promisify(exec);
 
-const ai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY!,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 export const maxDuration = 60;
 
@@ -219,8 +216,8 @@ async function analyzeWithVision(
     const imgBase64 = imgBuffer.toString("base64");
     execAsync(`rm -f "${resizedPath}"`).catch(() => null);
 
-    const response = await ai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const response = await ai.messages.create({
+      model: "claude-sonnet-4-5",
       max_tokens: 300,
       messages: [
         {
@@ -248,7 +245,7 @@ async function analyzeWithVision(
       ],
     });
 
-    const raw = response.choices[0]?.message?.content?.trim() || "{}";
+    const raw = response.content[0]?.type === "text" ? .content[0].text : ""?.trim() || "{}";
     let analysis: Record<string, string> = {};
     try {
       const cleaned = raw.replace(/```json\n?/g, "").replace(/```/g, "").trim();
@@ -269,3 +266,4 @@ async function analyzeWithVision(
     );
   }
 }
+

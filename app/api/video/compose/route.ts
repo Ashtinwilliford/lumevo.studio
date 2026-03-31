@@ -6,16 +6,13 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { ReplitConnectors } from "@replit/connectors-sdk";
 
 export const maxDuration = 120;
 const execAsync = promisify(exec);
 
-const ai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY!,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 const VIDEO_W = 1080;
 const VIDEO_H = 1920;
@@ -386,8 +383,8 @@ Return ONLY this JSON:
   "pacingNote": "describe the rhythm"
 }`;
 
-    const directorRes = await ai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const directorRes = await ai.messages.create({
+      model: "claude-sonnet-4-5",
       max_tokens: 1500,
       temperature: 0.65,
       messages: [{ role: "user", content: directorPrompt }],
@@ -405,7 +402,7 @@ Return ONLY this JSON:
 
     let timeline: TimelineJSON;
     try {
-      timeline = JSON.parse(directorRes.choices[0]?.message?.content || "{}") as TimelineJSON;
+      timeline = JSON.parse(directorRes.content[0]?.type === "text" ? .content[0].text : "" || "{}") as TimelineJSON;
       if (!timeline.clips?.length) throw new Error("No clips");
     } catch {
       const perClip = targetDuration / uploads.length;
@@ -692,3 +689,4 @@ Return ONLY this JSON:
     }
   }
 }
+
