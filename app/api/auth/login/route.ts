@@ -27,10 +27,10 @@ const valid = await bcrypt.compare(password, user.password_hash as string);
     }
 
     await createSession({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      subscription_tier: user.subscription_tier,
+      id: user.id as string,
+      email: user.email as string,
+      name: user.name as string,
+      subscription_tier: user.subscription_tier as string,
     });
 
     return NextResponse.json({
