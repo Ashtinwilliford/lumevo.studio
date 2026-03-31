@@ -200,10 +200,9 @@ Respond with ONLY the caption text and hashtags. No labels, no quotes around it.
 
   if (voiceId && script && useVoiceClone !== false) {
     try {
-      const connectors = new ReplitConnectors();
-      const res = await connectors.proxy("elevenlabs", `/v1/text-to-speech/${voiceId}`, {
+      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "audio/mpeg" },
+        headers: { "Content-Type": "application/json", Accept: "audio/mpeg", "xi-api-key": process.env.ELEVENLABS_API_KEY! },
         body: JSON.stringify({
           text: script,
           model_id: "eleven_multilingual_v2",
@@ -232,6 +231,7 @@ Respond with ONLY the caption text and hashtags. No labels, no quotes around it.
 
   return NextResponse.json({ projectId, script, caption, audioBase64, hasVoice: !!voiceId });
 }
+
 
 
 
