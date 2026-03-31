@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { query } from "@/lib/db";
 import { v2 as cloudinary } from "cloudinary";
@@ -24,6 +24,22 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  try {
+    const { projectId, fileName, fileType, mimeType, fileSize, filePath } = await req.json();
+    const result = await query(
+      `INSERT INTO uploads (user_id, project_id, file_name, file_type, mime_type, file_path, file_size, analysis_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, file_name, file_type, mime_type, file_path, file_size, analysis_status, created_at`,
+      [session.id, projectId || null, fileName, fileType, mimeType, filePath, fileSize, "ready"]
+    );
+    return NextResponse.json({ upload: result.rows[0] });
+  } catch (err) {
+    console.error("Upload error:", err);
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+  }
+}
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
