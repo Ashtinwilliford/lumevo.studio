@@ -388,7 +388,6 @@ Return ONLY this JSON:
       max_tokens: 1500,
       temperature: 0.65,
       messages: [{ role: "user", content: directorPrompt }],
-      response_format: { type: "json_object" },
     });
 
     interface TimelineJSON {
@@ -689,6 +688,7 @@ Return ONLY this JSON:
     }
   }
 }
+
 
 
 
