@@ -288,10 +288,10 @@ export async function POST(req: NextRequest) {
       ),
     ]);
 
-    const uploads = uploadRows.rows as UploadRow[];
-    const brand = brandRows.rows[0] as BrandProfile | undefined;
-    const user = userRows.rows[0] as { name: string; elevenlabs_voice_id?: string };
-    const insights = insightRows.rows as { insight_data: Record<string, unknown> }[];
+    const uploads = uploadRows.rows as unknown as UploadRow[];
+    const brand = brandRows.rows[0] as unknown as BrandProfile | undefined;
+    const user = userRows.rows[0] as unknown as { name: string; elevenlabs_voice_id?: string };
+    const insights = insightRows.rows as unknown as { insight_data: Record<string, unknown> }[];
 
     // === 2. Build creative brief for AI director ===
     const clipDescriptions = uploads
