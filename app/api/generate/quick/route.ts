@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const brand = rows.rows[0];
 
   const brandContext = brand
-    ? `Brand voice: ${brand.voice_style || "conversational"}\nTone: ${brand.tone_keywords?.join(", ") || "authentic, engaging"}\nNiche: ${brand.niche || "lifestyle content"}\nAudience: ${brand.target_audience || "general audience"}`
+    ? `Brand voice: ${brand.voice_style || "conversational"}\nTone: ${(brand.tone_keywords as string[] | undefined)?.join(", ") || "authentic, engaging"}\nNiche: ${brand.niche || "lifestyle content"}\nAudience: ${brand.target_audience || "general audience"}`
     : "Create content that is authentic, engaging, and relatable.";
 
   const typeInstructions: Record<string, string> = {
