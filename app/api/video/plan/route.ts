@@ -284,9 +284,9 @@ Output ONLY this JSON (no markdown, no explanation):
       });
     }
 
-    // Save plan to project
+    // Save plan to project (cast to jsonb explicitly for postgres driver compatibility)
     await query(
-      `UPDATE projects SET claude_plan = $1, status = 'planned', updated_at = now() WHERE id = $2`,
+      `UPDATE projects SET claude_plan = $1::jsonb, status = 'planned', updated_at = now() WHERE id = $2`,
       [JSON.stringify(plan), projectId]
     );
 

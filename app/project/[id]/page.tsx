@@ -65,12 +65,12 @@ export default function ProjectPage() {
       const planData = await planRes.json();
       if (planData.error) { setGenError(planData.error); setGenStatus(null); setGenerating(false); return; }
 
-      // Step 2: Render
+      // Step 2: Render (pass plan in body as fallback if DB save didn't persist)
       setGenStatus("Crafting your video... this takes 3–5 minutes.");
       const renderRes = await fetch("/api/video/render-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: id }),
+        body: JSON.stringify({ projectId: id, plan: planData.plan }),
       });
       const renderData = await renderRes.json();
       if (renderData.error) { setGenError(renderData.error); setGenStatus(null); setGenerating(false); return; }
