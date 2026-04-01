@@ -17,6 +17,7 @@
     "bcryptjs": "^3.0.3",
     "busboy": "^1.6.0",
     "cloudinary": "^2.9.0",
+    "creatomate": "^1.2.1",
     "drizzle-zod": "^0.8.3",
     "jose": "^6.2.2",
     "next": "16.2.1",

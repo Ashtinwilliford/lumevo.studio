@@ -11,6 +11,7 @@ export default function ProjectPage() {
   const [videoUrl, setVideoUrl] = useState<string|null>(null);
   const [loading, setLoading] = useState(true);
   const [genError, setGenError] = useState<string|null>(null);
+  const [genStatus, setGenStatus] = useState<string|null>(null);
   const [genResult, setGenResult] = useState<{script?:string;caption?:string}|null>(null);
 
   useEffect(() => {
@@ -32,33 +33,48 @@ export default function ProjectPage() {
   async function generateVideo() {
     setGenerating(true);
     setGenError(null);
+    setGenStatus("Generating script with AI...");
+
     try {
-      const body = {
-        title: project?.title || "Untitled",
-        uploadIds: uploads.map(u => u.id),
-        platform: project?.target_platform || "tiktok",
-        duration: project?.target_duration || 30,
-        vibe: project?.vibe || null,
-        draftProjectId: id,
-      };
-      const res = await fetch("/api/video/create", {
+      // Step 1: Generate script
+      const scriptRes = await fetch("/api/video/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          title: project?.title || "Untitled",
+          uploadIds: uploads.map(u => u.id),
+          platform: project?.target_platform || "tiktok",
+          duration: project?.target_duration || 30,
+          vibe: project?.vibe || null,
+          draftProjectId: id,
+        }),
       });
-      const data = await res.json();
-      if (data.error) {
-        setGenError(data.error);
-        setGenerating(false);
-        return;
+      const scriptData = await scriptRes.json();
+      if (scriptData.error) { setGenError(scriptData.error); setGenerating(false); setGenStatus(null); return; }
+
+      if (scriptData.script) {
+        setGenResult({ script: scriptData.script, caption: scriptData.caption });
       }
-      if (data.script) {
-        setGenResult({ script: data.script, caption: data.caption });
+
+      // Step 2: Render video with Creatomate
+      setGenStatus("Rendering your video... this may take a minute");
+      const renderRes = await fetch("/api/video/compose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: id }),
+      });
+      const renderData = await renderRes.json();
+      if (renderData.error) { setGenError(renderData.error); setGenerating(false); setGenStatus(null); return; }
+
+      if (renderData.videoUrl) {
+        setVideoUrl(renderData.videoUrl);
+        setGenStatus(null);
       }
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Network error - check your connection");
     }
     setGenerating(false);
+    setGenStatus(null);
   }
 
   if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8F8A6"}}><div style={{width:8,height:8,background:"#FF2D2D",borderRadius:"50%"}} /></div>;
@@ -129,12 +145,16 @@ export default function ProjectPage() {
         <div style={{background:"#fff0f0",border:"1px solid rgba(255,45,45,0.3)",borderRadius:12,padding:"14px 18px",marginBottom:16,fontSize:13,color:"#FF2D2D"}}>{genError}</div>
       )}
 
+      {genStatus && (
+        <div style={{background:"#f0f0ff",border:"1px solid rgba(123,97,255,0.3)",borderRadius:12,padding:"14px 18px",marginBottom:16,fontSize:13,color:"#7B61FF",fontWeight:600}}>{genStatus}</div>
+      )}
+
       <button
         onClick={generateVideo}
         disabled={generating || uploads.length === 0}
         style={{background:uploads.length===0?"#ccc":"#FF2D2D",color:"#fff",border:"none",borderRadius:999,padding:"16px 40px",fontWeight:700,fontSize:16,cursor:uploads.length===0?"not-allowed":"pointer",width:"100%"}}
       >
-        {generating ? "Generating your video..." : uploads.length===0 ? "Upload media first" : "Generate My Video with AI"}
+        {generating ? "Generating..." : uploads.length===0 ? "Upload media first" : "Generate My Video with AI"}
       </button>
     </div>
   );
