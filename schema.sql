@@ -125,6 +125,35 @@ CREATE TABLE IF NOT EXISTS learning_insights (
   created_at TIMESTAMP DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS creator_styles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  vibe_keywords TEXT[] DEFAULT '{}',
+  pacing TEXT DEFAULT 'medium',
+  caption_style TEXT DEFAULT 'minimal',
+  music_energy TEXT DEFAULT 'cinematic',
+  transition_density TEXT DEFAULT 'smooth',
+  voiceover_preference TEXT DEFAULT 'none',
+  preferred_hooks TEXT[] DEFAULT '{}',
+  banned_elements TEXT[] DEFAULT '{}',
+  color_grade TEXT DEFAULT 'warm',
+  text_amount TEXT DEFAULT 'minimal',
+  updated_at TIMESTAMP DEFAULT now(),
+  UNIQUE(user_id)
+);
+
+CREATE TABLE IF NOT EXISTS generation_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  stage TEXT NOT NULL,
+  payload JSONB,
+  result JSONB,
+  error TEXT,
+  duration_ms INTEGER,
+  created_at TIMESTAMP DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS music_tracks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
