@@ -100,13 +100,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Load past feedback for this user (helps Claude learn preferences)
-    const feedbackRes = await query(
-      `SELECT action, context FROM project_feedback WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10`,
-      [userId]
-    );
-    const pastFeedback = feedbackRes.rows
-      .map(f => `${f.action}: ${JSON.stringify(f.context)}`)
-      .join("\n");
+    let pastFeedback = "";
+    try {
+      const feedbackRes = await query(
+        `SELECT action, context FROM project_feedback WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10`,
+        [userId]
+      );
+      pastFeedback = feedbackRes.rows
+        .map(f => `${f.action}: ${JSON.stringify(f.context)}`)
+        .join("\n");
+    } catch { /* table may not exist yet */ }
 
     // Build clip descriptions for Claude
     const clipDescriptions = clips.map((c, i) => {

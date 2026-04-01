@@ -84,6 +84,17 @@ export async function GET() {
   await run("projects.text_overlays", `ALTER TABLE projects ADD COLUMN IF NOT EXISTS text_overlays TEXT[]`);
   await run("projects.music_style", `ALTER TABLE projects ADD COLUMN IF NOT EXISTS music_style TEXT`);
 
+  // migrate-v4.sql — project feedback + uploads project linkage
+  await run("project_feedback table", `CREATE TABLE IF NOT EXISTS project_feedback (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    action TEXT NOT NULL,
+    context JSONB,
+    created_at TIMESTAMP DEFAULT now()
+  )`);
+  await run("uploads.project_id fk", `ALTER TABLE uploads ADD COLUMN IF NOT EXISTS project_id UUID REFERENCES projects(id) ON DELETE SET NULL`);
+
   const errors = results.filter(r => r.status === "error");
   return NextResponse.json({
     message: errors.length === 0 ? "All migrations applied successfully" : `${errors.length} steps had errors`,
