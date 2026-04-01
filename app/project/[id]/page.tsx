@@ -109,7 +109,7 @@ export default function ProjectPage() {
   async function renderVideo() {
     setGenerating(true);
     setGenError(null);
-    setGenStatus("Rendering your video... this may take a minute");
+    setGenStatus("Starting video render...");
     try {
       const renderRes = await fetch("/api/video/compose", {
         method: "POST",
@@ -118,9 +118,39 @@ export default function ProjectPage() {
       });
       const renderData = await renderRes.json();
       if (renderData.error) { setGenError(renderData.error); setGenerating(false); setGenStatus(null); return; }
-      if (renderData.videoUrl) {
-        setVideoUrl(renderData.videoUrl);
+
+      const renderId = renderData.renderId;
+      if (!renderId) { setGenError("No render ID returned"); setGenerating(false); setGenStatus(null); return; }
+
+      // Poll for render completion
+      setGenStatus("Rendering your video... this takes 30-60 seconds");
+      let attempts = 0;
+      const maxAttempts = 40; // ~2 minutes max
+      while (attempts < maxAttempts) {
+        await new Promise(r => setTimeout(r, 3000)); // wait 3s between checks
+        attempts++;
+        try {
+          const statusRes = await fetch(`/api/video/status?renderId=${renderId}`);
+          const statusData = await statusRes.json();
+
+          if (statusData.status === "succeeded") {
+            setVideoUrl(statusData.url);
+            setGenStatus(null);
+            setGenerating(false);
+            return;
+          } else if (statusData.status === "failed") {
+            setGenError(statusData.errorMessage || "Video render failed");
+            setGenStatus(null);
+            setGenerating(false);
+            return;
+          }
+          // Still rendering - update status
+          setGenStatus(`Rendering your video... ${Math.min(attempts * 3, 90)}s elapsed`);
+        } catch {
+          // Network blip, keep trying
+        }
       }
+      setGenError("Render timed out. Check your project later - it may still complete.");
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Network error");
     }
