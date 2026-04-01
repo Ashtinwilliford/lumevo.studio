@@ -544,6 +544,68 @@ function VideoSection({ user, uploads, onRefresh }: { user: User; uploads: Uploa
                 <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", lineHeight: 1.6 }}>Add up to 10 files. Lumevo will use them to build your video.</div>
               </div>
 
+              {/* Google Drive Import - TOP of upload section */}
+              <div style={{ background: "#fff", borderRadius: 12, border: "1px solid rgba(0,0,0,0.07)", padding: "14px 16px", marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#7c7660", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Import from Google Drive</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={gdriveInput}
+                    onChange={e => setGdriveInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && gdriveInput.trim()) {
+                        setGdriveImporting(true);
+                        setGdriveStatus("Importing...");
+                        fetch("/api/uploads/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gdriveInput.trim() }) })
+                          .then(r => r.json())
+                          .then(data => {
+                            if (data.error) { setGdriveStatus(data.error); }
+                            else if (data.uploads?.length > 0) {
+                              setLocalUploads(prev => [...(data.uploads as Upload[]), ...prev]);
+                              setSelectedIds(prev => [...data.uploads.map((u: Upload) => u.id), ...prev]);
+                              setGdriveInput("");
+                              setGdriveStatus("Imported!");
+                              setTimeout(() => setGdriveStatus(null), 3000);
+                              onRefresh();
+                            }
+                          })
+                          .catch(() => setGdriveStatus("Import failed"))
+                          .finally(() => setGdriveImporting(false));
+                      }
+                    }}
+                    placeholder="Paste Google Drive share link..."
+                    style={{ flex: 1, padding: "9px 12px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 12, outline: "none" }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!gdriveInput.trim()) return;
+                      setGdriveImporting(true);
+                      setGdriveStatus("Importing...");
+                      fetch("/api/uploads/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gdriveInput.trim() }) })
+                        .then(r => r.json())
+                        .then(data => {
+                          if (data.error) { setGdriveStatus(data.error); }
+                          else if (data.uploads?.length > 0) {
+                            setLocalUploads(prev => [...(data.uploads as Upload[]), ...prev]);
+                            setSelectedIds(prev => [...data.uploads.map((u: Upload) => u.id), ...prev]);
+                            setGdriveInput("");
+                            setGdriveStatus("Imported!");
+                            setTimeout(() => setGdriveStatus(null), 3000);
+                            onRefresh();
+                          }
+                        })
+                        .catch(() => setGdriveStatus("Import failed"))
+                        .finally(() => setGdriveImporting(false));
+                    }}
+                    disabled={!gdriveInput.trim() || gdriveImporting}
+                    style={{ background: gdriveInput.trim() ? "#FF2D2D" : "#f5f5f0", color: gdriveInput.trim() ? "#fff" : "#b5b09a", border: "none", borderRadius: 10, padding: "9px 14px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: gdriveInput.trim() ? "pointer" : "default" }}
+                  >
+                    {gdriveImporting ? "..." : "Import"}
+                  </button>
+                </div>
+                {gdriveStatus && <div style={{ fontSize: 11, marginTop: 6, color: gdriveStatus === "Imported!" ? "#16a34a" : gdriveStatus === "Importing..." ? "#7B61FF" : "#FF2D2D", fontWeight: 600 }}>{gdriveStatus}</div>}
+                <div style={{ fontSize: 10, color: "#b5b09a", marginTop: 6 }}>Share file in Google Drive → "Anyone with the link" → paste link above</div>
+              </div>
+
               <div
                 onClick={() => fileRef.current?.click()}
                 style={{ border: "2px dashed rgba(255,45,45,0.3)", borderRadius: 12, padding: "32px 24px", textAlign: "center", cursor: "pointer", background: "#fafaf4", marginBottom: 12 }}
@@ -570,79 +632,6 @@ function VideoSection({ user, uploads, onRefresh }: { user: User; uploads: Uploa
                 )}
               </div>
               <input ref={fileRef} type="file" style={{ display: "none" }} onChange={handleFileUpload} accept="video/*,image/*" multiple />
-
-              {/* Google Drive Import */}
-              <div style={{ background: "#fff", borderRadius: 12, border: "1px solid rgba(0,0,0,0.07)", padding: "14px 16px", marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#7c7660", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Or import from Google Drive</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    value={gdriveInput}
-                    onChange={e => setGdriveInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === "Enter" && gdriveInput.trim()) {
-                        setGdriveImporting(true);
-                        setGdriveStatus("Importing...");
-                        fetch("/api/uploads/gdrive", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ url: gdriveInput.trim() }),
-                        })
-                          .then(r => r.json())
-                          .then(data => {
-                            if (data.error) { setGdriveStatus(data.error); }
-                            else if (data.uploads?.length > 0) {
-                              setLocalUploads(prev => [...(data.uploads as Upload[]), ...prev]);
-                              setSelectedIds(prev => [...data.uploads.map((u: Upload) => u.id), ...prev]);
-                              setGdriveInput("");
-                              setGdriveStatus("Imported!");
-                              setTimeout(() => setGdriveStatus(null), 2000);
-                              onRefresh();
-                            }
-                          })
-                          .catch(() => setGdriveStatus("Import failed"))
-                          .finally(() => setGdriveImporting(false));
-                      }
-                    }}
-                    placeholder="Paste Google Drive share link..."
-                    style={{ flex: 1, padding: "9px 12px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 12, outline: "none" }}
-                  />
-                  <button
-                    onClick={() => {
-                      if (!gdriveInput.trim()) return;
-                      setGdriveImporting(true);
-                      setGdriveStatus("Importing...");
-                      fetch("/api/uploads/gdrive", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ url: gdriveInput.trim() }),
-                      })
-                        .then(r => r.json())
-                        .then(data => {
-                          if (data.error) { setGdriveStatus(data.error); }
-                          else if (data.uploads?.length > 0) {
-                            setLocalUploads(prev => [...(data.uploads as Upload[]), ...prev]);
-                            setSelectedIds(prev => [...data.uploads.map((u: Upload) => u.id), ...prev]);
-                            setGdriveInput("");
-                            setGdriveStatus("Imported!");
-                            setTimeout(() => setGdriveStatus(null), 2000);
-                            onRefresh();
-                          }
-                        })
-                        .catch(() => setGdriveStatus("Import failed"))
-                        .finally(() => setGdriveImporting(false));
-                    }}
-                    disabled={!gdriveInput.trim() || gdriveImporting}
-                    style={{ background: gdriveInput.trim() ? "#FF2D2D" : "#f5f5f0", color: gdriveInput.trim() ? "#fff" : "#b5b09a", border: "none", borderRadius: 10, padding: "9px 14px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: gdriveInput.trim() ? "pointer" : "default" }}
-                  >
-                    {gdriveImporting ? "..." : "Import"}
-                  </button>
-                </div>
-                {gdriveStatus && (
-                  <div style={{ fontSize: 11, marginTop: 6, color: gdriveStatus === "Imported!" ? "#16a34a" : gdriveStatus === "Importing..." ? "#7B61FF" : "#FF2D2D", fontWeight: 600 }}>
-                    {gdriveStatus}
-                  </div>
-                )}
-              </div>
 
               {localUploads.filter(u => u.file_type === "video" || u.file_type === "image").length > 0 && (
                 <div style={{ marginBottom: 12 }}>
