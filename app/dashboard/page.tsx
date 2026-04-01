@@ -238,7 +238,7 @@ function CreateSection({ user, uploads, onRefresh }: { user: User; uploads: Uplo
       setGenStatus("Patience... crafting your masterpiece. This takes 3–5 minutes.");
       const renderRes = await fetch("/api/video/render-plan", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: draftProjectId }),
+        body: JSON.stringify({ projectId: draftProjectId, plan: planData.plan }),
       });
       const renderData = await renderRes.json();
       if (renderData.error) { setGenError(renderData.error); setGenStatus(null); setGenerating(false); return; }

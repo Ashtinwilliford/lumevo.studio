@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
   let body;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid request" }, { status: 400 }); }
 
-  const { projectId } = body;
+  const { projectId, plan: bodyPlan } = body;
   if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
 
   const userId = session.id;
@@ -242,7 +242,8 @@ export async function POST(req: NextRequest) {
     const project = projectRes.rows[0];
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
-    const plan = project.claude_plan as VideoPlan;
+    // Use DB plan if available, fall back to plan passed in request body
+    const plan = (project.claude_plan as VideoPlan) || (bodyPlan as VideoPlan) || null;
     if (!plan?.scene_order?.length) return NextResponse.json({ error: "No plan generated yet. Generate a plan first." }, { status: 400 });
 
     // Load creator style
