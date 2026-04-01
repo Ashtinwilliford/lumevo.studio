@@ -10,6 +10,8 @@ export default function ProjectPage() {
   const [generating, setGenerating] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string|null>(null);
   const [loading, setLoading] = useState(true);
+  const [genError, setGenError] = useState<string|null>(null);
+  const [genResult, setGenResult] = useState<{script?:string;caption?:string}|null>(null);
 
   useEffect(() => {
     async function load() {
@@ -19,6 +21,7 @@ export default function ProjectPage() {
       setProject(data.project);
       const gc = data.project?.generated_content;
       if (gc?.videoUrl) setVideoUrl(gc.videoUrl);
+      if (gc?.script) setGenResult({ script: gc.script, caption: gc.caption });
       const uRes = await fetch(`/api/uploads?projectId=${id}`);
       if (uRes.ok) { const uData = await uRes.json(); setUploads(uData.uploads || []); }
       setLoading(false);
@@ -28,27 +31,32 @@ export default function ProjectPage() {
 
   async function generateVideo() {
     setGenerating(true);
+    setGenError(null);
     try {
+      const body = {
+        title: project?.title || "Untitled",
+        uploadIds: uploads.map(u => u.id),
+        platform: project?.target_platform || "tiktok",
+        duration: project?.target_duration || 30,
+        vibe: project?.vibe || null,
+        draftProjectId: id,
+      };
       const res = await fetch("/api/video/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: project?.title || "Untitled",
-          uploadIds: uploads.map(u => u.id),
-          platform: project?.target_platform || "tiktok",
-          duration: project?.target_duration || 30,
-          vibe: project?.vibe || null,
-          draftProjectId: id,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (data.error) { alert(data.error); setGenerating(false); return; }
-      if (data.script) {
-        setProject(prev => prev ? { ...prev, generated_content: { script: data.script, caption: data.caption } } : prev);
+      if (data.error) {
+        setGenError(data.error);
+        setGenerating(false);
+        return;
       }
-      alert("Video script generated! Refresh to see results.");
+      if (data.script) {
+        setGenResult({ script: data.script, caption: data.caption });
+      }
     } catch (err) {
-      alert("Generation failed. Try again.");
+      setGenError(err instanceof Error ? err.message : "Network error - check your connection");
     }
     setGenerating(false);
   }
@@ -66,6 +74,27 @@ export default function ProjectPage() {
           <h2 style={{fontSize:20,fontWeight:700,marginBottom:16}}>Your Video</h2>
           <video src={videoUrl} controls style={{width:"100%",maxWidth:400,borderRadius:14}} />
           <div style={{marginTop:12}}><a href={videoUrl} download style={{background:"#FF2D2D",color:"#fff",padding:"10px 20px",borderRadius:999,textDecoration:"none",fontWeight:600}}>Download</a></div>
+        </div>
+      )}
+
+      {genResult?.script && (
+        <div style={{marginBottom:40}}>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid rgba(0,0,0,0.07)",overflow:"hidden",marginBottom:16}}>
+            <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(0,0,0,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:11,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:"#7c7660"}}>Script</div>
+              <button onClick={()=>navigator.clipboard?.writeText(genResult.script||"")} style={{background:"none",border:"none",fontSize:11,color:"#FF2D2D",cursor:"pointer",fontWeight:700}}>Copy</button>
+            </div>
+            <div style={{padding:"16px 20px",fontSize:14,lineHeight:1.7,color:"#1a1a1a",whiteSpace:"pre-wrap"}}>{genResult.script}</div>
+          </div>
+          {genResult.caption && (
+            <div style={{background:"#fff",borderRadius:16,border:"1px solid rgba(0,0,0,0.07)",overflow:"hidden"}}>
+              <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(0,0,0,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontSize:11,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:"#7c7660"}}>Caption</div>
+                <button onClick={()=>navigator.clipboard?.writeText(genResult.caption||"")} style={{background:"none",border:"none",fontSize:11,color:"#FF2D2D",cursor:"pointer",fontWeight:700}}>Copy</button>
+              </div>
+              <div style={{padding:"16px 20px",fontSize:14,lineHeight:1.7,color:"#1a1a1a"}}>{genResult.caption}</div>
+            </div>
+          )}
         </div>
       )}
 
@@ -94,6 +123,10 @@ export default function ProjectPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {genError && (
+        <div style={{background:"#fff0f0",border:"1px solid rgba(255,45,45,0.3)",borderRadius:12,padding:"14px 18px",marginBottom:16,fontSize:13,color:"#FF2D2D"}}>{genError}</div>
       )}
 
       <button

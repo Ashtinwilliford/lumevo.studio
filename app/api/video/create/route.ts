@@ -6,11 +6,15 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 
 
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { title, uploadIds, platform, duration: rawDuration, vibe, useVoiceClone, draftProjectId } = await req.json();
+  let body;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid request body" }, { status: 400 }); }
+  const { title, uploadIds, platform, duration: rawDuration, vibe, useVoiceClone, draftProjectId } = body;
   if (!title?.trim()) return NextResponse.json({ error: "Title required" }, { status: 400 });
   const duration = typeof rawDuration === "number" ? rawDuration : (parseInt(String(rawDuration), 10) || 30);
 
@@ -164,43 +168,54 @@ Rules:
 
 Respond with ONLY the caption text and hashtags. No labels, no quotes around it.`;
 
-  const [completion, captionCompletion] = await Promise.all([
-    anthropic.messages.create({
-      model: "claude-sonnet-4-5",
-      messages: [{ role: "user", content: scriptPrompt }],
-      max_tokens: 600,
-      temperature: 0.82,
-    }),
-    anthropic.messages.create({
-      model: "claude-sonnet-4-5",
-      messages: [{ role: "user", content: captionPrompt }],
-      max_tokens: 180,
-      temperature: 0.87,
-    }),
-  ]);
+  let completion, captionCompletion;
+  try {
+    [completion, captionCompletion] = await Promise.all([
+      anthropic.messages.create({
+        model: "claude-sonnet-4-5",
+        messages: [{ role: "user", content: scriptPrompt }],
+        max_tokens: 600,
+        temperature: 0.82,
+      }),
+      anthropic.messages.create({
+        model: "claude-sonnet-4-5",
+        messages: [{ role: "user", content: captionPrompt }],
+        max_tokens: 180,
+        temperature: 0.87,
+      }),
+    ]);
+  } catch (err) {
+    console.error("Claude API error in video/create:", err);
+    return NextResponse.json({ error: "AI generation failed. Check your ANTHROPIC_API_KEY." }, { status: 503 });
+  }
 
   const script = completion.content[0]?.type === "text" ? completion.content[0].text.trim() : "";
   const caption = (captionCompletion.content[0]?.type === "text" ? captionCompletion.content[0].text.trim() : "");
 
   let projectId = draftProjectId;
-  if (draftProjectId) {
-    await query(
-      `UPDATE projects SET title = $1, project_type = 'video', target_platform = $2, target_duration = $3, prompt_text = $4, status = 'scripting', generated_content = $5, updated_at = now()
-       WHERE id = $6 AND user_id = $7`,
-      [title, platform || "tiktok", duration || 30, title, JSON.stringify({ script, caption, vibe }), draftProjectId, userId]
-    );
-  } else {
-    const projectRows = await query(
-      `INSERT INTO projects (user_id, title, project_type, target_platform, target_duration, prompt_text, status, generated_content)
-       VALUES ($1, $2, 'video', $3, $4, $5, 'scripting', $6) RETURNING id`,
-      [userId, title, platform || "tiktok", duration || 30, title, JSON.stringify({ script, caption, vibe })]
-    );
-    projectId = projectRows.rows[0]?.id;
+  try {
+    if (draftProjectId) {
+      await query(
+        `UPDATE projects SET title = $1, project_type = 'video', target_platform = $2, target_duration = $3, prompt_text = $4, status = 'scripting', generated_content = $5, updated_at = now()
+         WHERE id = $6 AND user_id = $7`,
+        [title, platform || "tiktok", duration || 30, title, JSON.stringify({ script, caption, vibe }), draftProjectId, userId]
+      );
+    } else {
+      const projectRows = await query(
+        `INSERT INTO projects (user_id, title, project_type, target_platform, target_duration, prompt_text, status, generated_content)
+         VALUES ($1, $2, 'video', $3, $4, $5, 'scripting', $6) RETURNING id`,
+        [userId, title, platform || "tiktok", duration || 30, title, JSON.stringify({ script, caption, vibe })]
+      );
+      projectId = projectRows.rows[0]?.id;
+    }
+  } catch (err) {
+    console.error("DB error saving project:", err);
+    return NextResponse.json({ error: "Failed to save project to database." }, { status: 500 });
   }
 
   if (uploadIds?.length > 0) {
     for (const uploadId of uploadIds) {
-      await query("UPDATE uploads SET project_id = $1 WHERE id = $2 AND user_id = $3", [projectId, uploadId, userId]);
+      await query("UPDATE uploads SET project_id = $1 WHERE id = $2 AND user_id = $3", [projectId, uploadId, userId]).catch(() => {});
     }
   }
 
@@ -235,7 +250,7 @@ Respond with ONLY the caption text and hashtags. No labels, no quotes around it.
       console.error("ElevenLabs synthesis error:", e);
     }
   } else {
-    await query("UPDATE projects SET status = 'scripted' WHERE id = $1", [projectId]);
+    await query("UPDATE projects SET status = 'scripted' WHERE id = $1", [projectId]).catch(() => {});
   }
 
   return NextResponse.json({ projectId, script, caption, audioBase64, hasVoice: !!voiceId });
