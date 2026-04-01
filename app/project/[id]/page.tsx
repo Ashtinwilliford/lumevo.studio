@@ -36,6 +36,28 @@ export default function ProjectPage() {
     const uRes = await fetch(`/api/uploads?projectId=${id}`);
     if (uRes.ok) { const uData = await uRes.json(); setUploads(uData.uploads || []); }
     setLoading(false);
+
+    // If still rendering, auto-poll for completion
+    if (data.project?.status === "rendering" && data.project?.render_id && !data.project?.video_url) {
+      const renderId = data.project.render_id as string;
+      setGenStatus("Crafting your video...");
+      let attempts = 0;
+      const poll = async () => {
+        while (attempts < 60) {
+          await new Promise(r => setTimeout(r, 5000));
+          attempts++;
+          try {
+            const statusRes = await fetch(`/api/video/status?renderId=${renderId}`);
+            const statusData = await statusRes.json();
+            if (statusData.status === "succeeded") { setVideoUrl(statusData.url); setGenStatus(null); return; }
+            if (statusData.status === "failed") { setGenError(statusData.errorMessage || "Render failed"); setGenStatus(null); return; }
+            setGenStatus(`Crafting your video... ${Math.min(attempts * 5, 300)}s`);
+          } catch { /* keep polling */ }
+        }
+        setGenStatus(null);
+      };
+      poll();
+    }
   }
 
   useEffect(() => { load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps

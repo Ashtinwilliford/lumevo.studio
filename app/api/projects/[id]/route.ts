@@ -9,7 +9,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
 
   const projectRes = await query(
-    `SELECT id, title, project_type, target_platform, target_duration, vibe, status, generated_content, created_at, updated_at
+    `SELECT id, title, project_type, target_platform, target_duration, vibe, status, generated_content, video_url, render_id, claude_plan, created_at, updated_at
      FROM projects WHERE id = $1 AND user_id = $2`,
     [id, session.id]
   );

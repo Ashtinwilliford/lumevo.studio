@@ -84,6 +84,12 @@ export async function GET() {
   await run("projects.text_overlays", `ALTER TABLE projects ADD COLUMN IF NOT EXISTS text_overlays TEXT[]`);
   await run("projects.music_style", `ALTER TABLE projects ADD COLUMN IF NOT EXISTS music_style TEXT`);
 
+  // uploads optional columns
+  await run("uploads.transcript_text", `ALTER TABLE uploads ADD COLUMN IF NOT EXISTS transcript_text TEXT`);
+  await run("uploads.ai_analysis", `ALTER TABLE uploads ADD COLUMN IF NOT EXISTS ai_analysis JSONB`);
+  await run("uploads.video_duration_sec", `ALTER TABLE uploads ADD COLUMN IF NOT EXISTS video_duration_sec FLOAT`);
+  await run("uploads.thumb_path", `ALTER TABLE uploads ADD COLUMN IF NOT EXISTS thumb_path TEXT`);
+
   // migrate-v4.sql — project feedback + uploads project linkage
   await run("project_feedback table", `CREATE TABLE IF NOT EXISTS project_feedback (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
