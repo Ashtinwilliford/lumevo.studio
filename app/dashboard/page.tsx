@@ -449,11 +449,8 @@ function VideoSection({ user, uploads, onRefresh }: { user: User; uploads: Uploa
 
         {result.projectId && (
           <div style={{ marginBottom: 24, display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button onClick={generateVideo} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "14px 32px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
-              Generate My Video with AI
-            </button>
-            <button onClick={() => router.push(`/project/${result.projectId}`)} style={{ background: "none", border: "1px solid rgba(0,0,0,0.12)", borderRadius: 999, padding: "14px 24px", fontFamily: "inherit", fontSize: 14, cursor: "pointer", color: "#1a1a1a" }}>
-              View Project
+            <button onClick={() => router.push(`/project/${result.projectId}`)} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "14px 32px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+              Review Script & Render Video
             </button>
           </div>
         )}
