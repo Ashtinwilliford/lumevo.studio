@@ -262,14 +262,33 @@ export async function POST(req: NextRequest) {
       clipMap.set(c.id, c);
     }
 
-    // Check for voiceover
+    // Check for / generate voiceover
     let voiceoverUrl: string | null = null;
-    if (plan.voiceover_needed) {
+    if (plan.voiceover_needed && plan.voiceover_script) {
+      // Check if we already have one
       const voRes = await query(
-        "SELECT audio_url FROM voiceovers WHERE project_id = $1 AND status = 'completed' AND audio_type != 'music' ORDER BY created_at DESC LIMIT 1",
+        "SELECT audio_url FROM voiceovers WHERE project_id = $1 AND status = 'completed' AND audio_type = 'voiceover' ORDER BY created_at DESC LIMIT 1",
         [projectId]
       );
-      voiceoverUrl = (voRes.rows[0]?.audio_url as string) || null;
+      if (voRes.rows[0]?.audio_url) {
+        voiceoverUrl = voRes.rows[0].audio_url as string;
+      } else if (process.env.ELEVENLABS_API_KEY) {
+        // Generate voiceover with ElevenLabs
+        try {
+          const voiceRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/voice/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "" },
+            body: JSON.stringify({ projectId, script: plan.voiceover_script }),
+          });
+          if (voiceRes.ok) {
+            const voiceData = await voiceRes.json();
+            voiceoverUrl = voiceData.audioUrl || null;
+          }
+          await logStage(projectId, userId, "voiceover_generation", { script: plan.voiceover_script.slice(0, 100) }, { voiceoverUrl }, undefined, 0);
+        } catch (err) {
+          console.error("Voiceover generation failed:", err);
+        }
+      }
     }
 
     const title = project.title as string;

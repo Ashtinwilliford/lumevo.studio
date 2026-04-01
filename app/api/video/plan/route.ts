@@ -133,6 +133,16 @@ export async function POST(req: NextRequest) {
     const platform = project.target_platform as string || "instagram";
     const targetDuration = (project.target_duration as number) || 30;
 
+    // Rich brief fields (from project creation form)
+    const scene = project.scene as string || "";
+    const people = project.people as string || "";
+    const location = project.location as string || "";
+    const occasion = project.occasion as string || "";
+    const tone = project.tone as string || "";
+    const musicStyle = project.music_style as string || "";
+    const voiceoverScript = project.voiceover_script as string || "";
+    const textOverlays = (project.text_overlays as string[]) || [];
+
     const plannerPrompt = `You are the creative director for a premium short-form video editor.
 
 Your job is to convert raw clips plus a creator style profile into a polished vertical video plan.
@@ -150,6 +160,14 @@ Title: "${title}"
 Platform: ${platform}
 Target duration: ${targetDuration}s
 Vibe: ${vibe}
+${tone ? `Tone: ${tone}` : ""}
+${scene ? `Scene: ${scene}` : ""}
+${people ? `People: ${people}` : ""}
+${location ? `Location: ${location}` : ""}
+${occasion ? `Occasion: ${occasion}` : ""}
+${musicStyle ? `Music style requested: ${musicStyle}` : ""}
+${voiceoverScript ? `\nVOICEOVER SCRIPT (use this exact text for voiceover):\n"${voiceoverScript}"\n` : ""}
+${textOverlays.length > 0 ? `\nTEXT OVERLAYS (place these on screen at appropriate moments):\n${textOverlays.map((t, i) => `${i + 1}. "${t}"`).join("\n")}\n` : ""}
 
 === CREATOR STYLE PROFILE ===
 Vibe keywords: ${style.vibe_keywords?.join(", ") || "cinematic, warm"}
@@ -248,6 +266,19 @@ Output ONLY this JSON (no markdown, no explanation):
     if (!plan) {
       await logStage(projectId, userId, "claude_plan", { prompt: "..." }, null, `Failed after ${attempts} attempts: ${lastError}`, Date.now() - startTime);
       return NextResponse.json({ error: `AI planning failed: ${lastError}` }, { status: 500 });
+    }
+
+    // If user provided a voiceover script, use it directly (override AI's version)
+    if (voiceoverScript) {
+      plan.voiceover_needed = true;
+      plan.voiceover_script = voiceoverScript;
+    }
+
+    // If user provided text overlays, inject them into first few scenes
+    if (textOverlays.length > 0 && plan.scene_order?.length > 0) {
+      textOverlays.forEach((text, i) => {
+        if (plan.scene_order[i]) plan.scene_order[i].overlay_text = text;
+      });
     }
 
     // Save plan to project

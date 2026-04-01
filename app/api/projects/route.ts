@@ -21,16 +21,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { title, project_type, target_platform, target_duration, prompt_text, vibe, tone, audience_goal } = body;
+    const { title, project_type, target_platform, target_duration, prompt_text, vibe, tone, audience_goal,
+            scene, people, location, occasion, voiceover_script, text_overlays, music_style } = body;
 
     if (!title) return NextResponse.json({ error: "title required" }, { status: 400 });
 
     const result = await query(
-      `INSERT INTO projects (user_id, title, project_type, target_platform, target_duration, prompt_text, vibe, tone, audience_goal, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'draft')
+      `INSERT INTO projects (user_id, title, project_type, target_platform, target_duration, prompt_text, vibe, tone, audience_goal,
+         scene, people, location, occasion, voiceover_script, text_overlays, music_style, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'draft')
        RETURNING id, title, project_type, target_platform, status, created_at`,
       [session.id, title, project_type || "caption", target_platform || "general",
-       target_duration || null, prompt_text || null, vibe || null, tone || null, audience_goal || null]
+       target_duration || null, prompt_text || null, vibe || null, tone || null, audience_goal || null,
+       scene || null, people || null, location || null, occasion || null,
+       voiceover_script || null, text_overlays || null, music_style || null]
     );
 
     return NextResponse.json({ project: result.rows[0] });
