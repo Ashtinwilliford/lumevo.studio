@@ -14,6 +14,13 @@ export default function ProjectPage() {
   const [genStatus, setGenStatus] = useState<string|null>(null);
   const [genResult, setGenResult] = useState<{script?:string;caption?:string}|null>(null);
 
+  // Script editing state
+  const [editingScript, setEditingScript] = useState(false);
+  const [editedScript, setEditedScript] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
+  const [feedbackInput, setFeedbackInput] = useState("");
+  const [showFeedback, setShowFeedback] = useState(false);
+
   useEffect(() => {
     async function load() {
       const res = await fetch(`/api/projects/${id}`);
@@ -30,20 +37,18 @@ export default function ProjectPage() {
     load();
   }, [id, router]);
 
-  async function generateVideo() {
+  async function generateScript() {
     setGenerating(true);
     setGenError(null);
     setGenStatus("Generating script with AI...");
-
     try {
-      // Step 1: Generate script
       const scriptRes = await fetch("/api/video/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: project?.title || "Untitled",
           uploadIds: uploads.map(u => u.id),
-          platform: project?.target_platform || "tiktok",
+          platform: project?.target_platform || "instagram",
           duration: project?.target_duration || 30,
           vibe: project?.vibe || null,
           draftProjectId: id,
@@ -51,13 +56,61 @@ export default function ProjectPage() {
       });
       const scriptData = await scriptRes.json();
       if (scriptData.error) { setGenError(scriptData.error); setGenerating(false); setGenStatus(null); return; }
-
       if (scriptData.script) {
         setGenResult({ script: scriptData.script, caption: scriptData.caption });
       }
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : "Network error");
+    }
+    setGenerating(false);
+    setGenStatus(null);
+  }
 
-      // Step 2: Render video with Creatomate
-      setGenStatus("Rendering your video... this may take a minute");
+  async function regenerateScript(feedback: string) {
+    setRegenerating(true);
+    setGenError(null);
+    setShowFeedback(false);
+    setFeedbackInput("");
+    try {
+      const scriptRes = await fetch("/api/video/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: project?.title || "Untitled",
+          uploadIds: uploads.map(u => u.id),
+          platform: project?.target_platform || "instagram",
+          duration: project?.target_duration || 30,
+          vibe: `${project?.vibe || ""} — FEEDBACK: ${feedback}`.trim(),
+          draftProjectId: id,
+        }),
+      });
+      const scriptData = await scriptRes.json();
+      if (scriptData.error) { setGenError(scriptData.error); setRegenerating(false); return; }
+      if (scriptData.script) {
+        setGenResult({ script: scriptData.script, caption: scriptData.caption });
+      }
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : "Network error");
+    }
+    setRegenerating(false);
+  }
+
+  function saveCustomScript() {
+    setGenResult({ script: editedScript, caption: genResult?.caption || "" });
+    setEditingScript(false);
+    // Save to DB
+    fetch(`/api/projects/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ generated_content: { script: editedScript, caption: genResult?.caption || "" } }),
+    }).catch(() => {});
+  }
+
+  async function renderVideo() {
+    setGenerating(true);
+    setGenError(null);
+    setGenStatus("Rendering your video... this may take a minute");
+    try {
       const renderRes = await fetch("/api/video/compose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -65,25 +118,34 @@ export default function ProjectPage() {
       });
       const renderData = await renderRes.json();
       if (renderData.error) { setGenError(renderData.error); setGenerating(false); setGenStatus(null); return; }
-
       if (renderData.videoUrl) {
         setVideoUrl(renderData.videoUrl);
-        setGenStatus(null);
       }
     } catch (err) {
-      setGenError(err instanceof Error ? err.message : "Network error - check your connection");
+      setGenError(err instanceof Error ? err.message : "Network error");
     }
     setGenerating(false);
     setGenStatus(null);
   }
 
+  async function generateAll() {
+    await generateScript();
+  }
+
   if (loading) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#F8F8A6"}}><div style={{width:8,height:8,background:"#FF2D2D",borderRadius:"50%"}} /></div>;
+
+  const platform = (project?.target_platform as string) || "instagram";
+  const PLATFORM_LABELS: Record<string,string> = { tiktok: "TikTok", instagram: "Instagram", youtube: "YouTube", general: "General" };
 
   return (
     <div style={{maxWidth:900,margin:"0 auto",padding:"48px 24px 100px",background:"#F8F8A6",minHeight:"100vh"}}>
       <button onClick={()=>router.push("/dashboard")} style={{background:"none",border:"none",cursor:"pointer",marginBottom:32,fontSize:14,color:"#78716c"}}>Back to Dashboard</button>
       <h1 style={{fontSize:32,fontWeight:800,marginBottom:8}}>{String(project?.title || "Project")}</h1>
-      <p style={{color:"#78716c",marginBottom:40}}>{String(project?.vibe || "")} {project?.target_platform ? `· ${String(project.target_platform)}` : ""} {project?.target_duration ? `· ${String(project.target_duration)}s` : ""}</p>
+      <p style={{color:"#78716c",marginBottom:40}}>
+        {String(project?.vibe || "")}
+        {platform ? ` · ${PLATFORM_LABELS[platform] || platform}` : ""}
+        {project?.target_duration ? ` · ${String(project.target_duration)}s` : ""}
+      </p>
 
       {videoUrl && (
         <div style={{marginBottom:40}}>
@@ -93,17 +155,50 @@ export default function ProjectPage() {
         </div>
       )}
 
-      {genResult?.script && (
+      {genResult?.script && !editingScript && (
         <div style={{marginBottom:40}}>
-          <div style={{background:"#fff",borderRadius:16,border:"1px solid rgba(0,0,0,0.07)",overflow:"hidden",marginBottom:16}}>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid rgba(0,0,0,0.07)",overflow:"hidden",marginBottom:12}}>
             <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(0,0,0,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{fontSize:11,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:"#7c7660"}}>Script</div>
-              <button onClick={()=>navigator.clipboard?.writeText(genResult.script||"")} style={{background:"none",border:"none",fontSize:11,color:"#FF2D2D",cursor:"pointer",fontWeight:700}}>Copy</button>
+              <div style={{display:"flex",gap:12}}>
+                <button onClick={()=>navigator.clipboard?.writeText(genResult.script||"")} style={{background:"none",border:"none",fontSize:11,color:"#FF2D2D",cursor:"pointer",fontWeight:700}}>Copy</button>
+                <button onClick={()=>{setEditedScript(genResult.script||"");setEditingScript(true);}} style={{background:"none",border:"none",fontSize:11,color:"#7B61FF",cursor:"pointer",fontWeight:700}}>Edit</button>
+              </div>
             </div>
             <div style={{padding:"16px 20px",fontSize:14,lineHeight:1.7,color:"#1a1a1a",whiteSpace:"pre-wrap"}}>{genResult.script}</div>
           </div>
+
+          {/* Regenerate options */}
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+            {["Make it shorter","Make it sassier","More energy","Less generic","More personal"].map(fb=>(
+              <button key={fb} onClick={()=>regenerateScript(fb)} disabled={regenerating}
+                style={{padding:"8px 14px",borderRadius:999,border:"1.5px solid rgba(0,0,0,0.1)",background:"#fff",fontFamily:"inherit",fontSize:12,cursor:"pointer",color:"#1a1a1a",fontWeight:500}}>
+                {fb}
+              </button>
+            ))}
+            <button onClick={()=>setShowFeedback(!showFeedback)}
+              style={{padding:"8px 14px",borderRadius:999,border:"1.5px solid #7B61FF",background:"#fff",fontFamily:"inherit",fontSize:12,cursor:"pointer",color:"#7B61FF",fontWeight:600}}>
+              Custom feedback...
+            </button>
+          </div>
+
+          {showFeedback && (
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <input value={feedbackInput} onChange={e=>setFeedbackInput(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter"&&feedbackInput.trim())regenerateScript(feedbackInput.trim());}}
+                placeholder="Tell AI what to change... e.g. 'too long, make it punchy and fun'"
+                style={{flex:1,padding:"10px 14px",borderRadius:12,border:"1.5px solid rgba(0,0,0,0.1)",fontFamily:"inherit",fontSize:13,outline:"none"}} />
+              <button onClick={()=>{if(feedbackInput.trim())regenerateScript(feedbackInput.trim());}} disabled={!feedbackInput.trim()||regenerating}
+                style={{background:"#7B61FF",color:"#fff",border:"none",borderRadius:12,padding:"10px 18px",fontFamily:"inherit",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                {regenerating?"...":"Regenerate"}
+              </button>
+            </div>
+          )}
+
+          {regenerating && <div style={{fontSize:13,color:"#7B61FF",fontWeight:600,marginBottom:12}}>Regenerating script...</div>}
+
           {genResult.caption && (
-            <div style={{background:"#fff",borderRadius:16,border:"1px solid rgba(0,0,0,0.07)",overflow:"hidden"}}>
+            <div style={{background:"#fff",borderRadius:16,border:"1px solid rgba(0,0,0,0.07)",overflow:"hidden",marginBottom:12}}>
               <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(0,0,0,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div style={{fontSize:11,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:"#7c7660"}}>Caption</div>
                 <button onClick={()=>navigator.clipboard?.writeText(genResult.caption||"")} style={{background:"none",border:"none",fontSize:11,color:"#FF2D2D",cursor:"pointer",fontWeight:700}}>Copy</button>
@@ -111,6 +206,38 @@ export default function ProjectPage() {
               <div style={{padding:"16px 20px",fontSize:14,lineHeight:1.7,color:"#1a1a1a"}}>{genResult.caption}</div>
             </div>
           )}
+
+          {/* Render video button - only shows after script is ready */}
+          {!videoUrl && (
+            <button onClick={renderVideo} disabled={generating}
+              style={{width:"100%",background:"#FF2D2D",color:"#fff",border:"none",borderRadius:999,padding:"16px 40px",fontWeight:700,fontSize:16,cursor:"pointer",marginTop:8}}>
+              {generating ? "Rendering..." : "Render Video with This Script"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Custom script editor */}
+      {editingScript && (
+        <div style={{marginBottom:40}}>
+          <div style={{background:"#fff",borderRadius:16,border:"1px solid #7B61FF",overflow:"hidden",marginBottom:12}}>
+            <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(0,0,0,0.06)"}}>
+              <div style={{fontSize:11,fontWeight:800,letterSpacing:2,textTransform:"uppercase",color:"#7B61FF"}}>Edit Script</div>
+            </div>
+            <textarea value={editedScript} onChange={e=>setEditedScript(e.target.value)}
+              rows={8}
+              style={{width:"100%",padding:"16px 20px",border:"none",fontFamily:"inherit",fontSize:14,lineHeight:1.7,resize:"vertical",outline:"none",boxSizing:"border-box"}} />
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={saveCustomScript}
+              style={{background:"#7B61FF",color:"#fff",border:"none",borderRadius:999,padding:"12px 24px",fontFamily:"inherit",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+              Use This Script
+            </button>
+            <button onClick={()=>setEditingScript(false)}
+              style={{background:"none",border:"1px solid rgba(0,0,0,0.1)",borderRadius:999,padding:"12px 24px",fontFamily:"inherit",fontSize:14,cursor:"pointer",color:"#7c7660"}}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -149,13 +276,16 @@ export default function ProjectPage() {
         <div style={{background:"#f0f0ff",border:"1px solid rgba(123,97,255,0.3)",borderRadius:12,padding:"14px 18px",marginBottom:16,fontSize:13,color:"#7B61FF",fontWeight:600}}>{genStatus}</div>
       )}
 
-      <button
-        onClick={generateVideo}
-        disabled={generating || uploads.length === 0}
-        style={{background:uploads.length===0?"#ccc":"#FF2D2D",color:"#fff",border:"none",borderRadius:999,padding:"16px 40px",fontWeight:700,fontSize:16,cursor:uploads.length===0?"not-allowed":"pointer",width:"100%"}}
-      >
-        {generating ? "Generating..." : uploads.length===0 ? "Upload media first" : "Generate My Video with AI"}
-      </button>
+      {/* Initial generate button - only shows if no script yet */}
+      {!genResult?.script && (
+        <button
+          onClick={generateAll}
+          disabled={generating || uploads.length === 0}
+          style={{background:uploads.length===0?"#ccc":"#FF2D2D",color:"#fff",border:"none",borderRadius:999,padding:"16px 40px",fontWeight:700,fontSize:16,cursor:uploads.length===0?"not-allowed":"pointer",width:"100%"}}
+        >
+          {generating ? "Generating..." : uploads.length===0 ? "Upload media first" : "Generate Script with AI"}
+        </button>
+      )}
     </div>
   );
 }
