@@ -45,7 +45,16 @@ export async function POST(req: NextRequest) {
       `INSERT INTO uploads (user_id, project_id, file_name, file_type, mime_type, file_path, file_size, analysis_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, file_name, file_type, mime_type, file_path, file_size, analysis_status, created_at`,
       [session.id, projectId || null, fileName, fileType, mimeType, filePath, fileSize, "ready"]
     );
-    return NextResponse.json({ upload: result.rows[0] });
+    // Fire-and-forget AI analysis
+    const uploadRow = result.rows[0];
+    if (uploadRow?.id && filePath) {
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/uploads/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+        body: JSON.stringify({ uploadId: uploadRow.id }),
+      }).catch(() => {});
+    }
+    return NextResponse.json({ upload: uploadRow });
   } catch (err) {
     console.error("Upload error:", err);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });

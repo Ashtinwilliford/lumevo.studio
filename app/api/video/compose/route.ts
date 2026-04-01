@@ -1,23 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { query } from "@/lib/db";
+import Anthropic from "@anthropic-ai/sdk";
 
 export const maxDuration = 60;
 
-// Curated royalty-free cinematic music tracks (direct MP3 URLs)
+const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+
+// Curated royalty-free cinematic music
 const MUSIC_LIBRARY = [
-  // Emotional/cinematic
-  "https://cdn.pixabay.com/audio/2024/11/29/audio_688ab0e968.mp3", // cinematic emotional
-  "https://cdn.pixabay.com/audio/2024/02/14/audio_8e53869e0a.mp3", // inspiring cinematic
-  "https://cdn.pixabay.com/audio/2023/10/25/audio_fddaa5c0e1.mp3", // cinematic trailer
-  "https://cdn.pixabay.com/audio/2024/09/10/audio_6e1f4eb5c9.mp3", // elegant piano
-  "https://cdn.pixabay.com/audio/2023/04/28/audio_d3d2328f81.mp3", // soft emotional
+  "https://cdn.pixabay.com/audio/2024/11/29/audio_688ab0e968.mp3",
+  "https://cdn.pixabay.com/audio/2024/02/14/audio_8e53869e0a.mp3",
+  "https://cdn.pixabay.com/audio/2023/10/25/audio_fddaa5c0e1.mp3",
+  "https://cdn.pixabay.com/audio/2024/09/10/audio_6e1f4eb5c9.mp3",
+  "https://cdn.pixabay.com/audio/2023/04/28/audio_d3d2328f81.mp3",
 ];
 
-function pickMusic(vibe?: string): string {
-  // Simple vibe-based selection - can be made smarter later
-  const idx = Math.floor(Math.random() * MUSIC_LIBRARY.length);
-  return MUSIC_LIBRARY[idx];
+interface UploadWithAnalysis {
+  id: string;
+  file_name: string;
+  file_type: string;
+  file_path: string;
+  ai_analysis: Record<string, unknown> | null;
+  video_duration_sec: number | null;
+}
+
+interface ClipSelection {
+  uploadId: string;
+  trimStart: number;
+  trimEnd: number;
+  keepAudio: boolean;
+  reason: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -33,6 +46,7 @@ export async function POST(req: NextRequest) {
   const userId = session.id;
 
   try {
+    // Load project
     const projectRes = await query(
       `SELECT id, title, target_platform, target_duration, vibe, generated_content
        FROM projects WHERE id = $1 AND user_id = $2`,
@@ -46,15 +60,17 @@ export async function POST(req: NextRequest) {
       : (project.generated_content as Record<string, unknown>) || {};
     const script = (gc.script as string) || "";
     const title = (project.title as string) || "Untitled";
-    const vibe = (project.vibe as string) || "";
+    const vibe = (project.vibe as string) || "warm and cinematic";
     const targetDuration = (project.target_duration as number) || 30;
 
-    // Load uploads for this project
+    // Load ALL uploads for this project with analysis data
     const uploadRes = await query(
-      `SELECT id, file_name, file_type, file_path FROM uploads WHERE project_id = $1 AND user_id = $2 ORDER BY created_at ASC`,
+      `SELECT id, file_name, file_type, file_path, ai_analysis, video_duration_sec
+       FROM uploads WHERE project_id = $1 AND user_id = $2 AND file_path IS NOT NULL
+       ORDER BY created_at ASC`,
       [projectId, userId]
     );
-    const uploads = uploadRes.rows.filter(u => u.file_path);
+    const uploads = uploadRes.rows as unknown as UploadWithAnalysis[];
 
     if (uploads.length === 0) {
       return NextResponse.json({ error: "No media uploaded. Upload photos or videos first." }, { status: 400 });
@@ -63,55 +79,130 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.CREATOMATE_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "CREATOMATE_API_KEY not configured" }, { status: 500 });
 
-    // === CINEMATIC LUXURY REEL FORMULA ===
-    // 1. Smooth crossfade transitions (1s fade between clips)
-    // 2. Slow Ken Burns zoom on every clip
-    // 3. Warm color grading (sepia 15%)
-    // 4. Minimal text - just title at start, one line at end
-    // 5. Background music with fade in/out
-    // 6. 9:16 vertical format
+    // === AI CLIP SELECTOR ===
+    // Build a description of all available clips for Claude
+    const clipDescriptions = uploads.map((u, i) => {
+      const a = u.ai_analysis || {};
+      const dur = u.video_duration_sec || (u.file_type === "image" ? null : null);
+      return [
+        `Clip ${i + 1}: ID="${u.id}"`,
+        `Type: ${u.file_type}`,
+        dur ? `Duration: ${dur.toFixed(1)}s` : "Duration: unknown (image or no data)",
+        `File: ${u.file_name}`,
+        a.description ? `Content: ${a.description}` : "",
+        a.mood ? `Mood: ${a.mood}` : "",
+        a.energy ? `Energy: ${a.energy}` : "",
+        a.warmth_score ? `Warmth: ${a.warmth_score}/10` : "",
+        a.has_speech ? `Has speech: yes` : "",
+        a.has_laughter ? `Has laughter: yes` : "",
+        a.has_natural_audio ? `Has natural audio worth keeping: yes` : "",
+        a.best_use ? `Best use: ${a.best_use}` : "",
+        a.best_moment_start !== undefined ? `Best moment: ${a.best_moment_start}s - ${a.best_moment_end}s` : "",
+      ].filter(Boolean).join(" | ");
+    }).join("\n");
 
-    const clipCount = uploads.length;
-    const transitionDur = 1; // 1s crossfade
-    // Each clip gets equal time, accounting for transition overlaps
-    const rawClipDur = (targetDuration + (clipCount - 1) * transitionDur) / clipCount;
-    const clipDuration = Math.max(2, rawClipDur);
+    const selectorPrompt = `You are a cinematic video editor creating a ${targetDuration}-second Instagram/TikTok reel.
 
-    // Media elements - each on track 1 with crossfade transitions
-    const mediaElements = uploads.map((u, i) => {
-      const isVideo = (u.file_type as string) === "video";
+STYLE: Luxury cinematic. Warm tones. Smooth transitions. Music-driven with moments where real audio shines through.
+TITLE: "${title}"
+VIBE: "${vibe}"
+${script ? `SCRIPT/NARRATION CONTEXT: "${script.slice(0, 300)}"` : ""}
+
+AVAILABLE CLIPS:
+${clipDescriptions}
+
+BUILD A TIMELINE:
+- Select clips that total exactly ${targetDuration} seconds
+- For images: you control the duration (3-6 seconds works well)
+- For videos: use trimStart/trimEnd to pick the best segment (use the best_moment data if available)
+- Start with the strongest hook clip (highest energy or most visually striking)
+- Alternate between different clip types for variety
+- Prioritize warmth_score and mood that matches "${vibe}"
+- You CAN reuse a clip at a different trim point
+- Set keepAudio=true for clips with speech, laughter, or natural audio worth hearing
+- Set keepAudio=false for clips where background music should dominate
+
+Return ONLY this JSON array:
+[
+  {"uploadId":"exact-id","trimStart":0,"trimEnd":4,"keepAudio":false,"reason":"strong visual hook"},
+  {"uploadId":"exact-id","trimStart":2,"trimEnd":6,"keepAudio":true,"reason":"natural laughter moment"}
+]`;
+
+    let clipSelections: ClipSelection[];
+    try {
+      const selectorRes = await ai.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1000,
+        temperature: 0.5,
+        messages: [{ role: "user", content: selectorPrompt }],
+      });
+      const raw = selectorRes.content[0]?.type === "text" ? selectorRes.content[0].text : "[]";
+      clipSelections = JSON.parse(raw.replace(/```json\n?|\n?```/g, "").trim());
+      if (!Array.isArray(clipSelections) || clipSelections.length === 0) throw new Error("Empty");
+    } catch {
+      // Fallback: use all clips equally
+      const perClip = targetDuration / uploads.length;
+      clipSelections = uploads.map(u => ({
+        uploadId: u.id,
+        trimStart: 0,
+        trimEnd: u.file_type === "image" ? perClip : Math.min(perClip, u.video_duration_sec || perClip),
+        keepAudio: !!(u.ai_analysis?.has_speech || u.ai_analysis?.has_laughter),
+        reason: "equal distribution fallback",
+      }));
+    }
+
+    // Build upload lookup map
+    const uploadMap = new Map(uploads.map(u => [u.id, u]));
+
+    // === BUILD CREATOMATE SOURCE ===
+    const transitionDur = 0.8;
+    const musicUrl = MUSIC_LIBRARY[Math.floor(Math.random() * MUSIC_LIBRARY.length)];
+
+    // Media elements with smart audio
+    const mediaElements = clipSelections.map((clip, i) => {
+      const upload = uploadMap.get(clip.uploadId);
+      if (!upload) return null;
+
+      const isVideo = upload.file_type === "video";
+      const clipDur = Math.max(1, clip.trimEnd - clip.trimStart);
+
       return {
         type: isVideo ? "video" : "image",
         track: 1,
-        duration: clipDuration,
-        source: u.file_path as string,
+        duration: clipDur,
+        source: upload.file_path,
         fit: "cover",
+        // Trim for videos
+        ...(isVideo ? { trim_start: clip.trimStart, trim_end: clip.trimEnd } : {}),
+        // Smart audio: keep original audio for speech/laughter clips
+        ...(isVideo && clip.keepAudio ? { volume: "100%" } : { volume: "0%" }),
         // Warm cinematic color grading
         color_filter: [
-          { type: "sepia", value: "12%" },
-          { type: "brighten", value: "5%" },
-          { type: "contrast", value: "8%" },
+          { type: "sepia", value: "10%" },
+          { type: "brighten", value: "4%" },
+          { type: "contrast", value: "6%" },
         ],
-        // Slow Ken Burns zoom - cinematic movement
+        // Animations
         animations: [
+          // Ken Burns zoom for images
           ...(isVideo ? [] : [{
             easing: "linear",
             type: "scale",
             scope: "element",
             start_scale: "100%",
-            end_scale: "115%",
+            end_scale: "112%",
           }]),
-          // Crossfade transition between clips (not on first clip)
+          // Crossfade between clips (not on first)
           ...(i > 0 ? [{ type: "fade", duration: `${transitionDur} s` }] : []),
         ],
       };
-    });
+    }).filter(Boolean);
 
-    // Title text - elegant serif, appears for 3s at the start, fades in
+    // Title card - elegant serif
     const titleElement = {
       type: "text",
       track: 2,
-      time: 0.5,
+      time: 0.3,
       duration: 3,
       text: title.toUpperCase(),
       width: "75%",
@@ -136,7 +227,7 @@ export async function POST(req: NextRequest) {
       ],
     };
 
-    // Subtle hook line - one sentence from the script, lower third
+    // One hook line from script at 35%
     const hookLine = script.split(/[.!?]/)[0]?.trim() || "";
     const hookElement = hookLine ? {
       type: "text",
@@ -156,13 +247,10 @@ export async function POST(req: NextRequest) {
       shadow_color: "rgba(0,0,0,0.5)",
       shadow_blur: "10",
       text_alignment: "center",
-      line_height: "140%",
-      animations: [
-        { type: "fade", fade_duration: "0.6 s" },
-      ],
+      animations: [{ type: "fade", fade_duration: "0.6 s" }],
     } : null;
 
-    // End card - small elegant text
+    // End card
     const endElement = {
       type: "text",
       track: 4,
@@ -182,18 +270,21 @@ export async function POST(req: NextRequest) {
       shadow_blur: "12",
       text_alignment: "center",
       letter_spacing: "6%",
-      animations: [
-        { type: "fade", fade_duration: "0.8 s" },
-      ],
+      animations: [{ type: "fade", fade_duration: "0.8 s" }],
     };
 
-    // Background music - cinematic track with fade in/out
-    const musicUrl = pickMusic(vibe);
+    // Background music - ducks when clips have keepAudio=true
+    // Calculate segments where music should be quieter
+    let musicTime = 0;
+    const hasAnySpeechClips = clipSelections.some(c => c.keepAudio);
+
+    // Music volume: lower when speech clips play, higher when they don't
+    const musicVolume = hasAnySpeechClips ? "40%" : "80%";
     const musicElement = {
       type: "audio",
       source: musicUrl,
       duration: targetDuration,
-      volume: "80%",
+      volume: musicVolume,
       audio_fade_in: 1.5,
       audio_fade_out: 2.5,
     };
@@ -213,7 +304,7 @@ export async function POST(req: NextRequest) {
       ],
     };
 
-    console.log("Cinematic render for project:", projectId, "clips:", clipCount, "duration:", targetDuration, "music:", musicUrl);
+    console.log("Cinematic render:", projectId, "clips:", clipSelections.length, "speech clips:", clipSelections.filter(c=>c.keepAudio).length);
 
     const creatomateRes = await fetch("https://api.creatomate.com/v1/renders", {
       method: "POST",
@@ -227,10 +318,8 @@ export async function POST(req: NextRequest) {
     const renderData = await creatomateRes.json();
 
     if (!creatomateRes.ok) {
-      console.error("Creatomate API error:", creatomateRes.status, JSON.stringify(renderData));
-      const errMsg = typeof renderData === "object" && renderData?.message
-        ? renderData.message
-        : JSON.stringify(renderData);
+      console.error("Creatomate error:", creatomateRes.status, JSON.stringify(renderData));
+      const errMsg = typeof renderData === "object" && renderData?.message ? renderData.message : JSON.stringify(renderData);
       return NextResponse.json({ error: `Render error: ${errMsg}` }, { status: 500 });
     }
 
@@ -238,26 +327,25 @@ export async function POST(req: NextRequest) {
     const videoUrl = render?.url;
     const renderId = render?.id;
 
-    if (!videoUrl) {
-      return NextResponse.json({ error: "No video URL returned" }, { status: 500 });
-    }
+    if (!videoUrl) return NextResponse.json({ error: "No video URL returned" }, { status: 500 });
 
-    console.log("Cinematic render queued:", renderId);
+    console.log("Render queued:", renderId);
 
     await query(
       `UPDATE projects SET generated_content = $1, status = 'rendering', updated_at = now()
        WHERE id = $2 AND user_id = $3`,
-      [JSON.stringify({ ...gc, videoUrl, renderId, renderStatus: "planned" }), projectId, userId]
+      [JSON.stringify({ ...gc, videoUrl, renderId, renderStatus: "planned", clipSelections }), projectId, userId]
     );
 
     return NextResponse.json({
       videoUrl,
       renderId,
       status: "rendering",
-      message: "Your cinematic video is rendering. It will be ready in 30-60 seconds.",
+      clipSelections,
+      message: "Your cinematic video is rendering. Ready in 30-60 seconds.",
     });
   } catch (err) {
-    console.error("Cinematic compose error:", err);
+    console.error("Compose error:", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message.slice(0, 400) : "Video rendering failed" },
       { status: 500 }

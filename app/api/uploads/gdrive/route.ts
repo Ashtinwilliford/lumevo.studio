@@ -134,7 +134,17 @@ export async function POST(req: NextRequest) {
         [session.id, fileType, filename, mimetype, buffer.length, filePath]
       );
 
-      results.push(insertRow.rows[0]);
+      const uploadRow = insertRow.rows[0];
+      results.push(uploadRow);
+
+      // Fire-and-forget AI analysis
+      if (uploadRow?.id) {
+        fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/uploads/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
+          body: JSON.stringify({ uploadId: uploadRow.id }),
+        }).catch(() => {});
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Download failed";
       errors.push(`${driveUrl.slice(0, 50)}: ${msg}`);
