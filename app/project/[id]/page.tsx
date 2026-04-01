@@ -32,11 +32,21 @@ export default function ProjectPage() {
       const res = await fetch("/api/video/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: id }),
+        body: JSON.stringify({
+          title: project?.title || "Untitled",
+          uploadIds: uploads.map(u => u.id),
+          platform: project?.target_platform || "tiktok",
+          duration: project?.target_duration || 30,
+          vibe: project?.vibe || null,
+          draftProjectId: id,
+        }),
       });
       const data = await res.json();
       if (data.error) { alert(data.error); setGenerating(false); return; }
-      alert("Video is being generated! Check back in 60 seconds.");
+      if (data.script) {
+        setProject(prev => prev ? { ...prev, generated_content: { script: data.script, caption: data.caption } } : prev);
+      }
+      alert("Video script generated! Refresh to see results.");
     } catch (err) {
       alert("Generation failed. Try again.");
     }

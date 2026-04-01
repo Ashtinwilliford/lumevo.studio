@@ -182,12 +182,21 @@ Respond with ONLY the caption text and hashtags. No labels, no quotes around it.
   const script = completion.content[0]?.type === "text" ? completion.content[0].text.trim() : "";
   const caption = (captionCompletion.content[0]?.type === "text" ? captionCompletion.content[0].text.trim() : "");
 
-  const projectRows = await query(
-    `INSERT INTO projects (user_id, title, project_type, target_platform, target_duration, prompt_text, status, generated_content)
-     VALUES ($1, $2, 'video', $3, $4, $5, 'scripting', $6) RETURNING id`,
-    [userId, title, platform || "tiktok", duration || 30, title, JSON.stringify({ script, caption, vibe })]
-  );
-  const projectId = projectRows.rows[0]?.id;
+  let projectId = draftProjectId;
+  if (draftProjectId) {
+    await query(
+      `UPDATE projects SET title = $1, project_type = 'video', target_platform = $2, target_duration = $3, prompt_text = $4, status = 'scripting', generated_content = $5, updated_at = now()
+       WHERE id = $6 AND user_id = $7`,
+      [title, platform || "tiktok", duration || 30, title, JSON.stringify({ script, caption, vibe }), draftProjectId, userId]
+    );
+  } else {
+    const projectRows = await query(
+      `INSERT INTO projects (user_id, title, project_type, target_platform, target_duration, prompt_text, status, generated_content)
+       VALUES ($1, $2, 'video', $3, $4, $5, 'scripting', $6) RETURNING id`,
+      [userId, title, platform || "tiktok", duration || 30, title, JSON.stringify({ script, caption, vibe })]
+    );
+    projectId = projectRows.rows[0]?.id;
+  }
 
   if (uploadIds?.length > 0) {
     for (const uploadId of uploadIds) {
