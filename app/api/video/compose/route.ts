@@ -7,13 +7,12 @@ export const maxDuration = 60;
 
 const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
-// Curated royalty-free cinematic music
+// Publicly accessible royalty-free music tracks
 const MUSIC_LIBRARY = [
-  "https://cdn.pixabay.com/audio/2024/11/29/audio_688ab0e968.mp3",
-  "https://cdn.pixabay.com/audio/2024/02/14/audio_8e53869e0a.mp3",
-  "https://cdn.pixabay.com/audio/2023/10/25/audio_fddaa5c0e1.mp3",
-  "https://cdn.pixabay.com/audio/2024/09/10/audio_6e1f4eb5c9.mp3",
-  "https://cdn.pixabay.com/audio/2023/04/28/audio_d3d2328f81.mp3",
+  "https://cdn.creatomate.com/demo/music1.mp3",
+  "https://cdn.creatomate.com/demo/music2.mp3",
+  "https://cdn.creatomate.com/demo/music3.mp3",
+  "https://cdn.creatomate.com/demo/music4.mp3",
 ];
 
 interface UploadWithAnalysis {
