@@ -266,7 +266,7 @@ export async function POST(req: NextRequest) {
     let voiceoverUrl: string | null = null;
     if (plan.voiceover_needed) {
       const voRes = await query(
-        "SELECT audio_url FROM voiceovers WHERE project_id = $1 AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
+        "SELECT audio_url FROM voiceovers WHERE project_id = $1 AND status = 'completed' AND audio_type != 'music' ORDER BY created_at DESC LIMIT 1",
         [projectId]
       );
       voiceoverUrl = (voRes.rows[0]?.audio_url as string) || null;
@@ -275,8 +275,38 @@ export async function POST(req: NextRequest) {
     const title = project.title as string;
     const targetDuration = (project.target_duration as number) || 30;
 
+    // Generate music with ElevenLabs if key is configured
+    let musicUrl: string | null = null;
+    if (process.env.ELEVENLABS_API_KEY) {
+      try {
+        // Check if we already have a music track for this project
+        const existingMusic = await query(
+          "SELECT audio_url FROM voiceovers WHERE project_id = $1 AND audio_type = 'music' AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
+          [projectId]
+        );
+        if (existingMusic.rows[0]?.audio_url) {
+          musicUrl = existingMusic.rows[0].audio_url as string;
+        } else {
+          // Generate new music
+          const musicRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/music/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: "" },
+            body: JSON.stringify({ projectId, durationSeconds: Math.min(targetDuration + 5, 60) }),
+          });
+          if (musicRes.ok) {
+            const musicData = await musicRes.json();
+            musicUrl = musicData.audioUrl || null;
+          }
+        }
+        await logStage(projectId, userId, "music_generation", { prompt: plan.music_brief }, { musicUrl }, undefined, 0);
+      } catch (err) {
+        console.error("Music generation failed, using fallback:", err);
+        // Non-fatal — falls back to Creatomate CDN music
+      }
+    }
+
     // Build Creatomate source
-    const source = buildCreatomateSource(plan, clipMap, style, targetDuration, title, voiceoverUrl);
+    const source = buildCreatomateSource(plan, clipMap, style, targetDuration, title, voiceoverUrl, musicUrl);
 
     // Send to Creatomate
     const apiKey = process.env.CREATOMATE_API_KEY;

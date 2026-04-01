@@ -36,6 +36,24 @@ export async function GET(req: NextRequest) {
   }
 }
 
+export async function PATCH(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+  try {
+    const { uploadIds, projectId } = await req.json() as { uploadIds: string[]; projectId: string };
+    if (!uploadIds?.length || !projectId) return NextResponse.json({ error: "uploadIds and projectId required" }, { status: 400 });
+    const placeholders = uploadIds.map((_, i) => `$${i + 3}`).join(", ");
+    await query(
+      `UPDATE uploads SET project_id = $1 WHERE user_id = $2 AND id IN (${placeholders})`,
+      [projectId, session.id, ...uploadIds]
+    );
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("Upload PATCH error:", err);
+    return NextResponse.json({ error: "Failed to link uploads" }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
