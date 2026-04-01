@@ -11,6 +11,11 @@ cloudinary.config({
 
 export const maxDuration = 120;
 
+function extractFolderId(url: string): string | null {
+  const m = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  return m?.[1] || null;
+}
+
 function isGDriveFolder(url: string): boolean {
   return /\/drive\/folders\/|\/drive\/u\/\d+\/folders\//.test(url);
 }
@@ -26,6 +31,56 @@ function extractGDriveId(url: string): string | null {
     if (m?.[1]) return m[1];
   }
   return null;
+}
+
+// List files in a shared Google Drive folder using the public API
+async function listFolderFiles(folderId: string): Promise<{ id: string; name: string; mimeType: string }[]> {
+  const apiKey = process.env.GOOGLE_API_KEY;
+
+  if (apiKey) {
+    // Use Google Drive API v3 if API key is available
+    const url = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents&fields=files(id,name,mimeType)&key=${apiKey}&pageSize=50`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      return (data.files || []).filter((f: { mimeType: string }) =>
+        f.mimeType.startsWith("video/") || f.mimeType.startsWith("image/")
+      );
+    }
+  }
+
+  // Fallback: scrape the folder's public HTML page
+  const folderUrl = `https://drive.google.com/drive/folders/${folderId}`;
+  const res = await fetch(folderUrl, {
+    headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+  });
+  if (!res.ok) throw new Error("Can't access folder. Make sure it's shared as 'Anyone with the link'");
+
+  const html = await res.text();
+
+  // Extract file IDs and names from the folder HTML
+  // Google Drive embeds file data in the page as JS data
+  const files: { id: string; name: string; mimeType: string }[] = [];
+
+  // Pattern 1: Look for file IDs in data attributes or JS
+  const idMatches = html.matchAll(/\["([a-zA-Z0-9_-]{20,})","([^"]+?)","(video\/[^"]*|image\/[^"]*)"/g);
+  for (const m of idMatches) {
+    files.push({ id: m[1], name: m[2], mimeType: m[3] });
+  }
+
+  // Pattern 2: Simpler extraction - find all file IDs linked in the page
+  if (files.length === 0) {
+    const linkMatches = html.matchAll(/\/file\/d\/([a-zA-Z0-9_-]+)/g);
+    const seenIds = new Set<string>();
+    for (const m of linkMatches) {
+      if (!seenIds.has(m[1])) {
+        seenIds.add(m[1]);
+        files.push({ id: m[1], name: `file-${m[1].slice(0, 8)}`, mimeType: "video/mp4" });
+      }
+    }
+  }
+
+  return files;
 }
 
 async function downloadGDriveFile(fileId: string): Promise<{ buffer: Buffer; filename: string; mimetype: string }> {
@@ -70,85 +125,105 @@ async function downloadGDriveFile(fileId: string): Promise<{ buffer: Buffer; fil
   return { buffer, filename, mimetype: contentType.split(";")[0].trim() };
 }
 
+async function importOneFile(
+  fileId: string,
+  userId: string,
+  cookie: string
+): Promise<{ upload: Record<string, unknown> | null; error: string | null }> {
+  try {
+    const { buffer, filename, mimetype } = await downloadGDriveFile(fileId);
+
+    const isVideo = mimetype.startsWith("video/");
+    const isImage = mimetype.startsWith("image/");
+    const fileType = isVideo ? "video" : isImage ? "image" : "video";
+
+    const cloudResult = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: `lumevo/${userId}`, resource_type: isVideo ? "video" : "image" },
+        (error, result) => { if (error) reject(error); else resolve(result as Record<string, unknown>); }
+      );
+      stream.end(buffer);
+    });
+
+    const filePath = cloudResult.secure_url as string;
+
+    const insertRow = await query(
+      `INSERT INTO uploads (user_id, file_type, file_name, mime_type, file_size, file_path, analysis_status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'ready') RETURNING id, file_type, file_name, mime_type, file_size, file_path, analysis_status, created_at`,
+      [userId, fileType, filename, mimetype, buffer.length, filePath]
+    );
+
+    const uploadRow = insertRow.rows[0];
+
+    // Fire-and-forget AI analysis
+    if (uploadRow?.id) {
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/uploads/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({ uploadId: uploadRow.id }),
+      }).catch(() => {});
+    }
+
+    return { upload: uploadRow, error: null };
+  } catch (err) {
+    return { upload: null, error: err instanceof Error ? err.message : "Download failed" };
+  }
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
-  let urls: string[];
-  try {
-    const body = await req.json() as { url?: string; urls?: string[] };
-    if (body.urls && Array.isArray(body.urls)) {
-      urls = body.urls.map(u => u.trim()).filter(Boolean);
-    } else if (body.url) {
-      urls = [body.url.trim()];
-    } else {
-      return NextResponse.json({ error: "No URL provided" }, { status: 400 });
-    }
-  } catch {
+  let body;
+  try { body = await req.json() as { url?: string; urls?: string[] }; } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  const inputUrl = body.url?.trim() || "";
+  const inputUrls = body.urls?.map(u => u.trim()).filter(Boolean) || [];
+  const allUrls = inputUrl ? [inputUrl, ...inputUrls] : inputUrls;
+
+  if (allUrls.length === 0) return NextResponse.json({ error: "No URL provided" }, { status: 400 });
+
   const results: Record<string, unknown>[] = [];
   const errors: string[] = [];
+  const cookie = req.headers.get("cookie") || "";
 
-  for (const driveUrl of urls) {
+  for (const driveUrl of allUrls) {
+    // FOLDER SUPPORT: list all files and import each one
     if (isGDriveFolder(driveUrl)) {
-      errors.push(`Folder links not supported. Share individual files instead.`);
-      continue;
-    }
+      const folderId = extractFolderId(driveUrl);
+      if (!folderId) { errors.push("Couldn't parse folder ID"); continue; }
 
-    const fileId = extractGDriveId(driveUrl);
-    if (!fileId) {
-      errors.push(`Couldn't find file ID in: ${driveUrl.slice(0, 60)}...`);
-      continue;
-    }
+      console.log("Importing Google Drive folder:", folderId);
 
-    try {
-      const { buffer, filename, mimetype } = await downloadGDriveFile(fileId);
+      try {
+        const files = await listFolderFiles(folderId);
+        if (files.length === 0) {
+          errors.push("No media files found in folder. Make sure the folder is shared as 'Anyone with the link'.");
+          continue;
+        }
 
-      const isVideo = mimetype.startsWith("video/");
-      const isImage = mimetype.startsWith("image/");
-      const fileType = isVideo ? "video" : isImage ? "image" : "video";
+        console.log(`Found ${files.length} files in folder`);
 
-      // Upload to Cloudinary
-      const cloudResult = await new Promise<Record<string, unknown>>((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: `lumevo/${session.id}`,
-            resource_type: isVideo ? "video" : "image",
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result as Record<string, unknown>);
-          }
-        );
-        stream.end(buffer);
-      });
-
-      const filePath = cloudResult.secure_url as string;
-
-      // Save to database
-      const insertRow = await query(
-        `INSERT INTO uploads (user_id, file_type, file_name, mime_type, file_size, file_path, analysis_status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'ready') RETURNING id, file_type, file_name, mime_type, file_size, file_path, analysis_status, created_at`,
-        [session.id, fileType, filename, mimetype, buffer.length, filePath]
-      );
-
-      const uploadRow = insertRow.rows[0];
-      results.push(uploadRow);
-
-      // Fire-and-forget AI analysis
-      if (uploadRow?.id) {
-        fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/uploads/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: req.headers.get("cookie") || "" },
-          body: JSON.stringify({ uploadId: uploadRow.id }),
-        }).catch(() => {});
+        for (const file of files) {
+          const { upload, error } = await importOneFile(file.id, session.id, cookie);
+          if (upload) results.push(upload);
+          if (error) errors.push(`${file.name}: ${error}`);
+        }
+      } catch (err) {
+        errors.push(err instanceof Error ? err.message : "Folder import failed");
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Download failed";
-      errors.push(`${driveUrl.slice(0, 50)}: ${msg}`);
+      continue;
     }
+
+    // SINGLE FILE
+    const fileId = extractGDriveId(driveUrl);
+    if (!fileId) { errors.push(`Couldn't find file ID in: ${driveUrl.slice(0, 60)}`); continue; }
+
+    const { upload, error } = await importOneFile(fileId, session.id, cookie);
+    if (upload) results.push(upload);
+    if (error) errors.push(error);
   }
 
   return NextResponse.json({
