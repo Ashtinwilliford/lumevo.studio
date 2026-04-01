@@ -10,7 +10,12 @@
       "mcp__aa6b94f3-b545-4c7f-acba-88aaf2fc999c__get_deployment",
       "WebSearch",
       "WebFetch(domain:creatomate.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(node -e \"const c = require\\(''creatomate''\\); console.log\\(Object.keys\\(c\\)\\); console.log\\(typeof c.Client\\);\")",
+      "Bash(node -e \":*)",
+      "Bash(NODE_TLS_REJECT_UNAUTHORIZED=0 node -e \":*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "mcp__aa6b94f3-b545-4c7f-acba-88aaf2fc999c__web_fetch_vercel_url"
     ]
   }
 }

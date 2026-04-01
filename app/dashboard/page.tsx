@@ -244,35 +244,43 @@ function UploadsSection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
 
 function VideoSection({ user, uploads, onRefresh }: { user: User; uploads: Upload[]; onRefresh: () => void }) {
   const router = useRouter();
-  const [step, setStep] = useState<"name" | "chat">("name");
+  type FlowStep = "details" | "upload" | "generate";
+  const [step, setStep] = useState<FlowStep>("details");
   const [projectName, setProjectName] = useState("");
-  const [messages, setMessages] = useState<{ id: string; role: "user" | "ai"; content: string }[]>([
-    { id: "0", role: "ai", content: "What are we creating today? Tell me the topic - a trip, a product, a moment, a routine. The more specific the better." }
-  ]);
-  const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [projectState, setProjectState] = useState<Record<string, unknown>>({});
+  const [platform, setPlatform] = useState("instagram");
+  const [vibe, setVibe] = useState("cinematic");
+  const [duration, setDuration] = useState(30);
   const [draftProjectId, setDraftProjectId] = useState<string | null>(null);
-  const [needsUpload, setNeedsUpload] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [useVoiceClone, setUseVoiceClone] = useState(false);
-  const [includeMusic, setIncludeMusic] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [localUploads, setLocalUploads] = useState<Upload[]>(uploads);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
-  const [quickReplies, setQuickReplies] = useState<string[]>([]);
-  const [trialBlocked, setTrialBlocked] = useState(false);
-  const [result, setResult] = useState<{ projectId?: string; script?: string; caption?: string; hasVoice?: boolean } | null>(null);
   const [gdriveInput, setGdriveInput] = useState("");
   const [gdriveImporting, setGdriveImporting] = useState(false);
   const [gdriveStatus, setGdriveStatus] = useState<string | null>(null);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [genStatus, setGenStatus] = useState<string | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [scriptResult, setScriptResult] = useState<{ script?: string; caption?: string } | null>(null);
+  const [rendering, setRendering] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setLocalUploads(uploads); }, [uploads]);
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isTyping, needsUpload]);
 
-  function toggleSelect(id: string) {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  // Save project as soon as user enters name
+  async function saveProject() {
+    if (!projectName.trim() || saving) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: projectName.trim(), target_platform: platform, vibe, target_duration: duration, project_type: "video" }),
+      });
+      const data = await res.json();
+      if (data.project?.id) setDraftProjectId(data.project.id);
+    } catch (err) { console.error(err); }
+    setSaving(false);
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -285,18 +293,13 @@ function VideoSection({ user, uploads, onRefresh }: { user: User; uploads: Uploa
         const sigRes = await fetch("/api/uploads/sign");
         const sig = await sigRes.json();
         const form = new FormData();
-        form.append("file", file);
-        form.append("signature", sig.signature);
-        form.append("timestamp", String(sig.timestamp));
-        form.append("folder", sig.folder);
-        form.append("api_key", sig.apiKey);
+        form.append("file", file); form.append("signature", sig.signature); form.append("timestamp", String(sig.timestamp)); form.append("folder", sig.folder); form.append("api_key", sig.apiKey);
         const res = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`, { method: "POST", body: form });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error?.message || "Upload failed");
         const saveRes = await fetch("/api/uploads", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileName: file.name, fileType: file.type.startsWith("video/") ? "video" : "image", mimeType: file.type, fileSize: file.size, filePath: data.secure_url }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: draftProjectId, fileName: file.name, fileType: file.type.startsWith("video/") ? "video" : "image", mimeType: file.type, fileSize: file.size, filePath: data.secure_url }),
         });
         const saved = await saveRes.json();
         if (saved.upload) newUploads.push(saved.upload as Upload);
@@ -304,423 +307,299 @@ function VideoSection({ user, uploads, onRefresh }: { user: User; uploads: Uploa
       setLocalUploads(prev => [...newUploads, ...prev]);
       setSelectedIds(prev => [...newUploads.map(u => u.id), ...prev]);
       onRefresh();
-    } catch (err) {
-      console.error("Upload error:", err);
-    } finally {
-      setUploadingFiles(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
+    } catch (err) { console.error("Upload error:", err); }
+    finally { setUploadingFiles(false); if (fileRef.current) fileRef.current.value = ""; }
   }
 
-  async function sendMessage(msg?: string) {
-    const text = msg || input.trim();
-    if (!text) return;
-    setInput("");
-    setQuickReplies([]);
-    const userMsg = { id: Date.now().toString(), role: "user" as const, content: text };
-    setMessages(prev => [...prev, userMsg]);
-    setIsTyping(true);
-    try {
-      const res = await fetch("/api/project/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history: messages, projectState, draftProjectId }),
-      });
-      const data = await res.json();
-      if (data.trialLimitReached) { setTrialBlocked(true); setIsTyping(false); return; }
-      if (data.reply) setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: "ai", content: data.reply }]);
-      if (data.projectState) setProjectState(data.projectState);
-      if (data.projectId) setDraftProjectId(data.projectId);
-      if (data.needsUpload) setNeedsUpload(true);
-      if (data.quickReplies) setQuickReplies(data.quickReplies);
-      if (data.result) { setResult(data.result); setNeedsUpload(false); }
-    } catch (err) {
-      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: "ai", content: "Something went wrong. Try again." }]);
-    } finally {
-      setIsTyping(false);
-    }
-  }
-
-  function handleConfirmUploads() {
-    setNeedsUpload(false);
-    const uploadSummary = selectedIds.length > 0
-      ? `I have selected ${selectedIds.length} clip${selectedIds.length !== 1 ? "s" : ""} for the video.${useVoiceClone ? " Use my voice clone for narration." : ""}${includeMusic ? " Include background music." : ""}`
-      : "No clips - create from brand voice only.";
-    sendMessage(uploadSummary);
-  }
-
-  function handleReset() {
-    setMessages([{ id: "0", role: "ai", content: "What are we creating today? Tell me the topic - a trip, a product, a moment, a routine. The more specific the better." }]);
-    setInput(""); setProjectState({}); setDraftProjectId(null); setNeedsUpload(false);
-    setSelectedIds([]); setQuickReplies([]); setTrialBlocked(false); setResult(null);
-  }
-
-  async function generateVideo() {
+  async function generateScript() {
     if (!draftProjectId) return;
+    setGenError(null);
+    setGenStatus("Your AI creative director is writing the script...");
     try {
       const res = await fetch("/api/video/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: draftProjectId }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: projectName, uploadIds: selectedIds, platform, duration, vibe, draftProjectId }),
       });
       const data = await res.json();
-      if (data.error) { alert(data.error); return; }
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: "ai", content: "Your video is being generated. Check your project page in about 60 seconds." }]);
-    } catch (err) {
-      alert("Video generation failed. Try again.");
-    }
+      if (data.error) { setGenError(data.error); setGenStatus(null); return; }
+      if (data.script) setScriptResult({ script: data.script, caption: data.caption });
+      setGenStatus(null);
+    } catch (err) { setGenError("Script generation failed. Try again."); setGenStatus(null); }
   }
 
-    if (step === "name") {
+  async function renderVideo() {
+    if (!draftProjectId) return;
+    setRendering(true);
+    setGenError(null);
+    setGenStatus("Patience... we're crafting your masterpiece. This takes 3-5 minutes.");
+    try {
+      const renderRes = await fetch("/api/video/compose", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: draftProjectId }),
+      });
+      const renderData = await renderRes.json();
+      if (renderData.error) { setGenError(renderData.error); setRendering(false); setGenStatus(null); return; }
+
+      if (renderData.renderId) {
+        let attempts = 0;
+        while (attempts < 60) {
+          await new Promise(r => setTimeout(r, 5000));
+          attempts++;
+          try {
+            const statusRes = await fetch(`/api/video/status?renderId=${renderData.renderId}`);
+            const statusData = await statusRes.json();
+            if (statusData.status === "succeeded") {
+              setGenStatus(null);
+              setRendering(false);
+              router.push(`/project/${draftProjectId}`);
+              return;
+            } else if (statusData.status === "failed") {
+              setGenError(statusData.errorMessage || "Render failed");
+              setGenStatus(null);
+              setRendering(false);
+              return;
+            }
+            setGenStatus(`Crafting your masterpiece... ${Math.min(attempts * 5, 300)}s`);
+          } catch { /* keep polling */ }
+        }
+      }
+    } catch (err) { setGenError("Rendering failed. Try again."); }
+    setRendering(false);
+    setGenStatus(null);
+  }
+
+  const VIBES = ["cinematic", "warm & cozy", "fun & playful", "bold & edgy", "elegant", "energetic", "aesthetic", "dreamy"];
+  const PLATFORMS = [
+    { id: "instagram", label: "Instagram" },
+    { id: "tiktok", label: "TikTok" },
+    { id: "youtube", label: "YouTube" },
+  ];
+  const DURATIONS = [
+    { val: 15, label: "15s" },
+    { val: 30, label: "30s" },
+    { val: 60, label: "60s" },
+  ];
+
+  const mediaItems = localUploads.filter(u => u.file_type === "video" || u.file_type === "image");
+
+  // === STEP 1: PROJECT DETAILS ===
+  if (step === "details") {
     return (
-      <div style={{ maxWidth: 560 }}>
-        <div style={{ marginBottom: 48 }}>
+      <div style={{ maxWidth: 620 }}>
+        <div style={{ marginBottom: 40 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 12 }}>New Project</div>
-          <h2 style={{ fontFamily: "Syne, sans-serif", fontSize: 36, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 8 }}>What are we making?</h2>
-          <p style={{ fontSize: 15, color: "#7c7660" }}>Give your project a name to get started.</p>
-        </div>
-        <div style={{ background: "#fff", borderRadius: 16, padding: "32px", border: "1px solid rgba(0,0,0,0.07)" }}>
-          <input
-            autoFocus
-            value={projectName}
-            onChange={e => setProjectName(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === "Enter" && projectName.trim()) {
-                setMessages([{ id: "0", role: "ai", content: `Love it. Tell me everything about "${projectName}" - what happened, what you want people to feel, and who this is for.` }]);
-                setProjectState({ title: projectName.trim() });
-                setStep("chat");
-              }
-            }}
-            placeholder="e.g. My Bali Trip, Product Launch, Morning Routine..."
-            style={{ width: "100%", padding: "16px 20px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.12)", fontFamily: "inherit", fontSize: 16, outline: "none", boxSizing: "border-box", marginBottom: 16 }}
-          />
-          <button
-            onClick={() => {
-              if (!projectName.trim()) return;
-              setMessages([{ id: "0", role: "ai", content: `Love it. Tell me everything about "${projectName}" - what happened, what you want people to feel, and who this is for.` }]);
-              setProjectState({ title: projectName.trim() });
-              setStep("chat");
-            }}
-            disabled={!projectName.trim()}
-            style={{ width: "100%", background: projectName.trim() ? "#FF2D2D" : "#f5f5f0", color: projectName.trim() ? "#fff" : "#b5b09a", border: "none", borderRadius: 12, padding: "14px 20px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: projectName.trim() ? "pointer" : "default" }}
-          >
-            Start Creating
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (trialBlocked) {
-    return (
-      <div>
-        <div style={{ marginBottom: 24 }}>
-          <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800 }}>Trial Limit Reached</h2>
-        </div>
-        <div style={{ background: "#1a1a1a", borderRadius: 20, padding: "48px 40px", textAlign: "center" }}>
-          <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 16 }}>Free Trial</div>
-          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 24, fontWeight: 800, color: "#fff", marginBottom: 12 }}>You have used both trial projects</div>
-          <div style={{ fontSize: 15, color: "rgba(255,255,255,0.55)", maxWidth: 400, margin: "0 auto 32px" }}>
-            Your free trial includes 2 projects. To keep creating, pick a plan. Your work is saved.
-          </div>
-          <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
-            {[{ name: "Creator", price: "$29/mo" }, { name: "Pro", price: "$79/mo" }, { name: "Elite", price: "$149/mo" }].map(p => (
-              <button key={p.name} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "12px 24px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                {p.name} - {p.price}
-              </button>
-            ))}
-          </div>
-          <div style={{ marginTop: 20, fontSize: 12, color: "rgba(255,255,255,0.3)" }}>Cancel anytime - No hidden fees</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (result) {
-    const scriptLines = (result.script || "").split("\n").filter(Boolean);
-    return (
-      <div>
-        <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 6 }}>Ready</div>
-            <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800 }}>{String(projectState.title || "Your Content")}</h2>
-          </div>
-          <button onClick={handleReset} style={{ background: "none", border: "1px solid rgba(0,0,0,0.12)", borderRadius: 999, padding: "8px 18px", fontFamily: "inherit", fontSize: 13, cursor: "pointer", color: "#7c7660" }}>
-            Start fresh
-          </button>
+          <h2 style={{ fontFamily: "Syne, sans-serif", fontSize: 36, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 8 }}>Let&apos;s create something</h2>
+          <p style={{ fontSize: 15, color: "#7c7660" }}>Set up your project, then we&apos;ll add media and generate.</p>
         </div>
 
-        {result.projectId && (
-          <div style={{ marginBottom: 24, display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button onClick={() => router.push(`/project/${result.projectId}`)} style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "14px 32px", fontFamily: "inherit", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
-              Review Script & Render Video
-            </button>
+        <div style={{ background: "#fff", borderRadius: 20, padding: "32px", border: "1px solid rgba(0,0,0,0.07)" }}>
+          {/* Project Name */}
+          <div style={{ marginBottom: 28 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: "#7c7660", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Project Name</label>
+            <input autoFocus value={projectName} onChange={e => setProjectName(e.target.value)}
+              placeholder="e.g. Bali Trip, Product Launch, Morning Routine..."
+              style={{ width: "100%", padding: "14px 18px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 16, outline: "none", boxSizing: "border-box" }} />
           </div>
-        )}
 
-        {scriptLines.length > 0 && (
-          <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 16, overflow: "hidden" }}>
-            <div style={{ padding: "18px 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>Script</div>
-              <button onClick={() => navigator.clipboard?.writeText(result.script || "")} style={{ background: "none", border: "none", fontSize: 11, color: "#FF2D2D", cursor: "pointer", fontWeight: 700 }}>Copy</button>
-            </div>
-            <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-              {scriptLines.map((line, i) => (
-                <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                  <div style={{ width: 24, height: 24, borderRadius: 6, background: i === 0 ? "#FF2D2D" : "#f5f5f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: i === 0 ? "#fff" : "#7c7660", flexShrink: 0 }}>
-                    {i + 1}
-                  </div>
-                  <p style={{ fontSize: 14, lineHeight: 1.7, color: "#1a1a1a", margin: 0 }}>{line}</p>
-                </div>
+          {/* Platform */}
+          <div style={{ marginBottom: 28 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: "#7c7660", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Platform</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {PLATFORMS.map(p => (
+                <button key={p.id} onClick={() => setPlatform(p.id)}
+                  style={{ flex: 1, padding: "12px 16px", borderRadius: 12, border: platform === p.id ? "2px solid #FF2D2D" : "1.5px solid rgba(0,0,0,0.1)", background: platform === p.id ? "#FF2D2D" : "#fff", color: platform === p.id ? "#fff" : "#1a1a1a", fontFamily: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                  {p.label}
+                </button>
               ))}
             </div>
           </div>
-        )}
 
-        {result.caption && (
-          <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", overflow: "hidden" }}>
-            <div style={{ padding: "18px 20px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>Caption</div>
-              <button onClick={() => navigator.clipboard?.writeText(result.caption || "")} style={{ background: "none", border: "none", fontSize: 11, color: "#FF2D2D", cursor: "pointer", fontWeight: 700 }}>Copy</button>
-            </div>
-            <div style={{ padding: "16px 20px" }}>
-              <p style={{ fontSize: 14, lineHeight: 1.75, color: "#1a1a1a", margin: 0 }}>{result.caption}</p>
+          {/* Vibe */}
+          <div style={{ marginBottom: 28 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: "#7c7660", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Vibe</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {VIBES.map(v => (
+                <button key={v} onClick={() => setVibe(v)}
+                  style={{ padding: "8px 16px", borderRadius: 999, border: vibe === v ? "2px solid #FF2D2D" : "1.5px solid rgba(0,0,0,0.1)", background: vibe === v ? "#FF2D2D" : "#fff", color: vibe === v ? "#fff" : "#1a1a1a", fontFamily: "inherit", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+                  {v}
+                </button>
+              ))}
             </div>
           </div>
-        )}
+
+          {/* Duration */}
+          <div style={{ marginBottom: 32 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: "#7c7660", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 8 }}>Duration</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {DURATIONS.map(d => (
+                <button key={d.val} onClick={() => setDuration(d.val)}
+                  style={{ flex: 1, padding: "12px 16px", borderRadius: 12, border: duration === d.val ? "2px solid #FF2D2D" : "1.5px solid rgba(0,0,0,0.1)", background: duration === d.val ? "#FF2D2D" : "#fff", color: duration === d.val ? "#fff" : "#1a1a1a", fontFamily: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button onClick={async () => { await saveProject(); setStep("upload"); }} disabled={!projectName.trim() || saving}
+            style={{ width: "100%", background: projectName.trim() ? "#FF2D2D" : "#f5f5f0", color: projectName.trim() ? "#fff" : "#b5b09a", border: "none", borderRadius: 12, padding: "16px 20px", fontFamily: "inherit", fontSize: 16, fontWeight: 700, cursor: projectName.trim() ? "pointer" : "default" }}>
+            {saving ? "Saving..." : "Next: Add Media"}
+          </button>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        {draftProjectId && projectState.title ? (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontSize: 12, color: "#7c7660", marginBottom: 6 }}>Resuming saved project</div>
-              <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, marginBottom: 4 }}>{String(projectState.title)}</h2>
-              <p style={{ fontSize: 14, color: "#7c7660" }}>Pick up exactly where you left off.</p>
-            </div>
-            <button onClick={handleReset} style={{ background: "none", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 999, padding: "8px 16px", fontFamily: "inherit", fontSize: 12, cursor: "pointer", color: "#7c7660" }}>Start fresh</button>
-          </div>
-        ) : (
-          <>
-            <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, marginBottom: 4 }}>Create Content</h2>
-            <p style={{ fontSize: 14, color: "#7c7660" }}>Tell your AI creative director what you want to make.</p>
-          </>
-        )}
-      </div>
-
-      <div style={{ background: "#fff", borderRadius: 20, border: "1px solid rgba(0,0,0,0.07)", overflow: "hidden" }}>
-        <div style={{ maxHeight: 420, overflowY: "auto", padding: "24px 20px 16px" }}>
-          {messages.map(msg => (
-            <div key={msg.id} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start", gap: 10, marginBottom: 16, alignItems: "flex-start" }}>
-              {msg.role === "ai" && (
-                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#fff", flexShrink: 0 }}>L</div>
-              )}
-              <div style={{ maxWidth: "80%", padding: "12px 16px", borderRadius: msg.role === "user" ? "18px 4px 18px 18px" : "4px 18px 18px 18px", background: msg.role === "user" ? "#FF2D2D" : "#f5f5f0", color: msg.role === "user" ? "#fff" : "#1a1a1a", fontSize: 14, lineHeight: 1.6 }}>
-                {msg.content}
-              </div>
-            </div>
-          ))}
-
-          {isTyping && (
-            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, color: "#fff", flexShrink: 0 }}>L</div>
-              <div style={{ padding: "14px 18px", borderRadius: "4px 18px 18px 18px", background: "#f5f5f0", display: "flex", gap: 4 }}>
-                {[0, 1, 2].map(i => (
-                  <span key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "#b5b09a", display: "inline-block", animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {needsUpload && !isTyping && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ background: "linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)", borderRadius: 16, padding: "20px", marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 8 }}>Add Your Media</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 4 }}>Upload your clips and photos</div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", lineHeight: 1.6 }}>Add up to 10 files. Lumevo will use them to build your video.</div>
-              </div>
-
-              {/* Google Drive Import - TOP of upload section */}
-              <div style={{ background: "#fff", borderRadius: 12, border: "1px solid rgba(0,0,0,0.07)", padding: "14px 16px", marginBottom: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#7c7660", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Import from Google Drive</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    value={gdriveInput}
-                    onChange={e => setGdriveInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === "Enter" && gdriveInput.trim()) {
-                        setGdriveImporting(true);
-                        setGdriveStatus("Importing...");
-                        fetch("/api/uploads/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gdriveInput.trim(), projectId: draftProjectId }) })
-                          .then(r => r.json())
-                          .then(data => {
-                            if (data.error) { setGdriveStatus(data.error); }
-                            else if (data.uploads?.length > 0) {
-                              setLocalUploads(prev => [...(data.uploads as Upload[]), ...prev]);
-                              setSelectedIds(prev => [...data.uploads.map((u: Upload) => u.id), ...prev]);
-                              setGdriveInput("");
-                              setGdriveStatus("Imported!");
-                              setTimeout(() => setGdriveStatus(null), 3000);
-                              onRefresh();
-                            }
-                          })
-                          .catch(() => setGdriveStatus("Import failed"))
-                          .finally(() => setGdriveImporting(false));
-                      }
-                    }}
-                    placeholder="Paste Google Drive share link..."
-                    style={{ flex: 1, padding: "9px 12px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 12, outline: "none" }}
-                  />
-                  <button
-                    onClick={() => {
-                      if (!gdriveInput.trim()) return;
-                      setGdriveImporting(true);
-                      setGdriveStatus("Importing...");
-                      fetch("/api/uploads/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gdriveInput.trim(), projectId: draftProjectId }) })
-                        .then(r => r.json())
-                        .then(data => {
-                          if (data.error) { setGdriveStatus(data.error); }
-                          else if (data.uploads?.length > 0) {
-                            setLocalUploads(prev => [...(data.uploads as Upload[]), ...prev]);
-                            setSelectedIds(prev => [...data.uploads.map((u: Upload) => u.id), ...prev]);
-                            setGdriveInput("");
-                            setGdriveStatus("Imported!");
-                            setTimeout(() => setGdriveStatus(null), 3000);
-                            onRefresh();
-                          }
-                        })
-                        .catch(() => setGdriveStatus("Import failed"))
-                        .finally(() => setGdriveImporting(false));
-                    }}
-                    disabled={!gdriveInput.trim() || gdriveImporting}
-                    style={{ background: gdriveInput.trim() ? "#FF2D2D" : "#f5f5f0", color: gdriveInput.trim() ? "#fff" : "#b5b09a", border: "none", borderRadius: 10, padding: "9px 14px", fontFamily: "inherit", fontSize: 12, fontWeight: 700, cursor: gdriveInput.trim() ? "pointer" : "default" }}
-                  >
-                    {gdriveImporting ? "..." : "Import"}
-                  </button>
-                </div>
-                {gdriveStatus && <div style={{ fontSize: 11, marginTop: 6, color: gdriveStatus === "Imported!" ? "#16a34a" : gdriveStatus === "Importing..." ? "#7B61FF" : "#FF2D2D", fontWeight: 600 }}>{gdriveStatus}</div>}
-                <div style={{ fontSize: 10, color: "#b5b09a", marginTop: 6 }}>Share file in Google Drive → "Anyone with the link" → paste link above</div>
-              </div>
-
-              <div
-                onClick={() => fileRef.current?.click()}
-                style={{ border: "2px dashed rgba(255,45,45,0.3)", borderRadius: 12, padding: "32px 24px", textAlign: "center", cursor: "pointer", background: "#fafaf4", marginBottom: 12 }}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => {
-                  e.preventDefault();
-                  if (fileRef.current && e.dataTransfer.files.length > 0) {
-                    const fake = { target: { files: e.dataTransfer.files } } as unknown as React.ChangeEvent<HTMLInputElement>;
-                    handleFileUpload(fake);
-                  }
-                }}
-              >
-                {uploadingFiles ? (
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#FF2D2D" }}>Uploading...</div>
-                    <div style={{ fontSize: 11, color: "#7c7660", marginTop: 4 }}>Files are going directly to the cloud</div>
-                  </div>
-                ) : (
-                  <div>
-                    <div style={{ fontSize: 24, marginBottom: 8, color: "#FF2D2D" }}>+</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>Drop videos and photos here</div>
-                    <div style={{ fontSize: 11, color: "#7c7660" }}>or click to browse - up to 10 files - MP4, MOV, JPG, PNG</div>
-                  </div>
-                )}
-              </div>
-              <input ref={fileRef} type="file" style={{ display: "none" }} onChange={handleFileUpload} accept="video/*,image/*" multiple />
-
-              {localUploads.filter(u => u.file_type === "video" || u.file_type === "image").length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#7c7660", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Your Media Library - tap to select</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-                    {localUploads.filter(u => u.file_type === "video" || u.file_type === "image").map(u => {
-                      const sel = selectedIds.includes(u.id);
-                      return (
-                        <div key={u.id} onClick={() => toggleSelect(u.id)} style={{ position: "relative", borderRadius: 10, overflow: "hidden", aspectRatio: "1", cursor: "pointer", border: sel ? "2px solid #FF2D2D" : "2px solid transparent" }}>
-                          {u.file_path && u.file_type === "image" ? (
-                            <img src={u.file_path} alt={u.file_name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          ) : (
-                            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f5f0", fontSize: 11, color: "#7c7660", fontWeight: 600 }}>
-                              {u.file_type === "video" ? "Video" : "Image"}
-                            </div>
-                          )}
-                          {sel && (
-                            <div style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: "50%", background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#fff", fontWeight: 800 }}>
-                              ok
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {user.elevenlabs_voice_id ? (
-                <div onClick={() => setUseVoiceClone(v => !v)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "#fafaf4", borderRadius: 12, cursor: "pointer", marginBottom: 8 }}>
-                  <div style={{ width: 36, height: 20, background: useVoiceClone ? "#FF2D2D" : "#ddd", borderRadius: 10, position: "relative", flexShrink: 0, transition: "background 0.2s" }}>
-                    <div style={{ width: 16, height: 16, background: "#fff", borderRadius: "50%", position: "absolute", top: 2, left: useVoiceClone ? 18 : 2, transition: "left 0.2s" }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>Narrate with my voice</div>
-                    <div style={{ fontSize: 11, color: "#7c7660" }}>{user.voice_clone_name || "Voice clone active"}</div>
-                  </div>
-                </div>
-              ) : user.subscription_tier === "elite" ? (
-                <div style={{ background: "#F8F8A6", borderRadius: 12, padding: "12px 16px", marginBottom: 8, fontSize: 13, color: "#7c7660" }}>
-                  Set up your Voice Clone in Settings to narrate this video in your actual voice.
-                </div>
-              ) : null}
-
-              <div onClick={() => setIncludeMusic(v => !v)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "#fafaf4", borderRadius: 12, cursor: "pointer", marginBottom: 12 }}>
-                <div style={{ width: 36, height: 20, background: includeMusic ? "#FF2D2D" : "#ddd", borderRadius: 10, position: "relative", flexShrink: 0, transition: "background 0.2s" }}>
-                  <div style={{ width: 16, height: 16, background: "#fff", borderRadius: "50%", position: "absolute", top: 2, left: includeMusic ? 18 : 2, transition: "left 0.2s" }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>AI music selection</div>
-                  <div style={{ fontSize: 11, color: "#7c7660" }}>Lumevo picks background music that matches your vibe</div>
-                </div>
-              </div>
-
-              <button onClick={handleConfirmUploads} style={{ width: "100%", background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 12, padding: "14px 20px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                {selectedIds.length > 0 ? `Create video with ${selectedIds.length} clip${selectedIds.length !== 1 ? "s" : ""}` : "Create from brand voice only"}
-              </button>
-            </div>
-          )}
-
-          <div ref={chatEndRef} />
+  // === STEP 2: UPLOAD MEDIA ===
+  if (step === "upload") {
+    return (
+      <div style={{ maxWidth: 620 }}>
+        <div style={{ marginBottom: 32 }}>
+          <button onClick={() => setStep("details")} style={{ background: "none", border: "none", fontSize: 13, color: "#7c7660", cursor: "pointer", marginBottom: 12, padding: 0, fontFamily: "inherit" }}>Back to details</button>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 8 }}>{projectName}</div>
+          <h2 style={{ fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 800, marginBottom: 6 }}>Add your media</h2>
+          <p style={{ fontSize: 14, color: "#7c7660" }}>Upload clips and photos, or import from Google Drive.</p>
         </div>
 
-        {quickReplies.length > 0 && !isTyping && !needsUpload && (
-          <div style={{ padding: "8px 20px 12px", display: "flex", gap: 8, flexWrap: "wrap", borderTop: "1px solid rgba(0,0,0,0.05)" }}>
-            {quickReplies.map(q => (
-              <button key={q} onClick={() => sendMessage(q)} style={{ padding: "7px 14px", borderRadius: 999, border: "1.5px solid rgba(0,0,0,0.1)", background: "#fff", fontFamily: "inherit", fontSize: 13, cursor: "pointer", color: "#1a1a1a" }}>
-                {q}
-              </button>
-            ))}
+        {/* Google Drive Import */}
+        <div style={{ background: "#fff", borderRadius: 16, border: "1px solid rgba(0,0,0,0.07)", padding: "20px", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#7c7660", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Import from Google Drive</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={gdriveInput} onChange={e => setGdriveInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter" && gdriveInput.trim()) {
+                  setGdriveImporting(true); setGdriveStatus("Importing...");
+                  fetch("/api/uploads/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gdriveInput.trim(), projectId: draftProjectId }) })
+                    .then(r => r.json()).then(data => {
+                      if (data.error) setGdriveStatus(data.error);
+                      else if (data.uploads?.length > 0) { setLocalUploads(prev => [...(data.uploads as Upload[]), ...prev]); setSelectedIds(prev => [...data.uploads.map((u: Upload) => u.id), ...prev]); setGdriveInput(""); setGdriveStatus(`${data.uploads.length} file${data.uploads.length !== 1 ? "s" : ""} imported!`); setTimeout(() => setGdriveStatus(null), 3000); onRefresh(); }
+                      else setGdriveStatus("No media files found in that link.");
+                    }).catch(() => setGdriveStatus("Import failed")).finally(() => setGdriveImporting(false));
+                }
+              }}
+              placeholder="Paste Google Drive folder or file link..."
+              style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 13, outline: "none" }} />
+            <button onClick={() => {
+              if (!gdriveInput.trim()) return;
+              setGdriveImporting(true); setGdriveStatus("Importing...");
+              fetch("/api/uploads/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gdriveInput.trim(), projectId: draftProjectId }) })
+                .then(r => r.json()).then(data => {
+                  if (data.error) setGdriveStatus(data.error);
+                  else if (data.uploads?.length > 0) { setLocalUploads(prev => [...(data.uploads as Upload[]), ...prev]); setSelectedIds(prev => [...data.uploads.map((u: Upload) => u.id), ...prev]); setGdriveInput(""); setGdriveStatus(`${data.uploads.length} file${data.uploads.length !== 1 ? "s" : ""} imported!`); setTimeout(() => setGdriveStatus(null), 3000); onRefresh(); }
+                  else setGdriveStatus("No media files found in that link.");
+                }).catch(() => setGdriveStatus("Import failed")).finally(() => setGdriveImporting(false));
+            }} disabled={!gdriveInput.trim() || gdriveImporting}
+              style={{ background: gdriveInput.trim() ? "#FF2D2D" : "#f5f5f0", color: gdriveInput.trim() ? "#fff" : "#b5b09a", border: "none", borderRadius: 10, padding: "10px 16px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: gdriveInput.trim() ? "pointer" : "default" }}>
+              {gdriveImporting ? "..." : "Import"}
+            </button>
+          </div>
+          {gdriveStatus && <div style={{ fontSize: 12, marginTop: 8, color: gdriveStatus.includes("imported") ? "#16a34a" : gdriveStatus === "Importing..." ? "#7B61FF" : "#FF2D2D", fontWeight: 600 }}>{gdriveStatus}</div>}
+        </div>
+
+        {/* Device Upload */}
+        <div onClick={() => fileRef.current?.click()} onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); if (fileRef.current && e.dataTransfer.files.length > 0) { const fake = { target: { files: e.dataTransfer.files } } as unknown as React.ChangeEvent<HTMLInputElement>; handleFileUpload(fake); } }}
+          style={{ border: "2px dashed rgba(0,0,0,0.12)", borderRadius: 16, padding: "40px 24px", textAlign: "center", cursor: "pointer", background: "#fff", marginBottom: 16 }}>
+          {uploadingFiles ? (
+            <div><div style={{ fontSize: 14, fontWeight: 600, color: "#FF2D2D" }}>Uploading...</div></div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 28, marginBottom: 8, color: "#FF2D2D" }}>+</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1a1a" }}>Drop files or click to browse</div>
+              <div style={{ fontSize: 12, color: "#7c7660", marginTop: 4 }}>Videos and photos - unlimited</div>
+            </div>
+          )}
+        </div>
+        <input ref={fileRef} type="file" style={{ display: "none" }} onChange={handleFileUpload} accept="video/*,image/*" multiple />
+
+        {/* Uploaded files - compact collapsible */}
+        {mediaItems.length > 0 && (
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid rgba(0,0,0,0.07)", padding: "16px 20px", marginBottom: 16 }}>
+            <div onClick={() => setShowMediaPicker(!showMediaPicker)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a" }}>{selectedIds.length} of {mediaItems.length} clips selected</div>
+              <div style={{ fontSize: 12, color: "#7c7660" }}>{showMediaPicker ? "Hide" : "Select clips"}</div>
+            </div>
+            {showMediaPicker && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 12 }}>
+                {mediaItems.map(u => {
+                  const sel = selectedIds.includes(u.id);
+                  return (
+                    <div key={u.id} onClick={() => setSelectedIds(prev => sel ? prev.filter(x => x !== u.id) : [...prev, u.id])}
+                      style={{ position: "relative", borderRadius: 8, overflow: "hidden", aspectRatio: "1", cursor: "pointer", border: sel ? "2px solid #FF2D2D" : "2px solid transparent" }}>
+                      {u.file_path && u.file_type === "image" ? <img src={u.file_path} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f5f0", fontSize: 10, color: "#7c7660", fontWeight: 600 }}>VID</div>}
+                      {sel && <div style={{ position: "absolute", top: 3, right: 3, width: 18, height: 18, borderRadius: "50%", background: "#FF2D2D", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#fff", fontWeight: 800 }}>ok</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
-        <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(0,0,0,0.06)", display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <textarea
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            placeholder="Type anything..."
-            disabled={isTyping || needsUpload}
-            rows={1}
-            style={{ flex: 1, padding: "11px 14px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, resize: "none", outline: "none", background: "#fafaf4" }}
-          />
-          <button onClick={() => sendMessage()} disabled={!input.trim() || isTyping} style={{ width: 42, height: 42, borderRadius: 12, background: input.trim() ? "#FF2D2D" : "#f5f5f0", border: "none", color: input.trim() ? "#fff" : "#b5b09a", cursor: input.trim() ? "pointer" : "default", fontSize: 18, fontWeight: 700 }}>
-            →
+        <button onClick={() => setStep("generate")} disabled={selectedIds.length === 0}
+          style={{ width: "100%", background: selectedIds.length > 0 ? "#FF2D2D" : "#f5f5f0", color: selectedIds.length > 0 ? "#fff" : "#b5b09a", border: "none", borderRadius: 12, padding: "16px 20px", fontFamily: "inherit", fontSize: 16, fontWeight: 700, cursor: selectedIds.length > 0 ? "pointer" : "default" }}>
+          {selectedIds.length > 0 ? `Next: Generate with ${selectedIds.length} clip${selectedIds.length !== 1 ? "s" : ""}` : "Select clips to continue"}
+        </button>
+      </div>
+    );
+  }
+
+  // === STEP 3: GENERATE & RENDER ===
+  return (
+    <div style={{ maxWidth: 620 }}>
+      <div style={{ marginBottom: 32 }}>
+        <button onClick={() => setStep("upload")} style={{ background: "none", border: "none", fontSize: 13, color: "#7c7660", cursor: "pointer", marginBottom: 12, padding: 0, fontFamily: "inherit" }}>Back to media</button>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 8 }}>{projectName}</div>
+        <h2 style={{ fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 800, marginBottom: 6 }}>Generate your video</h2>
+        <p style={{ fontSize: 14, color: "#7c7660" }}>{platform} - {vibe} - {duration}s - {selectedIds.length} clips</p>
+      </div>
+
+      {genError && <div style={{ background: "#fff0f0", border: "1px solid rgba(255,45,45,0.3)", borderRadius: 12, padding: "14px 18px", marginBottom: 16, fontSize: 13, color: "#FF2D2D" }}>{genError}</div>}
+
+      {genStatus && (
+        <div style={{ background: "#1a1a1a", borderRadius: 20, padding: "40px 32px", textAlign: "center", marginBottom: 24 }}>
+          <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid rgba(255,45,45,0.3)", borderTopColor: "#FF2D2D", margin: "0 auto 20px", animation: "spin 1s linear infinite" }} />
+          <div style={{ fontFamily: "Syne, sans-serif", fontSize: 18, fontWeight: 800, color: "#fff", marginBottom: 8 }}>{genStatus}</div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.45)" }}>Your cinematic video is being crafted with AI</div>
+        </div>
+      )}
+
+      {!scriptResult && !genStatus && (
+        <button onClick={generateScript} style={{ width: "100%", background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 12, padding: "16px 20px", fontFamily: "inherit", fontSize: 16, fontWeight: 700, cursor: "pointer", marginBottom: 24 }}>
+          Generate Script with AI
+        </button>
+      )}
+
+      {scriptResult?.script && !genStatus && (
+        <div>
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid rgba(0,0,0,0.07)", overflow: "hidden", marginBottom: 16 }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>Script Preview</div>
+              <div style={{ display: "flex", gap: 12 }}>
+                <button onClick={() => navigator.clipboard?.writeText(scriptResult.script || "")} style={{ background: "none", border: "none", fontSize: 11, color: "#FF2D2D", cursor: "pointer", fontWeight: 700 }}>Copy</button>
+                <button onClick={() => { setScriptResult(null); generateScript(); }} style={{ background: "none", border: "none", fontSize: 11, color: "#7B61FF", cursor: "pointer", fontWeight: 700 }}>Regenerate</button>
+              </div>
+            </div>
+            <div style={{ padding: "16px 20px", fontSize: 14, lineHeight: 1.7, color: "#1a1a1a", whiteSpace: "pre-wrap", maxHeight: 200, overflowY: "auto" }}>{scriptResult.script}</div>
+          </div>
+
+          {scriptResult.caption && (
+            <div style={{ background: "#fff", borderRadius: 16, border: "1px solid rgba(0,0,0,0.07)", overflow: "hidden", marginBottom: 24 }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>Caption</div>
+              </div>
+              <div style={{ padding: "16px 20px", fontSize: 13, lineHeight: 1.7, color: "#1a1a1a" }}>{scriptResult.caption}</div>
+            </div>
+          )}
+
+          <button onClick={renderVideo} disabled={rendering}
+            style={{ width: "100%", background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 12, padding: "16px 20px", fontFamily: "inherit", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>
+            {rendering ? "Rendering..." : "Render Cinematic Video"}
           </button>
         </div>
-      </div>
-      <style>{`@keyframes bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-5px); opacity: 1; } }`}</style>
+      )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -962,7 +841,7 @@ function BillingSection({ user }: { user: User }) {
         {[
           { name: "Creator", price: "$29/mo", features: ["Unlimited projects", "AI video generation", "Brand profile", "Content plan"] },
           { name: "Pro", price: "$79/mo", features: ["Everything in Creator", "Priority rendering", "Advanced analytics", "Custom templates"] },
-          { name: "Elite", price: "$149/mo", features: ["Everything in Pro", "Voice Clone Studio", "AI Manager", "White-label export"] },
+          { name: "Elite", price: "$240/mo", features: ["Everything in Pro", "AI Manager with social analytics", "Voice Clone Studio", "2 team seats included", "Additional seats $49/mo each", "White-label export"] },
         ].map(plan => (
           <div key={plan.name} style={{ background: "#fff", borderRadius: 16, padding: "24px", border: user.subscription_tier === plan.name.toLowerCase() ? "2px solid #FF2D2D" : "1px solid rgba(0,0,0,0.07)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -1127,34 +1006,34 @@ export default function DashboardPage() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#F8F8A6", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-      <div style={{ width: 220, background: "#fff", borderRight: "1px solid rgba(0,0,0,0.07)", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 10, overflowY: "auto" }}>
-        <div style={{ padding: "24px 20px 16px" }}>
+      <div style={{ width: 240, background: "#1a1a1a", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 10, overflowY: "auto" }}>
+        <div style={{ padding: "28px 22px 20px" }}>
           <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: "#FF2D2D", letterSpacing: 2, marginBottom: 4 }}>LUMEVO</div>
-          <div style={{ fontSize: 10, color: "#b5b09a", letterSpacing: 1, textTransform: "uppercase" }}>Studio</div>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", letterSpacing: 1, textTransform: "uppercase" }}>Studio</div>
         </div>
 
-        <nav style={{ flex: 1, padding: "0 10px" }}>
+        <nav style={{ flex: 1, padding: "0 12px" }}>
           {groups.map(group => {
             const items = NAV.filter(n => (n.group || "") === group);
             if (!items.length) return null;
             return (
               <div key={group} style={{ marginBottom: 8 }}>
                 {group && (
-                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#b5b09a", padding: "8px 10px 4px" }}>{group}</div>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "rgba(255,255,255,0.3)", padding: "12px 10px 6px" }}>{group}</div>
                 )}
                 {items.map(item => {
                   const active = section === item.id;
                   if (item.elite && user.subscription_tier !== "elite") {
                     return (
-                      <div key={item.id} onClick={() => handleNav(item.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 10px", borderRadius: 10, cursor: "pointer", marginBottom: 2 }}>
-                        <span style={{ fontSize: 13, color: "#b5b09a" }}>{item.label}</span>
+                      <div key={item.id} onClick={() => handleNav(item.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 10, cursor: "pointer", marginBottom: 2 }}>
+                        <span style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>{item.label}</span>
                         <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", background: "#FF2D2D", color: "#fff", padding: "2px 6px", borderRadius: 4 }}>Elite</span>
                       </div>
                     );
                   }
                   return (
-                    <div key={item.id} onClick={() => handleNav(item.id)} style={{ padding: "9px 10px", borderRadius: 10, cursor: "pointer", marginBottom: 2, background: active ? "#FF2D2D" : "transparent" }}>
-                      <span style={{ fontSize: 13, fontWeight: active ? 700 : 400, color: active ? "#fff" : "#1a1a1a" }}>{item.label}</span>
+                    <div key={item.id} onClick={() => handleNav(item.id)} style={{ padding: "10px 12px", borderRadius: 10, cursor: "pointer", marginBottom: 2, background: active ? "#FF2D2D" : "transparent", transition: "background 0.15s" }}>
+                      <span style={{ fontSize: 13, fontWeight: active ? 700 : 500, color: active ? "#fff" : "rgba(255,255,255,0.75)" }}>{item.label}</span>
                     </div>
                   );
                 })}
@@ -1163,14 +1042,29 @@ export default function DashboardPage() {
           })}
         </nav>
 
-        <div style={{ padding: "16px 20px", borderTop: "1px solid rgba(0,0,0,0.07)" }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a", marginBottom: 2 }}>{user.name}</div>
-          <div style={{ fontSize: 11, color: "#b5b09a", marginBottom: 12 }}>{TIER_LABELS[user.subscription_tier] || user.subscription_tier}</div>
-          <button onClick={handleLogout} style={{ background: "none", border: "none", fontSize: 12, color: "#b5b09a", cursor: "pointer", padding: 0, fontFamily: "inherit" }}>Log out</button>
+        {/* Recent Projects in sidebar */}
+        {projects.length > 0 && (
+          <div style={{ padding: "0 12px 12px" }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "rgba(255,255,255,0.3)", padding: "8px 10px 8px" }}>Recent</div>
+            {projects.slice(0, 3).map(p => (
+              <div key={p.id} onClick={() => router.push(`/project/${p.id}`)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 10, cursor: "pointer", marginBottom: 4, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
+                </div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: STATUS_COLORS[p.status] || "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, flexShrink: 0, marginLeft: 8 }}>{p.status}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ padding: "16px 22px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", marginBottom: 2 }}>{user.name}</div>
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12 }}>{TIER_LABELS[user.subscription_tier] || user.subscription_tier}</div>
+          <button onClick={handleLogout} style={{ background: "none", border: "none", fontSize: 12, color: "rgba(255,255,255,0.35)", cursor: "pointer", padding: 0, fontFamily: "inherit" }}>Log out</button>
         </div>
       </div>
 
-      <div style={{ marginLeft: 220, flex: 1, padding: "40px 40px 80px", minWidth: 0 }}>
+      <div style={{ marginLeft: 240, flex: 1, padding: "40px 48px 80px", minWidth: 0 }}>
         {section === "overview" && <Overview user={user} uploads={uploads} projects={projects} brand={brand} onNav={handleNav} />}
         {section === "uploads" && <UploadsSection uploads={uploads} onRefresh={fetchData} />}
         {(section === "create" || section === "video") && <VideoSection user={user} uploads={uploads} onRefresh={fetchData} />}

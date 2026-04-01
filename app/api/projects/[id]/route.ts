@@ -26,6 +26,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json({ project, voiceover });
 }
 
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession();
+  if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+
+  // Only allow delete if project hasn't been completed
+  const check = await query("SELECT status FROM projects WHERE id = $1 AND user_id = $2", [id, session.id]);
+  if (!check.rows[0]) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if ((check.rows[0].status as string) === "completed") return NextResponse.json({ error: "Cannot delete a completed project" }, { status: 400 });
+
+  await query("DELETE FROM projects WHERE id = $1 AND user_id = $2", [id, session.id]);
+  return NextResponse.json({ ok: true });
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
