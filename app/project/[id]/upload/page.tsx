@@ -69,7 +69,7 @@ export default function UploadPage() {
         const res = await fetch("/api/uploads/gdrive", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: gdriveFiles[i].url }),
+          body: JSON.stringify({ url: gdriveFiles[i].url, projectId: id }),
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);

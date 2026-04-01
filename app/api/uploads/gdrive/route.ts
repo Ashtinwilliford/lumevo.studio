@@ -128,7 +128,8 @@ async function downloadGDriveFile(fileId: string): Promise<{ buffer: Buffer; fil
 async function importOneFile(
   fileId: string,
   userId: string,
-  cookie: string
+  cookie: string,
+  projectId: string | null = null
 ): Promise<{ upload: Record<string, unknown> | null; error: string | null }> {
   try {
     const { buffer, filename, mimetype } = await downloadGDriveFile(fileId);
@@ -148,9 +149,9 @@ async function importOneFile(
     const filePath = cloudResult.secure_url as string;
 
     const insertRow = await query(
-      `INSERT INTO uploads (user_id, file_type, file_name, mime_type, file_size, file_path, analysis_status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'ready') RETURNING id, file_type, file_name, mime_type, file_size, file_path, analysis_status, created_at`,
-      [userId, fileType, filename, mimetype, buffer.length, filePath]
+      `INSERT INTO uploads (user_id, project_id, file_type, file_name, mime_type, file_size, file_path, analysis_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'ready') RETURNING id, file_type, file_name, mime_type, file_size, file_path, analysis_status, created_at`,
+      [userId, projectId, fileType, filename, mimetype, buffer.length, filePath]
     );
 
     const uploadRow = insertRow.rows[0];
@@ -175,10 +176,11 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
   let body;
-  try { body = await req.json() as { url?: string; urls?: string[] }; } catch {
+  try { body = await req.json() as { url?: string; urls?: string[]; projectId?: string }; } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  const projectId = body.projectId || null;
   const inputUrl = body.url?.trim() || "";
   const inputUrls = body.urls?.map(u => u.trim()).filter(Boolean) || [];
   const allUrls = inputUrl ? [inputUrl, ...inputUrls] : inputUrls;
@@ -207,7 +209,7 @@ export async function POST(req: NextRequest) {
         console.log(`Found ${files.length} files in folder`);
 
         for (const file of files) {
-          const { upload, error } = await importOneFile(file.id, session.id, cookie);
+          const { upload, error } = await importOneFile(file.id, session.id, cookie, projectId);
           if (upload) results.push(upload);
           if (error) errors.push(`${file.name}: ${error}`);
         }
@@ -221,7 +223,7 @@ export async function POST(req: NextRequest) {
     const fileId = extractGDriveId(driveUrl);
     if (!fileId) { errors.push(`Couldn't find file ID in: ${driveUrl.slice(0, 60)}`); continue; }
 
-    const { upload, error } = await importOneFile(fileId, session.id, cookie);
+    const { upload, error } = await importOneFile(fileId, session.id, cookie, projectId);
     if (upload) results.push(upload);
     if (error) errors.push(error);
   }

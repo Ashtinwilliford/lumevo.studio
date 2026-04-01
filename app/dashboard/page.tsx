@@ -555,7 +555,7 @@ function VideoSection({ user, uploads, onRefresh }: { user: User; uploads: Uploa
                       if (e.key === "Enter" && gdriveInput.trim()) {
                         setGdriveImporting(true);
                         setGdriveStatus("Importing...");
-                        fetch("/api/uploads/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gdriveInput.trim() }) })
+                        fetch("/api/uploads/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gdriveInput.trim(), projectId: draftProjectId }) })
                           .then(r => r.json())
                           .then(data => {
                             if (data.error) { setGdriveStatus(data.error); }
@@ -580,7 +580,7 @@ function VideoSection({ user, uploads, onRefresh }: { user: User; uploads: Uploa
                       if (!gdriveInput.trim()) return;
                       setGdriveImporting(true);
                       setGdriveStatus("Importing...");
-                      fetch("/api/uploads/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gdriveInput.trim() }) })
+                      fetch("/api/uploads/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: gdriveInput.trim(), projectId: draftProjectId }) })
                         .then(r => r.json())
                         .then(data => {
                           if (data.error) { setGdriveStatus(data.error); }
