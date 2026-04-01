@@ -9,17 +9,27 @@ export default function UploadPage() {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string|null>(null);
   async function uploadOne(entry: FileEntry, index: number) {
     setFiles(p=>p.map((f,i)=>i===index?{...f,status:"uploading"}:f));
     try {
-      const sig = await (await fetch("/api/uploads/sign")).json();
+      const sigRes = await fetch("/api/uploads/sign");
+      if (!sigRes.ok) throw new Error(`Sign failed: ${sigRes.status}`);
+      const sig = await sigRes.json();
+      if (!sig.cloudName || !sig.apiKey || !sig.signature) throw new Error("Missing Cloudinary credentials - check env vars");
       const form = new FormData();
       form.append("file",entry.file); form.append("signature",sig.signature); form.append("timestamp",String(sig.timestamp)); form.append("folder",sig.folder); form.append("api_key",sig.apiKey);
       const res = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`,{method:"POST",body:form});
-      const data = await res.json(); if (!res.ok) throw new Error(data.error?.message);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || `Cloudinary error: ${res.status}`);
       await fetch("/api/uploads",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({projectId:id,fileName:entry.file.name,fileType:entry.file.type.startsWith("video/")?"video":"image",mimeType:entry.file.type,fileSize:entry.file.size,filePath:data.secure_url})});
       setFiles(p=>p.map((f,i)=>i===index?{...f,status:"done"}:f));
-    } catch { setFiles(p=>p.map((f,i)=>i===index?{...f,status:"error"}:f)); }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      console.error(`Upload error for ${entry.file.name}:`, msg);
+      setErrorMsg(msg);
+      setFiles(p=>p.map((f,i)=>i===index?{...f,status:"error"}:f));
+    }
   }
   function addFiles(raw: FileList|null) {
     if (!raw) return;
@@ -31,6 +41,7 @@ export default function UploadPage() {
       <button onClick={()=>router.back()} style={{background:"none",border:"none",cursor:"pointer",marginBottom:32,fontSize:14}}>Back</button>
       <h1 style={{fontSize:32,fontWeight:800,marginBottom:8}}>Upload Your Content</h1>
       <p style={{color:"#78716c",marginBottom:40}}>Photos and videos - any size.</p>
+      {errorMsg && <div style={{background:"#fff0f0",border:"1px solid rgba(255,45,45,0.3)",borderRadius:10,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#FF2D2D"}}>{errorMsg}</div>}
       <div onClick={()=>inputRef.current?.click()} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();addFiles(e.dataTransfer.files);}} style={{border:"2px dashed #ccc",borderRadius:14,padding:60,textAlign:"center",cursor:"pointer",background:"#fff"}}>
         <div style={{fontSize:32,marginBottom:8}}>+</div>
         <div style={{fontWeight:600}}>Click to browse or drag and drop</div>
