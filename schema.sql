@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS brand_profiles (
   learning_progress_percent INTEGER DEFAULT 0,
   upload_count INTEGER DEFAULT 0,
   generation_count INTEGER DEFAULT 0,
+  cta_style TEXT,
+  avg_pacing_bpm FLOAT,
   feedback_summary JSONB,
   last_learned_at TIMESTAMP,
   updated_at TIMESTAMP DEFAULT now(),
@@ -49,6 +51,10 @@ CREATE TABLE IF NOT EXISTS projects (
   chat_history JSONB DEFAULT '[]',
   draft_state JSONB DEFAULT '{}',
   project_type TEXT,
+  prompt_text TEXT,
+  render_path TEXT,
+  tone TEXT,
+  audience_goal TEXT,
   created_at TIMESTAMP DEFAULT now(),
   updated_at TIMESTAMP DEFAULT now()
 );
@@ -59,12 +65,26 @@ CREATE TABLE IF NOT EXISTS uploads (
   project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
   file_name TEXT NOT NULL,
   file_type TEXT,
+  mime_type TEXT,
   file_path TEXT,
+  thumb_path TEXT,
   file_size INTEGER,
+  analysis_status TEXT DEFAULT 'ready',
   ai_analysis JSONB,
   transcript_text TEXT,
   extracted_metadata JSONB,
   video_duration_sec FLOAT,
+  created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS voiceovers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  script_content TEXT,
+  provider_voice_id TEXT,
+  audio_url TEXT,
+  status TEXT DEFAULT 'pending',
   created_at TIMESTAMP DEFAULT now()
 );
 
