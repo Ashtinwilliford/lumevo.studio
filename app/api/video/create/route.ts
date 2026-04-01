@@ -215,8 +215,8 @@ Respond with ONLY the caption text and hashtags. No labels, no quotes around it.
         audioBase64 = Buffer.from(buf).toString("base64");
 
         await query(
-          `INSERT INTO voiceovers (user_id, project_id, script_content, provider, provider_voice_id, status)
-           VALUES ($1, $2, $3, 'elevenlabs', $4, 'completed')`,
+          `INSERT INTO voiceovers (user_id, project_id, script_content, provider_voice_id, status)
+           VALUES ($1, $2, $3, $4, 'completed')`,
           [userId, projectId, script, voiceId]
         );
 

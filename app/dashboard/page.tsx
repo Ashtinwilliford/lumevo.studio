@@ -355,7 +355,7 @@ function VideoSection({ user, uploads, onRefresh }: { user: User; uploads: Uploa
   async function generateVideo() {
     if (!draftProjectId) return;
     try {
-      const res = await fetch("/api/video/generate", {
+      const res = await fetch("/api/video/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: draftProjectId }),

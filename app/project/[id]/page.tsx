@@ -29,7 +29,7 @@ export default function ProjectPage() {
   async function generateVideo() {
     setGenerating(true);
     try {
-      const res = await fetch("/api/video/generate", {
+      const res = await fetch("/api/video/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: id }),
