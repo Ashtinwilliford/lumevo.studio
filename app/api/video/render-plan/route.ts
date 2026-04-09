@@ -51,22 +51,8 @@ function buildCreatomateSource(
   voiceoverUrl?: string | null,
   musicUrl?: string | null,
 ) {
-  // Transition cycle: alternate fade (0.6s) and fast-fade (0.2s)
-  const transitionCycle = [
-    { type: "fade", duration: "0.6 s" },
-    { type: "fade", duration: "0.2 s" },
-  ];
-
-  // Color grading — build CSS filter strings for Creatomate
-  const gradeMap: Record<string, string> = {
-    warm: "sepia(0.1) brightness(1.04) contrast(1.06)",
-    cool: "hue-rotate(10deg) brightness(1.03) contrast(1.08)",
-    dramatic: "contrast(1.15) brightness(0.97)",
-    natural: "brightness(1.02)",
-    moody: "sepia(0.06) contrast(1.12) brightness(0.95)",
-  };
-  const colorFilter = gradeMap[style.color_grade || "warm"] || gradeMap.warm;
-  void colorFilter; // used for future filter support
+  // Crossfade duration — clips overlap by this amount for a real dissolve
+  const CROSSFADE_DUR = 0.5;
 
   // Helper: compute safe clip duration from plan values + actual clip metadata
   function safeClipDur(scene: SceneItem, clip: ClipRow): { dur: number; trimStart: number; trimEnd: number } {
@@ -96,7 +82,11 @@ function buildCreatomateSource(
     return { dur, trimStart, trimEnd };
   }
 
-  // Build media elements from scene_order
+  // Build media elements — explicit time + alternating tracks for real crossfade dissolves
+  let clipStartTime = 0;
+  const sceneCount = plan.scene_order.filter(s => clips.get(s.clip_id)?.file_path).length;
+  let placedCount = 0;
+
   const mediaElements = plan.scene_order.map((scene, i) => {
     const clip = clips.get(scene.clip_id);
     if (!clip?.file_path) return null;
@@ -107,8 +97,7 @@ function buildCreatomateSource(
     const analysis = clip.ai_analysis || {};
     const hasPerson = !!(analysis.has_speech || analysis.has_laughter || analysis.has_natural_audio);
 
-    // Zoom: person clips zoom in tighter (they fill the frame better)
-    // Even clips zoom IN, odd zoom OUT — but person clips always start at 115% to crop in closer
+    // Zoom: person clips zoom in tighter; alternate in/out for visual variety
     const zoomIn = i % 2 === 0;
     const baseScale = hasPerson ? "115%" : "100%";
     const endScale  = hasPerson ? (zoomIn ? "125%" : "115%") : (zoomIn ? "110%" : "100%");
@@ -120,37 +109,48 @@ function buildCreatomateSource(
       end_scale: endScale,
     };
 
-    // Transition: cycle fade/fast-fade
-    const trans = transitionCycle[i % transitionCycle.length];
-    const transitionAnimation = i > 0 ? [{ type: trans.type, duration: trans.duration }] : [];
+    // Crossfade: each clip except first fades IN over the tail of the previous clip
+    const animations = placedCount === 0
+      ? [zoomAnimation]
+      : [zoomAnimation, { type: "fade", duration: `${CROSSFADE_DUR} s` }];
 
-    // Audio: keep original audio for any clip with voice/laughter/natural sound
-    const keepAudio = isVideo && hasPerson;
+    const thisTime = clipStartTime;
+    const isLastClip = placedCount === sceneCount - 1;
+    // Next clip starts CROSSFADE_DUR before this one ends → real dissolve, not fade-to-black
+    clipStartTime += clipDur - (isLastClip ? 0 : CROSSFADE_DUR);
+    placedCount++;
+
+    // Alternate tracks 1/2 so overlapping clips composite correctly
+    const track = (placedCount % 2) + 1;
+
+    // Keep audio for ALL video clips — don't require ai_analysis flags to be set
+    const keepAudio = isVideo;
 
     return {
       type: isVideo ? "video" : "image",
-      track: 1,
+      track,
+      time: Math.max(0, thisTime),
       duration: clipDur,
       source: clip.file_path,
       fit: "cover",
       ...(isVideo ? { trim_start: trimStart, trim_end: trimEnd } : {}),
       volume: keepAudio ? "100%" : "0%",
-      animations: [zoomAnimation, ...transitionAnimation],
+      animations,
     };
   }).filter(Boolean);
 
-  // Compute actual total clip duration so music doesn't run past the video
-  const totalClipDur = (mediaElements as { duration: number }[]).reduce((sum, el) => sum + (el?.duration ?? 0), 0);
+  // Total video duration = end time of last clip (accounts for crossfade overlaps)
+  const totalClipDur = clipStartTime;
 
   // Text overlays from scene_order (only if text_amount is not "none")
   const textElements: Record<string, unknown>[] = [];
   const showText = style.text_amount !== "none";
 
   if (showText) {
-    // Title card
+    // Title card — track 3+ so it floats above video clips on tracks 1/2
     textElements.push({
       type: "text",
-      track: 2,
+      track: 3,
       time: 0.3,
       duration: 2.5,
       text: title.toUpperCase(),
@@ -187,7 +187,7 @@ function buildCreatomateSource(
       if (scene.overlay_text && scene.overlay_text.trim()) {
         textElements.push({
           type: "text",
-          track: 3,
+          track: 4,
           time: timeOffset + 0.5,
           duration: Math.min(clipDur - 0.5, 3),
           text: scene.overlay_text,
@@ -208,27 +208,8 @@ function buildCreatomateSource(
       void i;
     });
 
-    // Ending text
-    if (plan.ending && totalClipDur > 4) {
-      textElements.push({
-        type: "text",
-        track: 4,
-        time: Math.max(0, totalClipDur - 3),
-        duration: 2.5,
-        text: plan.ending,
-        width: "70%",
-        x: "50%", y: "50%",
-        x_alignment: "50%", y_alignment: "50%",
-        font_family: "Playfair Display",
-        font_weight: "700",
-        font_size: "6 vmin",
-        fill_color: "#ffffff",
-        shadow_color: "rgba(0,0,0,0.5)",
-        shadow_blur: "12",
-        text_alignment: "center",
-        animations: [{ type: "fade", fade_duration: "0.8 s" }],
-      });
-    }
+    // NOTE: plan.ending is intentionally NOT rendered as a text overlay —
+    // Claude uses it for internal editor notes. Showing it on-screen was a bug.
   }
 
   // Audio elements
@@ -236,17 +217,17 @@ function buildCreatomateSource(
 
   // Background music — duration matches actual clip duration so video doesn't run to black
   const finalMusicUrl = musicUrl || MUSIC_FALLBACK[Math.floor(Math.random() * MUSIC_FALLBACK.length)];
-  const hasSpeechClips = plan.scene_order.some(s => {
-    const c = clips.get(s.clip_id);
-    return c?.ai_analysis?.has_speech || c?.ai_analysis?.has_laughter || c?.ai_analysis?.has_natural_audio;
-  });
 
-  // Music stays quiet so Ellie's voice / laughter comes through clearly
+  // Since ALL video clips keep their original audio, duck the music so natural
+  // sounds (laughter, speech) can be heard clearly over it.
+  const hasVideoClips = plan.scene_order.some(s => clips.get(s.clip_id)?.file_type === "video");
+  const musicVolume = hasVideoClips ? "35%" : "65%";
+
   audioElements.push({
     type: "audio",
     source: finalMusicUrl,
     duration: totalClipDur,
-    volume: hasSpeechClips ? "18%" : "65%",
+    volume: musicVolume,
     loop: true,
     audio_fade_in: 1.5,
     audio_fade_out: 3.5,
@@ -377,8 +358,13 @@ export async function POST(req: NextRequest) {
         [projectId]
       );
       if (existingMusic.rows[0]?.audio_url) {
-        musicUrl = existingMusic.rows[0].audio_url as string;
-      } else {
+        const cachedUrl = existingMusic.rows[0].audio_url as string;
+        // Only reuse cached music if it's from a known royalty-free library.
+        // Old ElevenLabs sound-effect tracks (Cloudinary URLs) are NOT music — skip them.
+        const isLibraryTrack = cachedUrl.includes("bensound.com") || cachedUrl.includes("creatomate.com");
+        if (isLibraryTrack) musicUrl = cachedUrl;
+      }
+      if (!musicUrl) {
         // Pick a real track from the library based on project vibe
         const vibe = project.vibe as string || "warm cozy";
         const platform = project.target_platform as string || "instagram";
