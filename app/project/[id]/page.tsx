@@ -12,6 +12,22 @@ interface Upload {
   ai_analysis?: Record<string, unknown> | null;
 }
 
+interface VideoPlan {
+  video_concept?: string;
+  target_emotion?: string;
+  music_brief?: string;
+  [key: string]: unknown;
+}
+
+const FEEDBACK_CHIPS: { key: string; label: string; apiKey: string }[] = [
+  { key: "more_energy",       label: "⚡ More Energy",         apiKey: "more_energy" },
+  { key: "better_music",      label: "🎵 Better Music",        apiKey: "better_music" },
+  { key: "more_cinematic",    label: "🔍 Zoom In More",        apiKey: "more_cinematic" },
+  { key: "faster_pace",       label: "✂️ Speed Up Clips",      apiKey: "faster_pace" },
+  { key: "slower_pace",       label: "🔄 Smoother Cuts",       apiKey: "slower_pace" },
+  { key: "more_personal",     label: "🎤 More Natural Audio",  apiKey: "more_personal" },
+];
+
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -24,6 +40,12 @@ export default function ProjectPage() {
   const [genStatus, setGenStatus] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // AI Feedback Panel state
+  const [feedbackApplied, setFeedbackApplied] = useState(false);
+  const [customFeedback, setCustomFeedback] = useState("");
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [claudePlan, setClaudePlan] = useState<VideoPlan | null>(null);
+
   async function load() {
     const res = await fetch(`/api/projects/${id}`);
     if (!res.ok) { router.push("/dashboard"); return; }
@@ -33,6 +55,14 @@ export default function ProjectPage() {
     if (gc?.videoUrl) setVideoUrl(gc.videoUrl);
     // Also check video_url column
     if (data.project?.video_url) setVideoUrl(data.project.video_url as string);
+
+    // Parse claude_plan (comes back as JSONB string or object)
+    try {
+      const rawPlan = data.project?.claude_plan;
+      if (rawPlan && typeof rawPlan === "string") setClaudePlan(JSON.parse(rawPlan) as VideoPlan);
+      else if (rawPlan && typeof rawPlan === "object") setClaudePlan(rawPlan as VideoPlan);
+    } catch { setClaudePlan(null); }
+
     const uRes = await fetch(`/api/uploads?projectId=${id}`);
     if (uRes.ok) { const uData = await uRes.json(); setUploads(uData.uploads || []); }
     setLoading(false);
@@ -71,10 +101,34 @@ export default function ProjectPage() {
     setDeletingId(null);
   }
 
+  async function sendFeedback(feedbackText: string) {
+    setFeedbackSending(true);
+    try {
+      await fetch("/api/video/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: id, feedback: feedbackText }),
+      });
+      setFeedbackApplied(true);
+    } catch (err) { console.error(err); }
+    setFeedbackSending(false);
+  }
+
+  async function handleChipClick(apiKey: string) {
+    await sendFeedback(apiKey);
+  }
+
+  async function handleCustomFeedbackSubmit() {
+    if (!customFeedback.trim()) return;
+    await sendFeedback(customFeedback.trim());
+    setCustomFeedback("");
+  }
+
   async function generateVideo() {
     if (uploads.length === 0) return;
     setGenerating(true);
     setGenError(null);
+    setFeedbackApplied(false);
 
     try {
       // Step 1: Plan
@@ -86,6 +140,14 @@ export default function ProjectPage() {
       });
       const planData = await planRes.json();
       if (planData.error) { setGenError(planData.error); setGenStatus(null); setGenerating(false); return; }
+
+      // Update local plan state if returned
+      if (planData.plan) {
+        try {
+          const p = typeof planData.plan === "string" ? JSON.parse(planData.plan) : planData.plan;
+          setClaudePlan(p as VideoPlan);
+        } catch { /* ignore */ }
+      }
 
       // Step 2: Render (pass plan in body as fallback if DB save didn't persist)
       setGenStatus("Crafting your video... this takes 3–5 minutes.");
@@ -140,7 +202,7 @@ export default function ProjectPage() {
   const PLATFORM_LABELS: Record<string, string> = { tiktok: "TikTok", instagram: "Instagram", youtube: "YouTube", general: "General" };
 
   return (
-    <div style={{ maxWidth: 860, margin: "0 auto", padding: "48px 24px 100px", background: "#e8dfc0", minHeight: "100vh" }}>
+    <div style={{ maxWidth: videoUrl ? 1100 : 860, margin: "0 auto", padding: "48px 24px 100px", background: "#e8dfc0", minHeight: "100vh" }}>
       <button onClick={() => router.push("/dashboard")}
         style={{ background: "none", border: "none", cursor: "pointer", marginBottom: 28, fontSize: 13, color: "#7c7660", fontFamily: "inherit" }}>
         ← Back to Studio
@@ -155,21 +217,167 @@ export default function ProjectPage() {
         {project?.target_duration ? ` · ${String(project.target_duration)}s` : ""}
       </p>
 
-      {/* Video output */}
+      {/* Video output + AI Feedback Panel — two-column when video exists */}
       {videoUrl && (
-        <div style={{ marginBottom: 40 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 14 }}>Your Video</div>
-          <video src={videoUrl} controls style={{ width: "100%", maxWidth: 380, borderRadius: 16, display: "block" }} />
-          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-            <a href={videoUrl} download
-              style={{ background: "#FF2D2D", color: "#fff", padding: "10px 22px", borderRadius: 999, textDecoration: "none", fontWeight: 700, fontSize: 14 }}>
-              Download
-            </a>
-            <button onClick={generateVideo} disabled={generating}
-              style={{ background: "#fff", color: "#1a1a1a", border: "1.5px solid rgba(0,0,0,0.1)", borderRadius: 999, padding: "10px 22px", fontFamily: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-              Regenerate
-            </button>
+        <div style={{
+          display: "flex",
+          flexDirection: "row",
+          gap: 28,
+          marginBottom: 40,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}>
+          {/* Left: video player + download */}
+          <div style={{ flex: "0 0 auto", minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 14 }}>Your Video</div>
+            <video src={videoUrl} controls style={{ width: "100%", maxWidth: 340, borderRadius: 16, display: "block" }} />
+            <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+              <a href={videoUrl} download
+                style={{ background: "#FF2D2D", color: "#fff", padding: "10px 22px", borderRadius: 999, textDecoration: "none", fontWeight: 700, fontSize: 14 }}>
+                Download
+              </a>
+              {!feedbackApplied && (
+                <button onClick={generateVideo} disabled={generating}
+                  style={{ background: "#fff", color: "#1a1a1a", border: "1.5px solid rgba(0,0,0,0.1)", borderRadius: 999, padding: "10px 22px", fontFamily: "inherit", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                  Regenerate
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Right: AI Feedback Panel */}
+          <div style={{
+            flex: "1 1 300px",
+            background: "#fff",
+            borderRadius: 20,
+            border: "1.5px solid rgba(0,0,0,0.08)",
+            padding: "24px 22px",
+            minWidth: 0,
+          }}>
+            {/* Header */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 17, fontWeight: 800, color: "#1a1a1a", marginBottom: 5 }}>
+                🎬 AI Director&apos;s Notes
+              </div>
+              {claudePlan?.video_concept && (
+                <div style={{ fontSize: 13, color: "#7c7660", lineHeight: 1.5 }}>
+                  {claudePlan.video_concept}
+                </div>
+              )}
+            </div>
+
+            {/* Quick action chips */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#7c7660", marginBottom: 10 }}>
+                Quick Feedback
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {FEEDBACK_CHIPS.map(chip => (
+                  <button
+                    key={chip.key}
+                    onClick={() => handleChipClick(chip.apiKey)}
+                    disabled={feedbackSending}
+                    style={{
+                      background: "#f5f0e4",
+                      border: "1.5px solid rgba(0,0,0,0.08)",
+                      borderRadius: 999,
+                      padding: "7px 14px",
+                      fontSize: 13,
+                      fontFamily: "inherit",
+                      fontWeight: 600,
+                      color: "#1a1a1a",
+                      cursor: feedbackSending ? "not-allowed" : "pointer",
+                      transition: "background 0.15s",
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#ede5cc"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#f5f0e4"; }}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom feedback textarea */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#7c7660", marginBottom: 10 }}>
+                Custom Note
+              </div>
+              <textarea
+                value={customFeedback}
+                onChange={e => setCustomFeedback(e.target.value)}
+                placeholder="Tell the AI what to change..."
+                rows={3}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: "1.5px solid rgba(0,0,0,0.1)",
+                  borderRadius: 12,
+                  padding: "10px 14px",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                  color: "#1a1a1a",
+                  background: "#faf8f2",
+                  resize: "vertical",
+                  outline: "none",
+                }}
+              />
+              <button
+                onClick={handleCustomFeedbackSubmit}
+                disabled={feedbackSending || !customFeedback.trim()}
+                style={{
+                  marginTop: 8,
+                  background: "#1a1a1a",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 999,
+                  padding: "9px 20px",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: feedbackSending || !customFeedback.trim() ? "not-allowed" : "pointer",
+                  opacity: feedbackSending || !customFeedback.trim() ? 0.5 : 1,
+                }}
+              >
+                {feedbackSending ? "Sending..." : "Send →"}
+              </button>
+            </div>
+
+            {/* Regenerate button — only shown after feedback */}
+            {feedbackApplied && (
+              <div style={{ borderTop: "1px solid rgba(0,0,0,0.08)", paddingTop: 18 }}>
+                <div style={{ fontSize: 12, color: "#7c7660", marginBottom: 12 }}>
+                  Feedback saved. Ready to regenerate with your changes.
+                </div>
+                <button
+                  onClick={generateVideo}
+                  disabled={generating}
+                  style={{
+                    width: "100%",
+                    background: "#fff",
+                    color: "#1a1a1a",
+                    border: "1.5px solid #1a1a1a",
+                    borderRadius: 12,
+                    padding: "13px",
+                    fontFamily: "inherit",
+                    fontSize: 15,
+                    fontWeight: 700,
+                    cursor: generating ? "not-allowed" : "pointer",
+                    opacity: generating ? 0.6 : 1,
+                  }}
+                >
+                  {generating ? "Regenerating..." : "Regenerate with changes →"}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Responsive: stack on mobile via a style tag */}
+          <style>{`
+            @media (max-width: 768px) {
+              .video-feedback-row { flex-direction: column !important; }
+            }
+          `}</style>
         </div>
       )}
 

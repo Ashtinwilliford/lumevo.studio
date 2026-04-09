@@ -51,7 +51,11 @@ function buildCreatomateSource(
   voiceoverUrl?: string | null,
   musicUrl?: string | null,
 ) {
-  const transitionDur = 0.8;
+  // Transition cycle: alternate fade (0.6s) and fast-fade (0.2s)
+  const transitionCycle = [
+    { type: "fade", duration: "0.6 s" },
+    { type: "fade", duration: "0.2 s" },
+  ];
 
   // Color grading — build CSS filter strings for Creatomate
   const gradeMap: Record<string, string> = {
@@ -62,6 +66,7 @@ function buildCreatomateSource(
     moody: "sepia(0.06) contrast(1.12) brightness(0.95)",
   };
   const colorFilter = gradeMap[style.color_grade || "warm"] || gradeMap.warm;
+  void colorFilter; // used for future filter support
 
   // Build media elements from scene_order
   const mediaElements = plan.scene_order.map((scene, i) => {
@@ -69,7 +74,38 @@ function buildCreatomateSource(
     if (!clip) return null;
 
     const isVideo = clip.file_type === "video";
-    const clipDur = Math.max(1, scene.end_trim_sec - scene.start_trim_sec);
+    const rawDur = scene.end_trim_sec - scene.start_trim_sec;
+
+    // Speed up long clips: cap video clips at min(sourceDuration, 5), images at 3.5s, min 1.5s
+    let clipDur: number;
+    if (isVideo) {
+      const sourceDur = clip.video_duration_sec ?? rawDur;
+      clipDur = rawDur > 5 ? Math.max(1.5, Math.min(sourceDur, 5)) : Math.max(1.5, rawDur);
+    } else {
+      clipDur = 3.5;
+    }
+
+    // Zoom/Ken Burns: even indices zoom IN (100%→110%), odd indices zoom OUT (110%→100%)
+    const zoomIn = i % 2 === 0;
+    const zoomAnimation = {
+      easing: "linear",
+      type: "scale",
+      scope: "element",
+      start_scale: zoomIn ? "100%" : "110%",
+      end_scale: zoomIn ? "110%" : "100%",
+    };
+
+    // Transition: cycle through fade/fast-fade per clip index
+    const trans = transitionCycle[i % transitionCycle.length];
+    const transitionAnimation = i > 0 ? [{ type: trans.type, duration: trans.duration }] : [];
+
+    // Smart audio mixing: keep volume if has_speech OR has_laughter OR has_natural_audio
+    const analysis = clip.ai_analysis || {};
+    const keepAudio = isVideo && (
+      analysis.has_speech === true ||
+      analysis.has_laughter === true ||
+      analysis.has_natural_audio === true
+    );
 
     return {
       type: isVideo ? "video" : "image",
@@ -78,20 +114,10 @@ function buildCreatomateSource(
       source: clip.file_path,
       fit: "cover",
       ...(isVideo ? { trim_start: scene.start_trim_sec, trim_end: scene.end_trim_sec } : {}),
-      // Keep original audio for videos with speech, otherwise mute
-      ...(isVideo && clip.ai_analysis?.has_speech ? { volume: "100%" } : { volume: "0%" }),
+      volume: keepAudio ? "100%" : "0%",
       animations: [
-        ...(isVideo ? [] : [{
-          easing: "linear",
-          type: "scale",
-          scope: "element",
-          start_scale: "100%",
-          end_scale: "112%",
-        }]),
-        ...(i > 0 ? [{
-          type: scene.transition_after === "cut" ? "fade" : "fade",
-          duration: scene.transition_after === "cut" ? "0.2 s" : `${transitionDur} s`,
-        }] : []),
+        zoomAnimation,
+        ...transitionAnimation,
       ],
     };
   }).filter(Boolean);
@@ -127,8 +153,17 @@ function buildCreatomateSource(
 
     // Overlay text from scenes (if provided and minimal)
     let timeOffset = 0;
-    plan.scene_order.forEach(scene => {
-      const clipDur = Math.max(1, scene.end_trim_sec - scene.start_trim_sec);
+    plan.scene_order.forEach((scene, i) => {
+      const clip = clips.get(scene.clip_id);
+      const isVideo = clip?.file_type === "video";
+      const rawDur = scene.end_trim_sec - scene.start_trim_sec;
+      let clipDur: number;
+      if (isVideo) {
+        const sourceDur = clip?.video_duration_sec ?? rawDur;
+        clipDur = rawDur > 5 ? Math.max(1.5, Math.min(sourceDur, 5)) : Math.max(1.5, rawDur);
+      } else {
+        clipDur = 3.5;
+      }
       if (scene.overlay_text && scene.overlay_text.trim()) {
         textElements.push({
           type: "text",
@@ -150,6 +185,7 @@ function buildCreatomateSource(
         });
       }
       timeOffset += clipDur;
+      void i;
     });
 
     // Ending text
@@ -178,7 +214,7 @@ function buildCreatomateSource(
   // Audio elements
   const audioElements: Record<string, unknown>[] = [];
 
-  // Background music
+  // Background music with loop + longer fade-out
   const finalMusicUrl = musicUrl || MUSIC_FALLBACK[Math.floor(Math.random() * MUSIC_FALLBACK.length)];
   const hasSpeechClips = plan.scene_order.some(s => {
     const c = clips.get(s.clip_id);
@@ -190,8 +226,9 @@ function buildCreatomateSource(
     source: finalMusicUrl,
     duration: targetDuration,
     volume: hasSpeechClips ? "35%" : "75%",
+    loop: true,
     audio_fade_in: 1.5,
-    audio_fade_out: 2.5,
+    audio_fade_out: 3.5,
   });
 
   // Voiceover
@@ -225,6 +262,11 @@ function buildCreatomateSource(
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Derive origin from request URL (avoids hard-coded localhost)
+  const reqOrigin = new URL(req.url).origin;
+  // Forward session cookie to internal API calls
+  const cookieHeader = req.headers.get("cookie") || "";
 
   let body;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid request" }, { status: 400 }); }
@@ -287,9 +329,9 @@ export async function POST(req: NextRequest) {
       } else if (process.env.ELEVENLABS_API_KEY) {
         // Generate voiceover with ElevenLabs
         try {
-          const voiceRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/voice/generate`, {
+          const voiceRes = await fetch(`${reqOrigin}/api/voice/generate`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: "" },
+            headers: { "Content-Type": "application/json", Cookie: cookieHeader },
             body: JSON.stringify({ projectId, script: plan.voiceover_script }),
           });
           if (voiceRes.ok) {
@@ -318,10 +360,18 @@ export async function POST(req: NextRequest) {
         if (existingMusic.rows[0]?.audio_url) {
           musicUrl = existingMusic.rows[0].audio_url as string;
         } else {
-          // Generate new music
-          const musicRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/music/generate`, {
+          // Generate new music — parse claude_plan JSONB string if needed for music prompt derivation
+          let parsedPlanForMusic: { music_brief?: string } | null = null;
+          try {
+            const rawPlan = project.claude_plan;
+            if (rawPlan && typeof rawPlan === "string") parsedPlanForMusic = JSON.parse(rawPlan);
+            else if (rawPlan && typeof rawPlan === "object") parsedPlanForMusic = rawPlan as { music_brief?: string };
+          } catch { parsedPlanForMusic = null; }
+          void parsedPlanForMusic; // music/generate endpoint handles its own plan lookup
+
+          const musicRes = await fetch(`${reqOrigin}/api/music/generate`, {
             method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: "" },
+            headers: { "Content-Type": "application/json", Cookie: cookieHeader },
             body: JSON.stringify({ projectId, durationSeconds: Math.min(targetDuration + 5, 60) }),
           });
           if (musicRes.ok) {
