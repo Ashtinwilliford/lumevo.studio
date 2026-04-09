@@ -114,10 +114,10 @@ export async function GET() {
     created_at TIMESTAMP DEFAULT now()
   )`);
 
+  // Ensure unique constraint exists (table may have been created without it)
+  await run("music_tracks.url_unique", `CREATE UNIQUE INDEX IF NOT EXISTS music_tracks_url_unique ON music_tracks(url)`);
+
   await run("seed_music_tracks", `INSERT INTO music_tracks (name, artist, genre, vibe_tags, bpm, duration_sec, url) VALUES
-    ('Country Morning', 'Pixabay', 'country', ARRAY['warm','country','acoustic','guitar','cozy'], 95, 180, 'https://cdn.pixabay.com/audio/2023/06/19/audio_7a9b3c8f4e.mp3'),
-    ('Sunny Fields', 'Pixabay', 'folk', ARRAY['warm','sunny','folk','upbeat','guitar'], 108, 165, 'https://cdn.pixabay.com/audio/2022/10/25/audio_946b6bdd5e.mp3'),
-    ('Warm Summer Day', 'Pixabay', 'country', ARRAY['warm','cozy','country','summer','relaxed'], 88, 195, 'https://cdn.pixabay.com/audio/2023/01/09/audio_0e14527b2d.mp3'),
     ('Acoustic Breeze', 'Bensound', 'folk', ARRAY['chill','acoustic','gentle','warm'], 75, 200, 'https://www.bensound.com/bensound-music/bensound-acousticbreeze.mp3'),
     ('Ukulele', 'Bensound', 'folk', ARRAY['warm','happy','ukulele','sunny','light'], 118, 120, 'https://www.bensound.com/bensound-music/bensound-ukulele.mp3'),
     ('Sunny', 'Bensound', 'country', ARRAY['sunny','upbeat','warm','cheerful','country'], 122, 132, 'https://www.bensound.com/bensound-music/bensound-sunny.mp3'),
