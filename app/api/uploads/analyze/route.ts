@@ -166,17 +166,25 @@ export async function POST(req: NextRequest) {
   let body;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid request" }, { status: 400 }); }
 
-  const { uploadId, projectId } = body as { uploadId?: string; projectId?: string };
+  const { uploadId, projectId, skipAnalyzed } = body as { uploadId?: string; projectId?: string; skipAnalyzed?: boolean };
   if (!uploadId && !projectId) return NextResponse.json({ error: "uploadId or projectId required" }, { status: 400 });
 
   const userId = session.id;
 
-  // Load uploads to analyze
+  // Load uploads to analyze — skip already-analyzed ones if skipAnalyzed is set
   let uploadsRes;
   if (uploadId) {
     uploadsRes = await query(
       "SELECT id, file_name, file_type, file_path, video_duration_sec FROM uploads WHERE id = $1 AND user_id = $2",
       [uploadId, userId]
+    );
+  } else if (skipAnalyzed) {
+    // Only fetch clips that haven't been analyzed yet
+    uploadsRes = await query(
+      `SELECT id, file_name, file_type, file_path, video_duration_sec FROM uploads
+       WHERE project_id = $1 AND user_id = $2 AND (analysis_status IS NULL OR analysis_status = 'ready')
+       ORDER BY created_at ASC`,
+      [projectId, userId]
     );
   } else {
     uploadsRes = await query(
@@ -185,7 +193,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!uploadsRes.rows.length) return NextResponse.json({ error: "No uploads found" }, { status: 404 });
+  if (!uploadsRes.rows.length) {
+    // All clips already analyzed — nothing to do
+    return NextResponse.json({ analyzed: 0, laughterDetected: 0, results: [], message: "All clips already scanned." });
+  }
 
   const results: { id: string; fileName: string; has_laughter: boolean; has_speech: boolean; mood: string; description: string }[] = [];
 

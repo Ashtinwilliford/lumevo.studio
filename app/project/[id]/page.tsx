@@ -185,6 +185,26 @@ export default function ProjectPage() {
     setFeedbackApplied(false);
 
     try {
+      // Step 0: Analyze clips for laughter/natural audio (skips already-analyzed ones)
+      setGenStatus("Scanning clips for Elliott's voice and laughter...");
+      try {
+        const analyzeRes = await fetch("/api/uploads/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: id, skipAnalyzed: true }),
+        });
+        if (analyzeRes.ok) {
+          const analyzeData = await analyzeRes.json();
+          if (analyzeData.results) {
+            const map: Record<string, { has_laughter: boolean; mood: string; description: string }> = {};
+            for (const r of analyzeData.results) {
+              map[r.id] = { has_laughter: r.has_laughter, mood: r.mood, description: r.description };
+            }
+            setClipAnalysis(prev => ({ ...prev, ...map }));
+          }
+        }
+      } catch { /* analysis failure is non-fatal — continue to plan */ }
+
       // Step 1: Plan
       setGenStatus("Your AI creative director is planning the edit...");
       const planRes = await fetch("/api/video/plan", {
@@ -451,23 +471,13 @@ export default function ProjectPage() {
       {/* Media grid */}
       {uploads.length > 0 && (
         <div style={{ marginBottom: 36 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>
-              Media ({uploads.length} file{uploads.length !== 1 ? "s" : ""})
-            </div>
-            <button
-              onClick={analyzeClips}
-              disabled={analyzing}
-              style={{
-                background: analyzing ? "#ccc" : "#1a1a1a",
-                color: "#fff", border: "none", borderRadius: 999,
-                padding: "7px 16px", fontFamily: "inherit", fontSize: 12, fontWeight: 700,
-                cursor: analyzing ? "not-allowed" : "pointer",
-                display: "flex", alignItems: "center", gap: 6,
-              }}
-            >
-              {analyzing ? "Scanning..." : "🔍 Find Baby Sounds"}
-            </button>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 14 }}>
+            Media ({uploads.length} file{uploads.length !== 1 ? "s" : ""})
+            {Object.keys(clipAnalysis).length > 0 && (
+              <span style={{ marginLeft: 8, fontWeight: 400, textTransform: "none", letterSpacing: 0, color: "#22a454" }}>
+                · {Object.values(clipAnalysis).filter(a => a.has_laughter).length} with baby sounds
+              </span>
+            )}
           </div>
 
           {analyzeMessage && (
