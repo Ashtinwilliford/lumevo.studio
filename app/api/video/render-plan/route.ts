@@ -134,6 +134,13 @@ function buildCreatomateSource(
   const totalClipDur = clipStartTime;
 
   // ── Pass 2: build media elements ──────────────────────────────────────────
+  // ALL clips on track 1 — Creatomate's `transition` property auto-positions
+  // each clip to overlap the previous by transition.duration, then blends them.
+  //
+  // CRITICAL: Do NOT set explicit `time` on clips when using `transition`.
+  // Explicit time CONFLICTS with transition auto-positioning and causes
+  // double-overlap, which shows the black fill_color through the alpha blend.
+  // Pass 1 timing is ONLY used for audio/text element positioning.
   let placedCount = 0;
   const mediaElements = plan.scene_order.map((scene, i) => {
     const timing = sceneTimings[i];
@@ -145,14 +152,11 @@ function buildCreatomateSource(
     const hasPerson = !!(analysis.has_speech || analysis.has_laughter || analysis.has_natural_audio);
 
     // ── Ken Burns zoom ────────────────────────────────────────────────────
-    // Alternate push-in / pull-back for visual rhythm.
-    // Far-away clips get a strong 55% zoom-in to bring the viewer close.
     const zoomIn    = i % 2 === 0;
     let startScale: string;
     let endScale:   string;
 
     if (farAway) {
-      // Aggressive push-in: subject is small — zoom right in
       startScale = "100%";
       endScale   = "155%";
     } else if (hasPerson) {
@@ -163,7 +167,6 @@ function buildCreatomateSource(
       endScale   = zoomIn ? "112%" : "100%";
     }
 
-    // Animation must span the FULL clip duration for visible Ken Burns movement
     const zoomAnimation = {
       type: "scale",
       easing: "linear",
@@ -176,11 +179,10 @@ function buildCreatomateSource(
     const el: Record<string, unknown> = {
       type: isVideo ? "video" : "image",
       track: 1,
-      time: Math.max(0, timing.time),
+      // *** NO explicit time — transition auto-positions on the track ***
       duration: clipDur,
       source: clip.file_path,
       fit: "cover",
-      // Mute clips unless AI explicitly confirmed baby/natural audio
       volume: timing.hasAudio ? "100%" : "0%",
       animations: [zoomAnimation],
     };
@@ -188,12 +190,12 @@ function buildCreatomateSource(
     if (isVideo) {
       el.trim_start = trimStart;
       el.trim_end   = trimEnd;
-      // Apply speed only when we need to stretch (< 1.0)
       if (speed < 0.99) el.speed = speed;
     }
 
-    // ── Native cross-dissolve transition (Creatomate engine, not manual overlay) ──
-    // type:"fade" = true dissolve — outgoing fades out as incoming fades in simultaneously.
+    // Creatomate SDK: transition = "animation between this and previous element"
+    // The engine blends outgoing → incoming INTERNALLY — no black background
+    // ever shows because both elements are composited in the same pass.
     if (placedCount > 0) {
       el.transition = { type: "fade", duration: CROSSFADE_DUR };
     }
