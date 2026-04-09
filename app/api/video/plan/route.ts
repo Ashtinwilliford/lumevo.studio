@@ -205,7 +205,13 @@ Text amount: ${style.text_amount}
 === AVAILABLE CLIPS ===
 ${clipDescriptions}
 
-${pastFeedback ? `=== PAST FEEDBACK (what the creator liked/disliked) ===\n${pastFeedback}\n` : ""}
+${pastFeedback ? `=== CREATOR FEEDBACK — YOU MUST ADDRESS THESE NOTES IN YOUR PLAN ===\nThe creator reviewed the last video and specifically asked for these changes. Prioritize them above all other style decisions:\n${pastFeedback}\n` : ""}
+
+=== FRAMING & AUDIO RULES (always apply) ===
+- For any clip where a person is visible, prefer clips where they fill at least 40% of the frame. If they are small/distant, use start_trim_sec/end_trim_sec to pick the moment when they're closest.
+- For clips where the subject (person/child) has speech, laughter, or natural sound: set the clip prominently. The original audio from those clips is played at 100% volume; background music is ducked to 18%.
+- For clips where the subject is far away and there's nothing interesting in frame, exclude them (add to exclude_clip_ids) — don't pad the video with weak footage.
+- trim_start and trim_end MUST be valid numbers within the clip's actual duration. Never output 0 for both start and end unless the clip truly starts at second 0 and ends at second 0 (which is impossible). If a clip is 5.2s, valid values are e.g. start=0.5 end=4.5.`
 
 === RULES ===
 - Choose only the strongest clips. Total scene durations must sum to ~${targetDuration}s

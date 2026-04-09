@@ -68,44 +68,64 @@ function buildCreatomateSource(
   const colorFilter = gradeMap[style.color_grade || "warm"] || gradeMap.warm;
   void colorFilter; // used for future filter support
 
+  // Helper: compute safe clip duration from plan values + actual clip metadata
+  function safeClipDur(scene: SceneItem, clip: ClipRow): { dur: number; trimStart: number; trimEnd: number } {
+    const isVideo = clip.file_type === "video";
+    const actualDur = clip.video_duration_sec ?? 5;
+    let trimStart = scene.start_trim_sec ?? 0;
+    let trimEnd = scene.end_trim_sec ?? 0;
+
+    // Guard: invalid trims (0,0 or reversed or exceeding actual duration)
+    if (trimEnd <= trimStart || (trimStart === 0 && trimEnd === 0)) {
+      // Use the full clip, capped at 6s
+      trimStart = 0;
+      trimEnd = Math.min(actualDur, 6);
+    }
+    // Clamp to actual duration
+    trimEnd = Math.min(trimEnd, actualDur);
+    trimStart = Math.min(trimStart, trimEnd - 1);
+
+    const sourceDur = trimEnd - trimStart;
+    let dur: number;
+    if (isVideo) {
+      // Cap display duration at 5s (if source is longer, Creatomate speeds it up)
+      dur = Math.max(1.5, Math.min(sourceDur, 5));
+    } else {
+      dur = 3.5;
+    }
+    return { dur, trimStart, trimEnd };
+  }
+
   // Build media elements from scene_order
   const mediaElements = plan.scene_order.map((scene, i) => {
     const clip = clips.get(scene.clip_id);
-    if (!clip) return null;
+    if (!clip?.file_path) return null;
 
     const isVideo = clip.file_type === "video";
-    const rawDur = scene.end_trim_sec - scene.start_trim_sec;
+    const { dur: clipDur, trimStart, trimEnd } = safeClipDur(scene, clip);
 
-    // Speed up long clips: cap video clips at min(sourceDuration, 5), images at 3.5s, min 1.5s
-    let clipDur: number;
-    if (isVideo) {
-      const sourceDur = clip.video_duration_sec ?? rawDur;
-      clipDur = rawDur > 5 ? Math.max(1.5, Math.min(sourceDur, 5)) : Math.max(1.5, rawDur);
-    } else {
-      clipDur = 3.5;
-    }
+    const analysis = clip.ai_analysis || {};
+    const hasPerson = !!(analysis.has_speech || analysis.has_laughter || analysis.has_natural_audio);
 
-    // Zoom/Ken Burns: even indices zoom IN (100%→110%), odd indices zoom OUT (110%→100%)
+    // Zoom: person clips zoom in tighter (they fill the frame better)
+    // Even clips zoom IN, odd zoom OUT — but person clips always start at 115% to crop in closer
     const zoomIn = i % 2 === 0;
+    const baseScale = hasPerson ? "115%" : "100%";
+    const endScale  = hasPerson ? (zoomIn ? "125%" : "115%") : (zoomIn ? "110%" : "100%");
     const zoomAnimation = {
       easing: "linear",
       type: "scale",
       scope: "element",
-      start_scale: zoomIn ? "100%" : "110%",
-      end_scale: zoomIn ? "110%" : "100%",
+      start_scale: baseScale,
+      end_scale: endScale,
     };
 
-    // Transition: cycle through fade/fast-fade per clip index
+    // Transition: cycle fade/fast-fade
     const trans = transitionCycle[i % transitionCycle.length];
     const transitionAnimation = i > 0 ? [{ type: trans.type, duration: trans.duration }] : [];
 
-    // Smart audio mixing: keep volume if has_speech OR has_laughter OR has_natural_audio
-    const analysis = clip.ai_analysis || {};
-    const keepAudio = isVideo && (
-      analysis.has_speech === true ||
-      analysis.has_laughter === true ||
-      analysis.has_natural_audio === true
-    );
+    // Audio: keep original audio for any clip with voice/laughter/natural sound
+    const keepAudio = isVideo && hasPerson;
 
     return {
       type: isVideo ? "video" : "image",
@@ -113,14 +133,14 @@ function buildCreatomateSource(
       duration: clipDur,
       source: clip.file_path,
       fit: "cover",
-      ...(isVideo ? { trim_start: scene.start_trim_sec, trim_end: scene.end_trim_sec } : {}),
+      ...(isVideo ? { trim_start: trimStart, trim_end: trimEnd } : {}),
       volume: keepAudio ? "100%" : "0%",
-      animations: [
-        zoomAnimation,
-        ...transitionAnimation,
-      ],
+      animations: [zoomAnimation, ...transitionAnimation],
     };
   }).filter(Boolean);
+
+  // Compute actual total clip duration so music doesn't run past the video
+  const totalClipDur = (mediaElements as { duration: number }[]).reduce((sum, el) => sum + (el?.duration ?? 0), 0);
 
   // Text overlays from scene_order (only if text_amount is not "none")
   const textElements: Record<string, unknown>[] = [];
@@ -189,11 +209,11 @@ function buildCreatomateSource(
     });
 
     // Ending text
-    if (plan.ending) {
+    if (plan.ending && totalClipDur > 4) {
       textElements.push({
         type: "text",
         track: 4,
-        time: targetDuration - 3,
+        time: Math.max(0, totalClipDur - 3),
         duration: 2.5,
         text: plan.ending,
         width: "70%",
@@ -214,18 +234,19 @@ function buildCreatomateSource(
   // Audio elements
   const audioElements: Record<string, unknown>[] = [];
 
-  // Background music with loop + longer fade-out
+  // Background music — duration matches actual clip duration so video doesn't run to black
   const finalMusicUrl = musicUrl || MUSIC_FALLBACK[Math.floor(Math.random() * MUSIC_FALLBACK.length)];
   const hasSpeechClips = plan.scene_order.some(s => {
     const c = clips.get(s.clip_id);
-    return c?.ai_analysis?.has_speech;
+    return c?.ai_analysis?.has_speech || c?.ai_analysis?.has_laughter || c?.ai_analysis?.has_natural_audio;
   });
 
+  // Music stays quiet so Ellie's voice / laughter comes through clearly
   audioElements.push({
     type: "audio",
     source: finalMusicUrl,
-    duration: targetDuration,
-    volume: hasSpeechClips ? "35%" : "75%",
+    duration: totalClipDur,
+    volume: hasSpeechClips ? "18%" : "65%",
     loop: true,
     audio_fade_in: 1.5,
     audio_fade_out: 3.5,
