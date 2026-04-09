@@ -51,6 +51,11 @@ export default function ProjectPage() {
   const [savingMusicStyle, setSavingMusicStyle] = useState(false);
   const [musicSaved, setMusicSaved] = useState(false);
 
+  // Clip analysis state
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeMessage, setAnalyzeMessage] = useState<string | null>(null);
+  const [clipAnalysis, setClipAnalysis] = useState<Record<string, { has_laughter: boolean; mood: string; description: string }>>({});
+
   async function load() {
     const res = await fetch(`/api/projects/${id}`);
     if (!res.ok) { router.push("/dashboard"); return; }
@@ -130,6 +135,31 @@ export default function ProjectPage() {
     if (!customFeedback.trim()) return;
     await sendFeedback(customFeedback.trim());
     setCustomFeedback("");
+  }
+
+  async function analyzeClips() {
+    setAnalyzing(true);
+    setAnalyzeMessage("Scanning clips for Elliott's laughter...");
+    try {
+      const res = await fetch("/api/uploads/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: id }),
+      });
+      const data = await res.json();
+      if (data.results) {
+        const map: Record<string, { has_laughter: boolean; mood: string; description: string }> = {};
+        for (const r of data.results) {
+          map[r.id] = { has_laughter: r.has_laughter, mood: r.mood, description: r.description };
+        }
+        setClipAnalysis(map);
+      }
+      setAnalyzeMessage(data.message || "Analysis complete.");
+    } catch (err) {
+      console.error(err);
+      setAnalyzeMessage("Analysis failed — try again.");
+    }
+    setAnalyzing(false);
   }
 
   async function saveMusicStyle() {
@@ -421,37 +451,81 @@ export default function ProjectPage() {
       {/* Media grid */}
       {uploads.length > 0 && (
         <div style={{ marginBottom: 36 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660", marginBottom: 14 }}>
-            Media ({uploads.length} file{uploads.length !== 1 ? "s" : ""})
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#7c7660" }}>
+              Media ({uploads.length} file{uploads.length !== 1 ? "s" : ""})
+            </div>
+            <button
+              onClick={analyzeClips}
+              disabled={analyzing}
+              style={{
+                background: analyzing ? "#ccc" : "#1a1a1a",
+                color: "#fff", border: "none", borderRadius: 999,
+                padding: "7px 16px", fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                cursor: analyzing ? "not-allowed" : "pointer",
+                display: "flex", alignItems: "center", gap: 6,
+              }}
+            >
+              {analyzing ? "Scanning..." : "🔍 Find Baby Sounds"}
+            </button>
           </div>
+
+          {analyzeMessage && (
+            <div style={{
+              background: analyzeMessage.includes("Found") ? "#f0fdf4" : "#faf8f2",
+              border: `1px solid ${analyzeMessage.includes("Found") ? "rgba(34,164,84,0.25)" : "rgba(0,0,0,0.08)"}`,
+              borderRadius: 10, padding: "10px 14px", marginBottom: 12,
+              fontSize: 13, color: analyzeMessage.includes("Found") ? "#22a454" : "#7c7660", fontWeight: 600,
+            }}>
+              {analyzeMessage}
+              {analyzeMessage.includes("Found") && " Tap Regenerate to use them!"}
+            </div>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
-            {uploads.map(u => (
-              <div key={u.id} style={{ position: "relative", background: "#fff", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(0,0,0,0.08)" }}>
-                {u.file_path && u.file_type === "image" ? (
-                  <img src={u.file_path} alt={u.file_name} style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
-                ) : (
-                  <div style={{ width: "100%", height: 110, background: "#ddd3a8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#a89b7a" }}>▷</div>
-                )}
-                {/* X delete button */}
-                <button
-                  onClick={() => deleteUpload(u.id)}
-                  disabled={deletingId === u.id}
-                  style={{
-                    position: "absolute", top: 6, right: 6,
-                    width: 22, height: 22, borderRadius: "50%",
-                    background: deletingId === u.id ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.6)",
-                    border: "none", cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 12, color: "#fff", fontWeight: 700, lineHeight: 1,
-                  }}>
-                  {deletingId === u.id ? "·" : "×"}
-                </button>
-                <div style={{ padding: "6px 10px" }}>
-                  <div style={{ fontSize: 11, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#1a1a1a" }}>{u.file_name}</div>
-                  {u.video_duration_sec && <div style={{ fontSize: 10, color: "#7c7660", marginTop: 1 }}>{u.video_duration_sec.toFixed(1)}s</div>}
+            {uploads.map(u => {
+              const analysis = clipAnalysis[u.id];
+              return (
+                <div key={u.id} style={{ position: "relative", background: "#fff", borderRadius: 12, overflow: "hidden", border: `1.5px solid ${analysis?.has_laughter ? "rgba(34,164,84,0.4)" : "rgba(0,0,0,0.08)"}` }}>
+                  {u.file_path && u.file_type === "image" ? (
+                    <img src={u.file_path} alt={u.file_name} style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
+                  ) : (
+                    <div style={{ width: "100%", height: 110, background: "#ddd3a8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#a89b7a" }}>▷</div>
+                  )}
+                  {/* Laughter badge */}
+                  {analysis?.has_laughter && (
+                    <div style={{
+                      position: "absolute", top: 6, left: 6,
+                      background: "#22a454", color: "#fff", borderRadius: 999,
+                      padding: "2px 7px", fontSize: 10, fontWeight: 700,
+                    }}>😂 audio</div>
+                  )}
+                  {/* X delete button */}
+                  <button
+                    onClick={() => deleteUpload(u.id)}
+                    disabled={deletingId === u.id}
+                    style={{
+                      position: "absolute", top: 6, right: 6,
+                      width: 22, height: 22, borderRadius: "50%",
+                      background: deletingId === u.id ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.6)",
+                      border: "none", cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 12, color: "#fff", fontWeight: 700, lineHeight: 1,
+                    }}>
+                    {deletingId === u.id ? "·" : "×"}
+                  </button>
+                  <div style={{ padding: "6px 10px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#1a1a1a" }}>{u.file_name}</div>
+                    {analysis?.description
+                      ? <div style={{ fontSize: 10, color: "#7c7660", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{analysis.description}</div>
+                      : u.video_duration_sec
+                        ? <div style={{ fontSize: 10, color: "#7c7660", marginTop: 1 }}>{u.video_duration_sec.toFixed(1)}s</div>
+                        : null
+                    }
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
