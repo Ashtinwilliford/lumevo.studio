@@ -261,16 +261,29 @@ Output ONLY this JSON (no markdown, no explanation):
       try {
         const completion = await ai.messages.create({
           model: "claude-sonnet-4-5",
-          max_tokens: 2000,
+          max_tokens: 4000,
           temperature: 0.6,
           messages: [
             { role: "user", content: plannerPrompt },
-            ...(lastError ? [{ role: "user" as const, content: `Your previous response was invalid JSON: ${lastError}. Please output ONLY valid JSON, no markdown.` }] : []),
+            ...(lastError ? [{ role: "user" as const, content: `Your previous response was invalid JSON: ${lastError}. Please output ONLY valid JSON, no markdown. Keep it concise.` }] : []),
           ],
         });
 
         const raw = completion.content[0]?.type === "text" ? completion.content[0].text : "";
-        const cleaned = raw.replace(/```json\n?|\n?```/g, "").trim();
+        let cleaned = raw.replace(/```json\n?|\n?```/g, "").trim();
+
+        // Handle truncated JSON from max_tokens — try to close open structures
+        if (completion.stop_reason === "max_tokens" || completion.stop_reason === "end_turn" && !cleaned.endsWith("}")) {
+          console.warn("[plan] Response may be truncated, attempting to close JSON");
+          // Count open braces/brackets and close them
+          const openBraces = (cleaned.match(/\{/g) || []).length - (cleaned.match(/\}/g) || []).length;
+          const openBrackets = (cleaned.match(/\[/g) || []).length - (cleaned.match(/\]/g) || []).length;
+          // Remove trailing partial values (incomplete strings/numbers after last comma)
+          cleaned = cleaned.replace(/,\s*"[^"]*$/, "").replace(/,\s*$/, "");
+          for (let b = 0; b < openBrackets; b++) cleaned += "]";
+          for (let b = 0; b < openBraces; b++) cleaned += "}";
+        }
+
         plan = JSON.parse(cleaned);
 
         // Validate required fields

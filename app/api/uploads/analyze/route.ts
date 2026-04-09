@@ -11,7 +11,8 @@ export const maxDuration = 60;
 // Cloudinary's URL transform: insert "so_XX p" after "/upload/" and swap extension to .jpg
 function getVideoFrameUrls(videoUrl: string): string[] {
   if (!videoUrl.includes("res.cloudinary.com")) return [];
-  const offsets = ["15p", "50p", "85p"];
+  // Single frame at 50% — faster than 3 frames, Sonnet can still detect laughter
+  const offsets = ["50p"];
   return offsets.map(pct =>
     videoUrl
       .replace("/upload/", `/upload/so_${pct}/`)
@@ -69,10 +70,10 @@ async function analyzeUpload(
 
   // ── Build Claude prompt ─────────────────────────────────────────────────
   const systemContext = fileType === "video"
-    ? `You are analyzing ${imageBlocks.length} frames from a short video clip of a baby/toddler named Elliott at a strawberry picking outing.
-The frames are at roughly 15%, 50%, and 85% through the clip.
-IMPORTANT: Look carefully at Elliott's expression in every frame. A big open mouth, scrunched eyes, raised cheeks = LAUGHING.
-Any adult speaking = has_speech. Outdoor nature setting = has_natural_audio may be true.`
+    ? `You are analyzing a frame from a short video clip of a baby/toddler named Elliott.
+IMPORTANT: Look carefully at Elliott's expression. A big open mouth, scrunched eyes, raised cheeks = LAUGHING.
+Any adult speaking = has_speech. Outdoor nature setting = has_natural_audio may be true.
+If the subject is far away or tiny in frame, set best_use to "wide".`
     : `You are analyzing a photo from a baby/toddler outing.`;
 
   const textPrompt = `${systemContext}
@@ -120,8 +121,9 @@ Return ONLY JSON:
   ];
 
   try {
+    // Use Sonnet (fast, great at vision) instead of Opus — avoids 504 timeouts
     const completion = await ai.messages.create({
-      model: "claude-opus-4-5",
+      model: "claude-sonnet-4-5",
       max_tokens: 400,
       temperature: 0.2,
       messages: [{
@@ -194,36 +196,40 @@ export async function POST(req: NextRequest) {
   }
 
   if (!uploadsRes.rows.length) {
-    // All clips already analyzed — nothing to do
     return NextResponse.json({ analyzed: 0, laughterDetected: 0, results: [], message: "All clips already scanned." });
   }
 
-  const results: { id: string; fileName: string; has_laughter: boolean; has_speech: boolean; mood: string; description: string }[] = [];
+  // Cap at 6 clips to stay within the 60s Vercel timeout.
+  // Analyze ALL clips in PARALLEL — Sonnet is fast enough for concurrent calls.
+  const uploads = uploadsRes.rows.slice(0, 6);
 
-  // Analyze each upload sequentially (avoid rate limits)
-  for (const upload of uploadsRes.rows) {
-    const analysis = await analyzeUpload(
-      upload.id as string,
-      upload.file_path as string,
-      upload.file_type as string,
-      upload.file_name as string,
-      upload.video_duration_sec as number | null,
-    );
+  const settled = await Promise.allSettled(
+    uploads.map(async (upload) => {
+      const analysis = await analyzeUpload(
+        upload.id as string,
+        upload.file_path as string,
+        upload.file_type as string,
+        upload.file_name as string,
+        upload.video_duration_sec as number | null,
+      );
+      await query(
+        `UPDATE uploads SET ai_analysis = $1::jsonb, analysis_status = 'analyzed' WHERE id = $2`,
+        [JSON.stringify(analysis), upload.id]
+      );
+      return {
+        id: upload.id as string,
+        fileName: upload.file_name as string,
+        has_laughter: analysis.has_laughter === true,
+        has_speech: analysis.has_speech === true,
+        mood: analysis.mood as string || "warm",
+        description: analysis.description as string || "",
+      };
+    })
+  );
 
-    await query(
-      `UPDATE uploads SET ai_analysis = $1::jsonb, analysis_status = 'analyzed' WHERE id = $2`,
-      [JSON.stringify(analysis), upload.id]
-    );
-
-    results.push({
-      id: upload.id as string,
-      fileName: upload.file_name as string,
-      has_laughter: analysis.has_laughter === true,
-      has_speech: analysis.has_speech === true,
-      mood: analysis.mood as string || "warm",
-      description: analysis.description as string || "",
-    });
-  }
+  const results = settled
+    .filter((s): s is PromiseFulfilledResult<{ id: string; fileName: string; has_laughter: boolean; has_speech: boolean; mood: string; description: string }> => s.status === "fulfilled")
+    .map(s => s.value);
 
   const laughterCount = results.filter(r => r.has_laughter).length;
 
@@ -232,7 +238,7 @@ export async function POST(req: NextRequest) {
     laughterDetected: laughterCount,
     results,
     message: laughterCount > 0
-      ? `Found ${laughterCount} clip${laughterCount > 1 ? "s" : ""} with Elliott's laughter — regenerate to use them!`
-      : "Analysis complete. No laughter detected yet — music will play over all clips.",
+      ? `Found ${laughterCount} clip${laughterCount > 1 ? "s" : ""} with Elliott's laughter!`
+      : "Analysis complete. No laughter detected — music will play over all clips.",
   });
 }
