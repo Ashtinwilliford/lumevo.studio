@@ -578,7 +578,7 @@ function StyleSection() {
           <div style={{ fontSize: 11, fontWeight: 700, color: "#7c7660", textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Current Settings</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {[["Color Grade", "color_grade"], ["Pacing", "pacing"], ["Music", "music_energy"], ["Captions", "caption_style"], ["Text", "text_amount"], ["Transitions", "transition_density"]].map(([label, key]) => (
-              <div key={key} style={{ padding: "10px 12px", background: "#e8dfc0", borderRadius: 10 }}>
+              <div key={key} style={{ padding: "10px 12px", background: "#F8F8A6", borderRadius: 10 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#7c7660", textTransform: "uppercase", letterSpacing: 1, marginBottom: 2 }}>{label}</div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a" }}>{String(style[key] || "—")}</div>
               </div>
@@ -712,7 +712,7 @@ function SettingsSection({ user, onRefresh }: { user: User; onRefresh: () => voi
         </div>
         <div style={{ marginBottom: 18 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: "#7c7660", display: "block", marginBottom: 6 }}>Email</label>
-          <div style={{ padding: "10px 14px", borderRadius: 10, background: "#e8dfc0", fontSize: 14, color: "#7c7660" }}>{user.email}</div>
+          <div style={{ padding: "10px 14px", borderRadius: 10, background: "#F8F8A6", fontSize: 14, color: "#7c7660" }}>{user.email}</div>
         </div>
         <button onClick={handleSave} style={{ background: saved ? "#2da44e" : "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "10px 24px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
           {saved ? "Saved" : "Save Changes"}
@@ -793,7 +793,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#e8dfc0" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F8F8A6" }}>
         <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 28, color: "#FF2D2D", letterSpacing: 2 }}>LUMEVO</div>
       </div>
     );
@@ -802,7 +802,7 @@ export default function DashboardPage() {
   if (!user) return null;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#e8dfc0", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div style={{ display: "flex", minHeight: "100vh", background: "#F8F8A6", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       {/* Sidebar */}
       <div style={{ width: 200, background: "#1a1a1a", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 10 }}>
         <div style={{ padding: "28px 22px 32px" }}>

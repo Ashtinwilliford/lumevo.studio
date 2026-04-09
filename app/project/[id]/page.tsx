@@ -270,7 +270,7 @@ export default function ProjectPage() {
   }
 
   if (loading) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#e8dfc0" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#F8F8A6" }}>
       <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: "#FF2D2D", letterSpacing: 2 }}>LUMEVO</div>
     </div>
   );
@@ -279,7 +279,7 @@ export default function ProjectPage() {
   const PLATFORM_LABELS: Record<string, string> = { tiktok: "TikTok", instagram: "Instagram", youtube: "YouTube", general: "General" };
 
   return (
-    <div style={{ maxWidth: videoUrl ? 1100 : 860, margin: "0 auto", padding: "48px 24px 100px", background: "#e8dfc0", minHeight: "100vh" }}>
+    <div style={{ maxWidth: videoUrl ? 1100 : 860, margin: "0 auto", padding: "48px 24px 100px", background: "#F8F8A6", minHeight: "100vh" }}>
       <button onClick={() => router.push("/dashboard")}
         style={{ background: "none", border: "none", cursor: "pointer", marginBottom: 28, fontSize: 13, color: "#7c7660", fontFamily: "inherit" }}>
         ← Back to Studio
