@@ -55,7 +55,8 @@ function buildCreatomateSource(
   const CROSSFADE_DUR = 0.5;
 
   // Helper: compute safe clip duration from plan values + actual clip metadata
-  function safeClipDur(scene: SceneItem, clip: ClipRow): { dur: number; trimStart: number; trimEnd: number } {
+  // targetPerClip is passed in so clips stretch to fill the target video duration.
+  function safeClipDur(scene: SceneItem, clip: ClipRow, targetPerClip: number): { dur: number; trimStart: number; trimEnd: number } {
     const isVideo = clip.file_type === "video";
     const actualDur = clip.video_duration_sec ?? 5;
     let trimStart = scene.start_trim_sec ?? 0;
@@ -64,33 +65,42 @@ function buildCreatomateSource(
     // Guard: invalid trims (0,0 or reversed or exceeding actual duration)
     if (trimEnd <= trimStart || (trimStart === 0 && trimEnd === 0)) {
       trimStart = 0;
-      trimEnd = Math.min(actualDur, 6);
+      trimEnd = Math.min(actualDur, targetPerClip);
     }
     trimEnd = Math.min(trimEnd, actualDur);
     trimStart = Math.min(trimStart, trimEnd - 1);
 
     const sourceDur = trimEnd - trimStart;
-    const dur = isVideo ? Math.max(1.5, Math.min(sourceDur, 5)) : 3.5;
+    // Cap at targetPerClip so clips fill the video rather than being cut to 5s
+    const dur = isVideo ? Math.max(1.5, Math.min(sourceDur, targetPerClip)) : Math.min(5, targetPerClip);
     return { dur, trimStart, trimEnd };
   }
 
   // ── Pass 1: precompute timing for every scene ──────────────────────────────
   interface SceneTiming {
-    time: number; dur: number; trimStart: number; trimEnd: number; isVideo: boolean;
+    time: number; dur: number; trimStart: number; trimEnd: number; isVideo: boolean; hasAudio: boolean;
   }
   const validCount = plan.scene_order.filter(s => clips.get(s.clip_id)?.file_path).length;
+
+  // Spread clips to fill the target duration — each clip gets an equal share, min 3s max 15s
+  const targetPerClip = validCount > 0
+    ? Math.max(3, Math.min(15, targetDuration / validCount))
+    : 8;
+
   let clipStartTime = 0;
   let validIdx = 0;
 
   const sceneTimings: (SceneTiming | null)[] = plan.scene_order.map(scene => {
     const clip = clips.get(scene.clip_id);
     if (!clip?.file_path) return null;
-    const { dur, trimStart, trimEnd } = safeClipDur(scene, clip);
+    const { dur, trimStart, trimEnd } = safeClipDur(scene, clip, targetPerClip);
     const isLastValid = validIdx === validCount - 1;
     const thisTime = clipStartTime;
     clipStartTime += dur - (isLastValid ? 0 : CROSSFADE_DUR);
     validIdx++;
-    return { time: thisTime, dur, trimStart, trimEnd, isVideo: clip.file_type === "video" };
+    const a = clip.ai_analysis || {};
+    const hasAudio = clip.file_type === "video" && !!(a.has_laughter === true || a.has_natural_audio === true);
+    return { time: thisTime, dur, trimStart, trimEnd, isVideo: clip.file_type === "video", hasAudio };
   });
 
   // Total video duration accounts for all crossfade overlaps
@@ -133,7 +143,9 @@ function buildCreatomateSource(
       source: clip.file_path,
       fit: "cover",
       ...(isVideo ? { trim_start: trimStart, trim_end: trimEnd } : {}),
-      volume: isVideo ? "100%" : "0%",   // ALL video clips keep their natural audio
+      // Only keep audio for clips where AI explicitly detected laughter/baby sounds.
+      // Default when ai_analysis is null = muted (safe — avoids playing unwanted voices).
+      volume: timing.hasAudio ? "100%" : "0%",
       animations,
     };
   }).filter(Boolean);
@@ -222,7 +234,8 @@ function buildCreatomateSource(
   validTimings.forEach((timing, idx) => {
     const isFirst = idx === 0;
     const isLast = idx === validTimings.length - 1;
-    const vol = timing.isVideo ? "18%" : "68%";
+    // Duck music when this clip has confirmed baby audio; otherwise music is prominent.
+    const vol = timing.hasAudio ? "18%" : "65%";
     audioElements.push({
       type: "audio",
       source: finalMusicUrl,
