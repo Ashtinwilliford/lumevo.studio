@@ -63,68 +63,67 @@ function buildCreatomateSource(
 
     // Guard: invalid trims (0,0 or reversed or exceeding actual duration)
     if (trimEnd <= trimStart || (trimStart === 0 && trimEnd === 0)) {
-      // Use the full clip, capped at 6s
       trimStart = 0;
       trimEnd = Math.min(actualDur, 6);
     }
-    // Clamp to actual duration
     trimEnd = Math.min(trimEnd, actualDur);
     trimStart = Math.min(trimStart, trimEnd - 1);
 
     const sourceDur = trimEnd - trimStart;
-    let dur: number;
-    if (isVideo) {
-      // Cap display duration at 5s (if source is longer, Creatomate speeds it up)
-      dur = Math.max(1.5, Math.min(sourceDur, 5));
-    } else {
-      dur = 3.5;
-    }
+    const dur = isVideo ? Math.max(1.5, Math.min(sourceDur, 5)) : 3.5;
     return { dur, trimStart, trimEnd };
   }
 
-  // Build media elements — explicit time + alternating tracks for real crossfade dissolves
+  // ── Pass 1: precompute timing for every scene ──────────────────────────────
+  interface SceneTiming {
+    time: number; dur: number; trimStart: number; trimEnd: number; isVideo: boolean;
+  }
+  const validCount = plan.scene_order.filter(s => clips.get(s.clip_id)?.file_path).length;
   let clipStartTime = 0;
-  const sceneCount = plan.scene_order.filter(s => clips.get(s.clip_id)?.file_path).length;
-  let placedCount = 0;
+  let validIdx = 0;
 
-  const mediaElements = plan.scene_order.map((scene, i) => {
+  const sceneTimings: (SceneTiming | null)[] = plan.scene_order.map(scene => {
     const clip = clips.get(scene.clip_id);
     if (!clip?.file_path) return null;
+    const { dur, trimStart, trimEnd } = safeClipDur(scene, clip);
+    const isLastValid = validIdx === validCount - 1;
+    const thisTime = clipStartTime;
+    clipStartTime += dur - (isLastValid ? 0 : CROSSFADE_DUR);
+    validIdx++;
+    return { time: thisTime, dur, trimStart, trimEnd, isVideo: clip.file_type === "video" };
+  });
 
-    const isVideo = clip.file_type === "video";
-    const { dur: clipDur, trimStart, trimEnd } = safeClipDur(scene, clip);
+  // Total video duration accounts for all crossfade overlaps
+  const totalClipDur = clipStartTime;
 
+  // ── Pass 2: build media elements ──────────────────────────────────────────
+  let placedCount = 0;
+  const mediaElements = plan.scene_order.map((scene, i) => {
+    const timing = sceneTimings[i];
+    const clip = clips.get(scene.clip_id);
+    if (!timing || !clip?.file_path) return null;
+
+    const { dur: clipDur, trimStart, trimEnd, isVideo, time: thisTime } = timing;
     const analysis = clip.ai_analysis || {};
     const hasPerson = !!(analysis.has_speech || analysis.has_laughter || analysis.has_natural_audio);
 
-    // Zoom: person clips zoom in tighter; alternate in/out for visual variety
+    // Alternate zoom in/out; person clips start tighter
     const zoomIn = i % 2 === 0;
     const baseScale = hasPerson ? "115%" : "100%";
     const endScale  = hasPerson ? (zoomIn ? "125%" : "115%") : (zoomIn ? "110%" : "100%");
     const zoomAnimation = {
-      easing: "linear",
-      type: "scale",
-      scope: "element",
-      start_scale: baseScale,
-      end_scale: endScale,
+      easing: "linear", type: "scale", scope: "element",
+      start_scale: baseScale, end_scale: endScale,
     };
 
-    // Crossfade: each clip except first fades IN over the tail of the previous clip
+    // First clip: no transition; subsequent clips fade IN over the tail of the previous
     const animations = placedCount === 0
       ? [zoomAnimation]
       : [zoomAnimation, { type: "fade", duration: `${CROSSFADE_DUR} s` }];
 
-    const thisTime = clipStartTime;
-    const isLastClip = placedCount === sceneCount - 1;
-    // Next clip starts CROSSFADE_DUR before this one ends → real dissolve, not fade-to-black
-    clipStartTime += clipDur - (isLastClip ? 0 : CROSSFADE_DUR);
-    placedCount++;
-
-    // Alternate tracks 1/2 so overlapping clips composite correctly
+    // Alternate tracks 1/2 so overlapping clips dissolve correctly
     const track = (placedCount % 2) + 1;
-
-    // Keep audio for ALL video clips — don't require ai_analysis flags to be set
-    const keepAudio = isVideo;
+    placedCount++;
 
     return {
       type: isVideo ? "video" : "image",
@@ -134,13 +133,10 @@ function buildCreatomateSource(
       source: clip.file_path,
       fit: "cover",
       ...(isVideo ? { trim_start: trimStart, trim_end: trimEnd } : {}),
-      volume: keepAudio ? "100%" : "0%",
+      volume: isVideo ? "100%" : "0%",   // ALL video clips keep their natural audio
       animations,
     };
   }).filter(Boolean);
-
-  // Total video duration = end time of last clip (accounts for crossfade overlaps)
-  const totalClipDur = clipStartTime;
 
   // Text overlays from scene_order (only if text_amount is not "none")
   const textElements: Record<string, unknown>[] = [];
@@ -212,25 +208,32 @@ function buildCreatomateSource(
     // Claude uses it for internal editor notes. Showing it on-screen was a bug.
   }
 
-  // Audio elements
+  // ── Audio elements ────────────────────────────────────────────────────────
   const audioElements: Record<string, unknown>[] = [];
-
-  // Background music — duration matches actual clip duration so video doesn't run to black
   const finalMusicUrl = musicUrl || MUSIC_FALLBACK[Math.floor(Math.random() * MUSIC_FALLBACK.length)];
 
-  // Since ALL video clips keep their original audio, duck the music so natural
-  // sounds (laughter, speech) can be heard clearly over it.
-  const hasVideoClips = plan.scene_order.some(s => clips.get(s.clip_id)?.file_type === "video");
-  const musicVolume = hasVideoClips ? "35%" : "65%";
-
-  audioElements.push({
-    type: "audio",
-    source: finalMusicUrl,
-    duration: totalClipDur,
-    volume: musicVolume,
-    loop: true,
-    audio_fade_in: 1.5,
-    audio_fade_out: 3.5,
+  // ── Intelligent per-clip audio ducking ────────────────────────────────────
+  // For video clips: music ducks to 18% so Ellie's voice / laughter comes through at 100%.
+  // For image clips (no natural audio): music rises to 68% and fills the space.
+  // Each segment has short fades (0.4s) so volume transitions blend smoothly.
+  // trim_start keeps the song playing continuously across all segments.
+  let musicOffset = 0;
+  const validTimings = sceneTimings.filter((t): t is NonNullable<typeof t> => t !== null);
+  validTimings.forEach((timing, idx) => {
+    const isFirst = idx === 0;
+    const isLast = idx === validTimings.length - 1;
+    const vol = timing.isVideo ? "18%" : "68%";
+    audioElements.push({
+      type: "audio",
+      source: finalMusicUrl,
+      time: Math.max(0, timing.time),
+      duration: timing.dur,
+      trim_start: musicOffset,
+      volume: vol,
+      audio_fade_in: isFirst ? 1.5 : 0.4,
+      audio_fade_out: isLast ? 3.0 : 0.4,
+    });
+    musicOffset += timing.dur;
   });
 
   // Voiceover
@@ -350,51 +353,65 @@ export async function POST(req: NextRequest) {
     const title = project.title as string;
     const targetDuration = (project.target_duration as number) || 30;
 
-    // Use music/select to pick from real royalty-free track library
+    // ── Music selection ─────────────────────────────────────────────────────
+    // Priority: cached matching music → ElevenLabs (when music_style set) → Bensound fallback
     let musicUrl: string | null = null;
+    const projectMusicStyle = (project.music_style as string) || "";
     try {
+      // Check cache: only reuse if style_prompt matches current music_style
       const existingMusic = await query(
-        "SELECT audio_url FROM voiceovers WHERE project_id = $1 AND audio_type = 'music' AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
+        "SELECT audio_url, style_prompt FROM voiceovers WHERE project_id = $1 AND audio_type = 'music' AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
         [projectId]
       );
       if (existingMusic.rows[0]?.audio_url) {
         const cachedUrl = existingMusic.rows[0].audio_url as string;
-        // Only reuse cached music if it's from a known royalty-free library.
-        // Old ElevenLabs sound-effect tracks (Cloudinary URLs) are NOT music — skip them.
-        const isLibraryTrack = cachedUrl.includes("bensound.com") || cachedUrl.includes("creatomate.com");
-        if (isLibraryTrack) musicUrl = cachedUrl;
+        const cachedStyle = (existingMusic.rows[0].style_prompt as string) || "";
+        // Reuse if: it's a library track matching current style, OR an ElevenLabs track for same style
+        const styleMatches = !projectMusicStyle || cachedStyle === projectMusicStyle;
+        const notOldSoundEffect = !cachedUrl.includes("res.cloudinary.com") || styleMatches;
+        if (styleMatches && notOldSoundEffect) musicUrl = cachedUrl;
       }
+
       if (!musicUrl) {
-        // Pick a real track from the library based on project vibe
-        const vibe = project.vibe as string || "warm cozy";
-        const platform = project.target_platform as string || "instagram";
-        const selectRes = await fetch(`${reqOrigin}/api/music/select`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Cookie: cookieHeader },
-          body: JSON.stringify({
-            vibe,
-            platform,
-            duration: targetDuration,
-            title: project.title,
-          }),
-        });
-        if (selectRes.ok) {
-          const selectData = await selectRes.json();
-          if (selectData.track?.url) {
-            musicUrl = selectData.track.url as string;
-            // Cache it
-            await query(
-              `INSERT INTO voiceovers (user_id, project_id, audio_url, status, audio_type, style_prompt)
-               VALUES ($1, $2, $3, 'completed', 'music', $4) ON CONFLICT DO NOTHING`,
-              [userId, projectId, musicUrl, vibe]
-            );
+        if (projectMusicStyle && process.env.ELEVENLABS_API_KEY) {
+          // Generate music with ElevenLabs using the user's genre description
+          const genRes = await fetch(`${reqOrigin}/api/music/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: cookieHeader },
+            body: JSON.stringify({ projectId }),
+          });
+          if (genRes.ok) {
+            const genData = await genRes.json();
+            if (genData.audioUrl) musicUrl = genData.audioUrl as string;
+          }
+        }
+
+        if (!musicUrl) {
+          // Fall back to Bensound royalty-free library
+          const vibe = project.vibe as string || "warm cozy";
+          const platform = project.target_platform as string || "instagram";
+          const selectRes = await fetch(`${reqOrigin}/api/music/select`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: cookieHeader },
+            body: JSON.stringify({ vibe, platform, duration: targetDuration, title: project.title }),
+          });
+          if (selectRes.ok) {
+            const selectData = await selectRes.json();
+            if (selectData.track?.url) {
+              musicUrl = selectData.track.url as string;
+              await query(
+                `INSERT INTO voiceovers (user_id, project_id, audio_url, status, audio_type, style_prompt)
+                 VALUES ($1, $2, $3, 'completed', 'music', $4) ON CONFLICT DO NOTHING`,
+                [userId, projectId, musicUrl, vibe]
+              );
+            }
           }
         }
       }
     } catch (err) {
       console.error("Music selection failed, using fallback:", err);
     }
-    await logStage(projectId, userId, "music_generation", { prompt: plan.music_brief }, { musicUrl }, undefined, 0);
+    await logStage(projectId, userId, "music_generation", { prompt: plan.music_brief, musicStyle: projectMusicStyle }, { musicUrl }, undefined, 0);
 
     // Build Creatomate source
     const source = buildCreatomateSource(plan, clipMap, style, targetDuration, title, voiceoverUrl, musicUrl);

@@ -46,6 +46,11 @@ export default function ProjectPage() {
   const [feedbackSending, setFeedbackSending] = useState(false);
   const [claudePlan, setClaudePlan] = useState<VideoPlan | null>(null);
 
+  // Music style state
+  const [musicStyle, setMusicStyle] = useState("");
+  const [savingMusicStyle, setSavingMusicStyle] = useState(false);
+  const [musicSaved, setMusicSaved] = useState(false);
+
   async function load() {
     const res = await fetch(`/api/projects/${id}`);
     if (!res.ok) { router.push("/dashboard"); return; }
@@ -62,6 +67,9 @@ export default function ProjectPage() {
       if (rawPlan && typeof rawPlan === "string") setClaudePlan(JSON.parse(rawPlan) as VideoPlan);
       else if (rawPlan && typeof rawPlan === "object") setClaudePlan(rawPlan as VideoPlan);
     } catch { setClaudePlan(null); }
+
+    // Load music style
+    if (data.project?.music_style) setMusicStyle(data.project.music_style as string);
 
     const uRes = await fetch(`/api/uploads?projectId=${id}`);
     if (uRes.ok) { const uData = await uRes.json(); setUploads(uData.uploads || []); }
@@ -122,6 +130,22 @@ export default function ProjectPage() {
     if (!customFeedback.trim()) return;
     await sendFeedback(customFeedback.trim());
     setCustomFeedback("");
+  }
+
+  async function saveMusicStyle() {
+    if (!musicStyle.trim()) return;
+    setSavingMusicStyle(true);
+    setMusicSaved(false);
+    try {
+      await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ music_style: musicStyle.trim() }),
+      });
+      setMusicSaved(true);
+      setTimeout(() => setMusicSaved(false), 3000);
+    } catch (err) { console.error(err); }
+    setSavingMusicStyle(false);
   }
 
   async function generateVideo() {
@@ -431,6 +455,57 @@ export default function ProjectPage() {
           </div>
         </div>
       )}
+
+      {/* Music Style Card */}
+      <div style={{ background: "#fff", borderRadius: 16, border: "1.5px solid rgba(0,0,0,0.08)", padding: "20px 22px", marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <span style={{ fontSize: 20 }}>🎵</span>
+          <div>
+            <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, color: "#1a1a1a" }}>Music Style</div>
+            <div style={{ fontSize: 12, color: "#7c7660", marginTop: 1 }}>Tell the AI what genre or vibe you want — it generates music to match.</div>
+          </div>
+        </div>
+        <input
+          type="text"
+          value={musicStyle}
+          onChange={e => setMusicStyle(e.target.value)}
+          placeholder='e.g. "warm country like Ella Langley" or "upbeat pop" or "cinematic strings"'
+          onKeyDown={e => e.key === "Enter" && saveMusicStyle()}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            border: "1.5px solid rgba(0,0,0,0.12)",
+            borderRadius: 10,
+            padding: "10px 14px",
+            fontFamily: "inherit",
+            fontSize: 14,
+            color: "#1a1a1a",
+            background: "#faf8f2",
+            outline: "none",
+            marginBottom: 10,
+          }}
+        />
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            onClick={saveMusicStyle}
+            disabled={savingMusicStyle || !musicStyle.trim()}
+            style={{
+              background: "#1a1a1a", color: "#fff", border: "none", borderRadius: 999,
+              padding: "9px 20px", fontFamily: "inherit", fontSize: 13, fontWeight: 700,
+              cursor: savingMusicStyle || !musicStyle.trim() ? "not-allowed" : "pointer",
+              opacity: savingMusicStyle || !musicStyle.trim() ? 0.5 : 1,
+            }}
+          >
+            {savingMusicStyle ? "Saving..." : "Save Style"}
+          </button>
+          {musicSaved && (
+            <span style={{ fontSize: 12, color: "#22a454", fontWeight: 600 }}>✓ Saved — music will regenerate on next video</span>
+          )}
+        </div>
+        <div style={{ marginTop: 10, fontSize: 11, color: "#a89b7a" }}>
+          💡 Your saved music style gets sent to ElevenLabs AI every time you generate — it creates a fresh track to match your description.
+        </div>
+      </div>
 
       {/* Generate button */}
       {!genStatus && (

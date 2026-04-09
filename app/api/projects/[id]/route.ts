@@ -9,7 +9,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
 
   const projectRes = await query(
-    `SELECT id, title, project_type, target_platform, target_duration, vibe, status, generated_content, video_url, render_id, claude_plan, created_at, updated_at
+    `SELECT id, title, project_type, target_platform, target_duration, vibe, status, generated_content, video_url, render_id, claude_plan, music_style, created_at, updated_at
      FROM projects WHERE id = $1 AND user_id = $2`,
     [id, session.id]
   );
@@ -45,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const { title, generated_content } = await req.json();
+  const { title, generated_content, music_style } = await req.json();
 
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -53,6 +53,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (title !== undefined) { updates.push(`title = $${i++}`); values.push(title); }
   if (generated_content !== undefined) { updates.push(`generated_content = $${i++}`); values.push(JSON.stringify(generated_content)); }
+  if (music_style !== undefined) {
+    updates.push(`music_style = $${i++}`);
+    values.push(music_style);
+    // Clear cached music so next render regenerates with the new style
+    await query(
+      "DELETE FROM voiceovers WHERE project_id = $1 AND audio_type = 'music'",
+      [id]
+    );
+  }
 
   if (updates.length === 0) return NextResponse.json({ ok: true });
 

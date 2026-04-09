@@ -29,15 +29,52 @@ const MUSIC_LIBRARY: Record<string, string[]> = {
 
 // Map music_energy style values to descriptive ElevenLabs prompts
 const MUSIC_PROMPTS: Record<string, string> = {
-  cinematic: "cinematic orchestral background music, warm strings, emotional, smooth, luxury reel",
-  "cinematic emotional": "cinematic emotional piano with strings, tender, heartfelt, beautiful, luxury video",
-  energetic: "upbeat energetic music, driving beat, high energy, exciting, dynamic",
-  trendy: "trendy modern pop music, upbeat, viral social media vibes, fresh",
-  ambient: "soft ambient background music, minimal, airy, modern editorial",
-  upbeat: "upbeat cheerful background music, positive, bright, lifestyle",
-  dramatic: "dramatic cinematic music, intense, powerful, dark undertones, film score",
-  "warm cozy": "warm acoustic country folk, gentle fingerpicked guitar, sunshine meadow, Ellie Langley inspired, tender, nostalgic",
+  cinematic: "cinematic orchestral background music, warm strings, emotional, smooth, luxury reel, no vocals",
+  "cinematic emotional": "cinematic emotional piano with strings, tender, heartfelt, beautiful, luxury video, no vocals",
+  energetic: "upbeat energetic music, driving beat, high energy, exciting, dynamic, no vocals",
+  trendy: "trendy modern pop music, upbeat, viral social media vibes, fresh, no vocals",
+  ambient: "soft ambient background music, minimal, airy, modern editorial, no vocals",
+  upbeat: "upbeat cheerful background music, positive, bright, lifestyle, no vocals",
+  dramatic: "dramatic cinematic music, intense, powerful, dark undertones, film score, no vocals",
+  "warm cozy": "warm acoustic country folk instrumental, gentle fingerpicked guitar, Nashville sound, southern warmth, no vocals",
 };
+
+// Build a rich, genre-specific ElevenLabs prompt from free-form user music description
+function buildMusicPromptFromStyle(musicStyle: string): string {
+  const s = musicStyle.toLowerCase();
+
+  // Country / Americana / Ella/Ellie Langley
+  if (s.includes("country") || s.includes("langley") || s.includes("ella") || s.includes("choosin") || s.includes("texas") || s.includes("nashville") || s.includes("southern")) {
+    return "warm country music instrumental, fingerpicked acoustic guitar, gentle Nashville-style fiddle, steel guitar undertone, southern Americana warmth, heartfelt folk melody, no vocals, high quality background music";
+  }
+  // Pop
+  if (s.includes("pop") || s.includes("taylor") || s.includes("olivia") || s.includes("trending") || s.includes("viral")) {
+    return "upbeat modern pop instrumental, bright synth layers, punchy beat, feel-good energy, radio-ready production, no vocals";
+  }
+  // Hip-hop / trap / R&B
+  if (s.includes("hip hop") || s.includes("hiphop") || s.includes("trap") || s.includes("r&b") || s.includes("rnb")) {
+    return "lo-fi hip hop instrumental, smooth beat, warm bass, chill vibes, modern urban sound, no vocals";
+  }
+  // Cinematic / film
+  if (s.includes("cinematic") || s.includes("film") || s.includes("orchestral") || s.includes("epic")) {
+    return "cinematic orchestral instrumental, sweeping strings, emotional build, luxury lifestyle feel, no vocals";
+  }
+  // Indie / alternative
+  if (s.includes("indie") || s.includes("alternative") || s.includes("folk")) {
+    return "indie folk instrumental, acoustic guitar, warm production, tender melody, no vocals";
+  }
+  // Upbeat / happy
+  if (s.includes("upbeat") || s.includes("happy") || s.includes("fun") || s.includes("cheerful")) {
+    return "upbeat cheerful background music, bright melody, positive energy, no vocals";
+  }
+  // Calm / chill / relaxed
+  if (s.includes("calm") || s.includes("chill") || s.includes("relax") || s.includes("peaceful") || s.includes("cozy") || s.includes("warm")) {
+    return "warm cozy acoustic background music, gentle guitar, soft ambient tones, relaxed feel, no vocals";
+  }
+
+  // Generic fallback: use the raw style as-is but append quality modifiers
+  return `${musicStyle} background music instrumental, professional music production, continuous melody, no vocals`;
+}
 
 // POST /api/music/generate
 // Body: { projectId, prompt?, durationSeconds? }
@@ -51,7 +88,7 @@ export async function POST(req: NextRequest) {
   let body;
   try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid request" }, { status: 400 }); }
 
-  const { projectId, prompt, durationSeconds = 30 } = body as {
+  const { projectId, prompt, durationSeconds = 22 } = body as {
     projectId?: string;
     prompt?: string;
     durationSeconds?: number;
@@ -59,24 +96,40 @@ export async function POST(req: NextRequest) {
 
   const userId = session.id;
 
-  // If no prompt provided but projectId given, derive from project plan + creator style
+  // Build music prompt: priority order:
+  // 1. Explicit prompt passed in request
+  // 2. project.music_style (user-specified genre, e.g. "warm country like Ella Langley")
+  // 3. claude_plan.music_brief (AI's music suggestion)
+  // 4. creator_styles.music_energy fallback
   let musicPrompt = prompt;
   if (!musicPrompt && projectId) {
     const [projRes, styleRes] = await Promise.all([
-      query("SELECT claude_plan, target_duration FROM projects WHERE id = $1 AND user_id = $2", [projectId, userId]),
+      query("SELECT claude_plan, target_duration, music_style FROM projects WHERE id = $1 AND user_id = $2", [projectId, userId]),
       query("SELECT music_energy FROM creator_styles WHERE user_id = $1", [userId]),
     ]);
     const proj = projRes.rows[0];
     const style = styleRes.rows[0];
-    const musicEnergy = (style?.music_energy as string) || "cinematic";
-    const claudePlan = proj?.claude_plan as { music_brief?: string } | null;
-    const planBrief = claudePlan?.music_brief;
-    musicPrompt = planBrief || MUSIC_PROMPTS[musicEnergy] || MUSIC_PROMPTS.cinematic;
+
+    // Priority: user's music_style > plan brief > creator energy
+    const userMusicStyle = proj?.music_style as string | null;
+    if (userMusicStyle) {
+      musicPrompt = buildMusicPromptFromStyle(userMusicStyle);
+    } else {
+      let claudePlan: { music_brief?: string } | null = null;
+      try {
+        const rawPlan = proj?.claude_plan;
+        claudePlan = rawPlan && typeof rawPlan === "string" ? JSON.parse(rawPlan) : rawPlan;
+      } catch { claudePlan = null; }
+      const planBrief = claudePlan?.music_brief;
+      const musicEnergy = (style?.music_energy as string) || "cinematic";
+      musicPrompt = (planBrief ? buildMusicPromptFromStyle(planBrief) : null) || MUSIC_PROMPTS[musicEnergy] || MUSIC_PROMPTS.cinematic;
+    }
   }
 
   if (!musicPrompt) musicPrompt = MUSIC_PROMPTS.cinematic;
 
-  const targetDuration = Math.min(Math.max(durationSeconds, 5), 60);
+  // ElevenLabs sound-generation max is 22s — Creatomate loops it for the full video
+  const targetDuration = Math.min(Math.max(durationSeconds, 5), 22);
 
   try {
     // Call ElevenLabs Sound Generation API
