@@ -114,6 +114,10 @@ export async function GET() {
     created_at TIMESTAMP DEFAULT now()
   )`);
 
+  // migrate-v6.sql — Soundstripe metadata on cached tracks
+  await run("music_tracks.source", `ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'library'`);
+  await run("music_tracks.soundstripe_id", `ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS soundstripe_id TEXT`);
+
   // Ensure unique constraint exists (table may have been created without it)
   await run("music_tracks.url_unique", `CREATE UNIQUE INDEX IF NOT EXISTS music_tracks_url_unique ON music_tracks(url)`);
 

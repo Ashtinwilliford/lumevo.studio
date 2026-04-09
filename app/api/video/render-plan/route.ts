@@ -359,11 +359,18 @@ export async function POST(req: NextRequest) {
     const targetDuration = (project.target_duration as number) || 30;
 
     // ── Music selection ─────────────────────────────────────────────────────
-    // Priority: cached matching music → ElevenLabs (when music_style set) → Bensound fallback
+    // Priority order (handled inside /api/music/select):
+    //   1. Soundstripe (licensed library — primary)
+    //   2. ElevenLabs sound generation (fallback)
+    //   3. Bensound royalty-free library (last resort)
+    // We cache the selected URL in voiceovers so repeated re-renders skip the API call.
     let musicUrl: string | null = null;
     const projectMusicStyle = (project.music_style as string) || "";
+    let musicSource = "unknown";
+    let musicTrackName = "";
+
     try {
-      // Check cache: only reuse if style_prompt matches current music_style
+      // Check cache: reuse if style_prompt matches the current music_style
       const existingMusic = await query(
         "SELECT audio_url, style_prompt FROM voiceovers WHERE project_id = $1 AND audio_type = 'music' AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
         [projectId]
@@ -371,52 +378,68 @@ export async function POST(req: NextRequest) {
       if (existingMusic.rows[0]?.audio_url) {
         const cachedUrl = existingMusic.rows[0].audio_url as string;
         const cachedStyle = (existingMusic.rows[0].style_prompt as string) || "";
-        // Reuse if: it's a library track matching current style, OR an ElevenLabs track for same style
         const styleMatches = !projectMusicStyle || cachedStyle === projectMusicStyle;
-        const notOldSoundEffect = !cachedUrl.includes("res.cloudinary.com") || styleMatches;
-        if (styleMatches && notOldSoundEffect) musicUrl = cachedUrl;
+        if (styleMatches) {
+          musicUrl = cachedUrl;
+          musicSource = "cached";
+          console.log("[render-plan] Reusing cached music:", cachedUrl.slice(0, 80));
+        }
       }
 
       if (!musicUrl) {
-        if (projectMusicStyle && process.env.ELEVENLABS_API_KEY) {
-          // Generate music with ElevenLabs using the user's genre description
-          const genRes = await fetch(`${reqOrigin}/api/music/generate`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: cookieHeader },
-            body: JSON.stringify({ projectId }),
-          });
-          if (genRes.ok) {
-            const genData = await genRes.json();
-            if (genData.audioUrl) musicUrl = genData.audioUrl as string;
-          }
-        }
+        // Pull AI analysis moods from clips to help vibe detection
+        const analysisResults = Array.from(clipMap.values())
+          .map(c => c.ai_analysis ? { mood: c.ai_analysis.mood as string, energy: c.ai_analysis.energy as string } : null)
+          .filter(Boolean) as { mood: string; energy: string }[];
 
-        if (!musicUrl) {
-          // Fall back to Bensound royalty-free library
-          const vibe = project.vibe as string || "warm cozy";
-          const platform = project.target_platform as string || "instagram";
-          const selectRes = await fetch(`${reqOrigin}/api/music/select`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: cookieHeader },
-            body: JSON.stringify({ vibe, platform, duration: targetDuration, title: project.title }),
-          });
-          if (selectRes.ok) {
-            const selectData = await selectRes.json();
-            if (selectData.track?.url) {
-              musicUrl = selectData.track.url as string;
-              await query(
-                `INSERT INTO voiceovers (user_id, project_id, audio_url, status, audio_type, style_prompt)
-                 VALUES ($1, $2, $3, 'completed', 'music', $4) ON CONFLICT DO NOTHING`,
-                [userId, projectId, musicUrl, vibe]
-              );
-            }
+        const selectRes = await fetch(`${reqOrigin}/api/music/select`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: cookieHeader },
+          body: JSON.stringify({
+            vibe: project.vibe as string || "warm cozy",
+            musicStyle: projectMusicStyle,
+            platform: project.target_platform as string || "instagram",
+            duration: targetDuration,
+            title: project.title,
+            projectId,
+            analysisResults,
+          }),
+        });
+
+        if (selectRes.ok) {
+          const selectData = await selectRes.json() as {
+            track?: { url: string; name?: string; artist?: string; source?: string };
+            source?: string;
+            reason?: string;
+          };
+          if (selectData.track?.url) {
+            musicUrl = selectData.track.url;
+            musicSource = selectData.source || selectData.track.source || "select";
+            musicTrackName = [selectData.track.name, selectData.track.artist].filter(Boolean).join(" — ");
+
+            // Cache so next render is instant
+            await query(
+              `INSERT INTO voiceovers (user_id, project_id, audio_url, status, audio_type, style_prompt)
+               VALUES ($1, $2, $3, 'completed', 'music', $4) ON CONFLICT DO NOTHING`,
+              [userId, projectId, musicUrl, projectMusicStyle || "auto"]
+            ).catch(() => { /* non-fatal */ });
+
+            console.log(`[render-plan] Music selected via ${musicSource}: "${musicTrackName}" — ${selectData.reason || ""}`);
           }
+        } else {
+          console.warn("[render-plan] /api/music/select failed:", await selectRes.text().catch(() => ""));
         }
       }
     } catch (err) {
-      console.error("Music selection failed, using fallback:", err);
+      console.error("[render-plan] Music selection error:", err instanceof Error ? err.message : err);
     }
-    await logStage(projectId, userId, "music_generation", { prompt: plan.music_brief, musicStyle: projectMusicStyle }, { musicUrl }, undefined, 0);
+
+    await logStage(
+      projectId, userId, "music_generation",
+      { musicStyle: projectMusicStyle, vibe: project.vibe },
+      { musicUrl, source: musicSource, track: musicTrackName },
+      undefined, 0
+    );
 
     // Build Creatomate source
     const source = buildCreatomateSource(plan, clipMap, style, targetDuration, title, voiceoverUrl, musicUrl);

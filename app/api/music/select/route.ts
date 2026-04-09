@@ -1,141 +1,214 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { query } from "@/lib/db";
-import Anthropic from "@anthropic-ai/sdk";
+import { detectVibe } from "@/app/api/music/soundstripe/route";
 
-const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+export const maxDuration = 45;
 
-interface MusicTrack {
-  id: string;
-  name: string;
-  artist: string;
-  genre: string;
-  vibe_tags: string[];
-  bpm: number;
-  duration_sec: number;
-  url: string;
-}
+// Bensound royalty-free fallbacks (last resort only)
+const BENSOUND_FALLBACKS = [
+  { url: "https://www.bensound.com/bensound-music/bensound-acousticbreeze.mp3", name: "Acoustic Breeze", artist: "Bensound", genre: "folk", source: "bensound" },
+  { url: "https://www.bensound.com/bensound-music/bensound-ukulele.mp3",        name: "Ukulele",        artist: "Bensound", genre: "folk", source: "bensound" },
+  { url: "https://www.bensound.com/bensound-music/bensound-sunny.mp3",          name: "Sunny",          artist: "Bensound", genre: "country", source: "bensound" },
+  { url: "https://www.bensound.com/bensound-music/bensound-tenderness.mp3",     name: "Tenderness",     artist: "Bensound", genre: "emotional", source: "bensound" },
+  { url: "https://www.bensound.com/bensound-music/bensound-happiness.mp3",      name: "Happiness",      artist: "Bensound", genre: "folk", source: "bensound" },
+];
 
-interface BrandProfile {
-  music_genre_preference: string | null;
-  creator_archetype: string | null;
-  emotional_arc_preference: string | null;
-  pacing_style: string | null;
-}
+// ElevenLabs sound generation prompts by vibe (fallback only)
+const ELEVENLABS_PROMPTS: Record<string, string> = {
+  warm_emotional:      "warm acoustic country folk instrumental, gentle fingerpicked guitar, Nashville sound, southern warmth, heartfelt melody, no vocals, high quality",
+  fun_playful:         "upbeat cheerful background music, bright ukulele, positive energy, playful, no vocals",
+  cinematic_luxury:    "cinematic orchestral instrumental, sweeping strings, emotional build, luxury lifestyle feel, no vocals",
+  upbeat_celebratory:  "upbeat energetic pop instrumental, driving beat, exciting, no vocals",
+};
 
+// POST /api/music/select
+// Body: { vibe?, musicStyle?, platform?, duration?, title?, projectId?, analysisResults? }
+// Returns: { track: { name, artist, url, source }, reason, vibe, musicVolumeUnderVoice, musicVolumeNoVoice, ... }
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { vibe, platform, duration, title } = await req.json() as {
+  // Forward the original cookie so internal fetch calls are authenticated
+  const cookieHeader = req.headers.get("cookie") || "";
+  const reqOrigin = new URL(req.url).origin;
+
+  const body = await req.json().catch(() => ({})) as {
     vibe?: string;
+    musicStyle?: string;
     platform?: string;
     duration?: number;
     title?: string;
+    projectId?: string;
+    analysisResults?: { mood?: string; energy?: string }[];
   };
 
-  const userId = session.id;
+  const { vibe, musicStyle, duration = 60, analysisResults } = body;
 
-  const [tracksRows, brandRows] = await Promise.all([
-    query("SELECT * FROM music_tracks ORDER BY RANDOM() LIMIT 20"),
-    query("SELECT music_genre_preference, creator_archetype, emotional_arc_preference, pacing_style FROM brand_profiles WHERE user_id = $1", [userId]),
-  ]);
+  // Detect vibe (used by all tiers)
+  const vibeKey = detectVibe({ vibe, musicStyle, analysisResults });
 
-  let tracks = tracksRows.rows as unknown as MusicTrack[];
-  const brand = brandRows.rows[0] as unknown as BrandProfile | undefined;
+  // ── TIER 1: Soundstripe ───────────────────────────────────────────────────
+  const soundstripeKey = process.env.SOUNDSTRIPE_API_KEY;
+  if (soundstripeKey) {
+    try {
+      const ssRes = await fetch(`${reqOrigin}/api/music/soundstripe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookieHeader },
+        body: JSON.stringify({ vibe, musicStyle, targetDuration: duration, analysisResults }),
+      });
 
-  if (!tracks.length) {
-    // Fallback to hardcoded tracks when library is empty
-    const warmTracks = [
-      { url: "https://www.bensound.com/bensound-music/bensound-ukulele.mp3", name: "Ukulele", genre: "folk" },
-      { url: "https://www.bensound.com/bensound-music/bensound-sunny.mp3", name: "Sunny", genre: "country" },
-      { url: "https://www.bensound.com/bensound-music/bensound-acousticbreeze.mp3", name: "Acoustic Breeze", genre: "folk" },
-      { url: "https://www.bensound.com/bensound-music/bensound-tenderness.mp3", name: "Tenderness", genre: "emotional" },
-      { url: "https://www.bensound.com/bensound-music/bensound-happiness.mp3", name: "Happiness", genre: "folk" },
-    ];
-    const track = warmTracks[Math.floor(Math.random() * warmTracks.length)];
-    return NextResponse.json({ track, musicVolumeUnderVoice: 0.15, musicVolumeNoVoice: 0.4, introFadeInSec: 1.5, outroFadeOutSec: 2.5, reason: "Warm folk fallback" });
+      if (ssRes.ok) {
+        const ssData = await ssRes.json() as {
+          track: { name: string; artist: string; url: string; bpm?: number; duration?: number; source: string };
+          vibe: string;
+          reason: string;
+          debug?: unknown;
+        };
+
+        if (ssData.track?.url) {
+          console.log(`[music/select] TIER 1 Soundstripe: "${ssData.track.name}" — ${ssData.reason}`);
+
+          // Cache in music_tracks so repeated renders skip the API call
+          await query(
+            `INSERT INTO music_tracks (name, artist, genre, vibe_tags, bpm, duration_sec, url)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (url) DO NOTHING`,
+            [
+              ssData.track.name,
+              ssData.track.artist,
+              (Array.isArray((ssData.track as unknown as Record<string, unknown>).genres) ? ((ssData.track as unknown as Record<string, string[]>).genres)[0] : undefined) ?? vibeKey,
+              `{${vibeKey}}`,
+              ssData.track.bpm ?? null,
+              ssData.track.duration ?? null,
+              ssData.track.url,
+            ]
+          ).catch(() => { /* non-fatal */ });
+
+          return NextResponse.json({
+            track: ssData.track,
+            vibe: vibeKey,
+            reason: ssData.reason,
+            source: "soundstripe",
+            musicVolumeUnderVoice: 0.18,
+            musicVolumeNoVoice: 0.65,
+            introFadeInSec: 1.5,
+            outroFadeOutSec: 3.0,
+            debug: ssData.debug,
+          });
+        }
+      } else {
+        const errText = await ssRes.text();
+        console.warn("[music/select] Soundstripe unavailable:", errText.slice(0, 200));
+      }
+    } catch (err) {
+      console.warn("[music/select] Soundstripe error:", err instanceof Error ? err.message : err);
+    }
+  } else {
+    console.log("[music/select] SOUNDSTRIPE_API_KEY not set — skipping Tier 1");
   }
 
-  // Smart vibe-tag filtering: if vibe contains warm/cozy/country/folk words, prefer matching tracks
-  const vibeStr = (vibe || "").toLowerCase();
-  const warmKeywords = ["cozy", "warm", "country", "folk", "acoustic", "sunny", "happy", "tender", "gentle"];
-  const matchingKeywords = warmKeywords.filter(k => vibeStr.includes(k));
-  if (matchingKeywords.length > 0) {
-    const filtered = tracks.filter(t =>
-      t.vibe_tags?.some(tag => matchingKeywords.includes(tag.toLowerCase())) ||
-      matchingKeywords.includes(t.genre?.toLowerCase())
-    );
-    if (filtered.length > 0) tracks = filtered;
+  // ── TIER 2: ElevenLabs sound generation ───────────────────────────────────
+  const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
+  if (elevenLabsKey) {
+    try {
+      const musicPrompt = ELEVENLABS_PROMPTS[vibeKey] || ELEVENLABS_PROMPTS.warm_emotional;
+      const targetSec = Math.min(Math.max(duration, 5), 22); // ElevenLabs max 22s
+
+      const elRes = await fetch("https://api.elevenlabs.io/v1/sound-generation", {
+        method: "POST",
+        headers: {
+          "xi-api-key": elevenLabsKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: musicPrompt,
+          duration_seconds: targetSec,
+          prompt_influence: 0.3,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+
+      if (elRes.ok) {
+        // Upload audio buffer to Cloudinary so Creatomate can reach it
+        const { v2: cloudinary } = await import("cloudinary");
+        cloudinary.config({
+          cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+          api_key: process.env.CLOUDINARY_API_KEY,
+          api_secret: process.env.CLOUDINARY_API_SECRET,
+        });
+
+        const audioBuffer = Buffer.from(await elRes.arrayBuffer());
+        const uploadResult = await cloudinary.uploader.upload(
+          `data:audio/mpeg;base64,${audioBuffer.toString("base64")}`,
+          { resource_type: "video", folder: "lumevo/music", format: "mp3" }
+        );
+
+        const audioUrl = uploadResult.secure_url;
+        console.log(`[music/select] TIER 2 ElevenLabs: generated ${targetSec}s track`);
+
+        return NextResponse.json({
+          track: { name: "AI Generated", artist: "ElevenLabs", url: audioUrl, source: "elevenlabs" },
+          vibe: vibeKey,
+          reason: `ElevenLabs generated: ${musicPrompt.slice(0, 60)}…`,
+          source: "elevenlabs",
+          musicVolumeUnderVoice: 0.18,
+          musicVolumeNoVoice: 0.65,
+          introFadeInSec: 1.5,
+          outroFadeOutSec: 3.0,
+        });
+      } else {
+        const errText = await elRes.text();
+        console.warn("[music/select] ElevenLabs error:", errText.slice(0, 200));
+      }
+    } catch (err) {
+      console.warn("[music/select] ElevenLabs error:", err instanceof Error ? err.message : err);
+    }
   }
 
-  // Build a rich selection prompt
-  const trackList = tracks.map((t, i) =>
-    `${i + 1}. "${t.name}" | genre: ${t.genre} | vibes: ${t.vibe_tags?.join(", ")} | BPM: ${t.bpm}`
-  ).join("\n");
-
-  const selectionPrompt = `You are a music supervisor for a short-form video creator.
-
-Video details:
-- Title: "${title || "Untitled"}"
-- Vibe: "${vibe || "engaging"}"
-- Platform: ${platform || "TikTok/Reels"}
-- Duration: ${duration || 30} seconds
-
-Creator's profile:
-- Music preference: ${brand?.music_genre_preference || "not set"}
-- Content archetype: ${brand?.creator_archetype || "creator"}
-- Emotional arc: ${brand?.emotional_arc_preference || "unknown"}
-- Pacing: ${brand?.pacing_style || "unknown"}
-
-Available tracks:
-${trackList}
-
-Pick the ONE track (by number) that best matches the video's emotional energy and the creator's style.
-Also suggest the ideal volume level for music under voice narration (0.0-1.0, where 0.15 means very soft background and 0.5 means equal with voice).
-
-Return JSON only:
-{
-  "trackIndex": <1-based number>,
-  "reason": "one sentence explaining why this track fits",
-  "musicVolumeUnderVoice": 0.15,
-  "musicVolumeNoVoice": 0.4,
-  "introFadeInSec": 1.5,
-  "outroFadeOutSec": 2.0
-}`;
-
-  let selection = { trackIndex: 1, musicVolumeUnderVoice: 0.12, musicVolumeNoVoice: 0.35, introFadeInSec: 1.5, outroFadeOutSec: 2.0, reason: "Default selection" };
-
+  // ── TIER 3: DB library (seeded Bensound tracks) ───────────────────────────
   try {
-    const res = await ai.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: 200,
-      temperature: 0.5,
-      messages: [{ role: "user", content: selectionPrompt }],
-    });
-    const parsed = JSON.parse((res.content[0]?.type === "text" ? res.content[0].text : "{}")) as typeof selection;
-    if (parsed.trackIndex) selection = parsed;
+    const tracksRes = await query(
+      `SELECT * FROM music_tracks WHERE $1 = ANY(vibe_tags) OR genre ILIKE $2 ORDER BY RANDOM() LIMIT 5`,
+      [vibeKey, `%${vibeKey.split("_")[0]}%`]
+    );
+    const dbTracks = tracksRes.rows;
+
+    if (dbTracks.length > 0) {
+      const pick = dbTracks[0];
+      console.log(`[music/select] TIER 3 DB library: "${pick.name}"`);
+      return NextResponse.json({
+        track: { name: pick.name, artist: pick.artist, url: pick.url, source: "library" },
+        vibe: vibeKey,
+        reason: "library track matching vibe",
+        source: "library",
+        musicVolumeUnderVoice: 0.15,
+        musicVolumeNoVoice: 0.60,
+        introFadeInSec: 1.5,
+        outroFadeOutSec: 2.5,
+      });
+    }
   } catch (err) {
-    console.error("Music selection AI error:", err);
+    console.warn("[music/select] DB library error:", err instanceof Error ? err.message : err);
   }
 
-  const selectedTrack = tracks[Math.max(0, (selection.trackIndex || 1) - 1)];
-
+  // ── TIER 4: Hardcoded Bensound (final safety net) ─────────────────────────
+  const fallback = BENSOUND_FALLBACKS[Math.floor(Math.random() * BENSOUND_FALLBACKS.length)];
+  console.log(`[music/select] TIER 4 Bensound fallback: "${fallback.name}"`);
   return NextResponse.json({
-    track: selectedTrack,
-    musicVolumeUnderVoice: selection.musicVolumeUnderVoice || 0.12,
-    musicVolumeNoVoice: selection.musicVolumeNoVoice || 0.35,
-    introFadeInSec: selection.introFadeInSec || 1.5,
-    outroFadeOutSec: selection.outroFadeOutSec || 2.0,
-    reason: selection.reason,
+    track: fallback,
+    vibe: vibeKey,
+    reason: "Bensound fallback — all primary sources unavailable",
+    source: "bensound",
+    musicVolumeUnderVoice: 0.15,
+    musicVolumeNoVoice: 0.60,
+    introFadeInSec: 1.5,
+    outroFadeOutSec: 2.5,
   });
 }
 
+// GET /api/music/select — list all cached tracks
 export async function GET() {
   const tracks = await query("SELECT * FROM music_tracks ORDER BY genre, name");
   return NextResponse.json({ tracks: tracks.rows });
 }
-
-
-
-// Thu Apr  9 10:46:31 CDT 2026
