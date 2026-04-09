@@ -53,13 +53,13 @@ function buildCreatomateSource(
 ) {
   const transitionDur = 0.8;
 
-  // Color grading based on style
-  const gradeMap: Record<string, { type: string; value: string }[]> = {
-    warm: [{ type: "sepia", value: "10%" }, { type: "brighten", value: "4%" }, { type: "contrast", value: "6%" }],
-    cool: [{ type: "hue", value: "10" }, { type: "brighten", value: "3%" }, { type: "contrast", value: "8%" }],
-    dramatic: [{ type: "contrast", value: "15%" }, { type: "brighten", value: "-3%" }],
-    natural: [{ type: "brighten", value: "2%" }],
-    moody: [{ type: "sepia", value: "6%" }, { type: "contrast", value: "12%" }, { type: "brighten", value: "-5%" }],
+  // Color grading — build CSS filter strings for Creatomate
+  const gradeMap: Record<string, string> = {
+    warm: "sepia(0.1) brightness(1.04) contrast(1.06)",
+    cool: "hue-rotate(10deg) brightness(1.03) contrast(1.08)",
+    dramatic: "contrast(1.15) brightness(0.97)",
+    natural: "brightness(1.02)",
+    moody: "sepia(0.06) contrast(1.12) brightness(0.95)",
   };
   const colorFilter = gradeMap[style.color_grade || "warm"] || gradeMap.warm;
 
@@ -80,7 +80,6 @@ function buildCreatomateSource(
       ...(isVideo ? { trim_start: scene.start_trim_sec, trim_end: scene.end_trim_sec } : {}),
       // Keep original audio for videos with speech, otherwise mute
       ...(isVideo && clip.ai_analysis?.has_speech ? { volume: "100%" } : { volume: "0%" }),
-      color_filter: colorFilter,
       animations: [
         ...(isVideo ? [] : [{
           easing: "linear",
@@ -268,6 +267,10 @@ export async function POST(req: NextRequest) {
     );
     const clipMap = new Map<string, ClipRow>();
     for (const c of clipRes.rows as unknown as ClipRow[]) {
+      // postgres returns JSONB as string — parse ai_analysis if needed
+      if (c.ai_analysis && typeof c.ai_analysis === "string") {
+        try { c.ai_analysis = JSON.parse(c.ai_analysis as unknown as string); } catch { c.ai_analysis = null; }
+      }
       clipMap.set(c.id, c);
     }
 
