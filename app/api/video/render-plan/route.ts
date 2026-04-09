@@ -51,40 +51,38 @@ function buildCreatomateSource(
   voiceoverUrl?: string | null,
   musicUrl?: string | null,
 ) {
-  // Crossfade duration — clips overlap by this amount for a real dissolve
-  const CROSSFADE_DUR = 0.5;
+  // Native dissolve between adjacent clips on the same track
+  const CROSSFADE_DUR = 0.6;
 
-  // Helper: compute safe clip duration from plan values + actual clip metadata
-  // targetPerClip is passed in so clips stretch to fill the target video duration.
-  function safeClipDur(scene: SceneItem, clip: ClipRow, targetPerClip: number): { dur: number; trimStart: number; trimEnd: number } {
-    const isVideo = clip.file_type === "video";
-    const actualDur = clip.video_duration_sec ?? 5;
-    let trimStart = scene.start_trim_sec ?? 0;
-    let trimEnd = scene.end_trim_sec ?? 0;
-
-    // Guard: invalid trims (0,0 or reversed or exceeding actual duration)
-    if (trimEnd <= trimStart || (trimStart === 0 && trimEnd === 0)) {
-      trimStart = 0;
-      trimEnd = Math.min(actualDur, targetPerClip);
-    }
-    trimEnd = Math.min(trimEnd, actualDur);
-    trimStart = Math.min(trimStart, trimEnd - 1);
-
-    const sourceDur = trimEnd - trimStart;
-    // Cap at targetPerClip so clips fill the video rather than being cut to 5s
-    const dur = isVideo ? Math.max(1.5, Math.min(sourceDur, targetPerClip)) : Math.min(5, targetPerClip);
-    return { dur, trimStart, trimEnd };
+  // ── Detect if a clip's subject appears small/distant ──────────────────────
+  // Used to drive a strong push-in zoom that brings the viewer closer.
+  function isDistantSubject(analysis: Record<string, unknown>): boolean {
+    const desc = ((analysis.description as string) || "").toLowerCase();
+    const bestUse = (analysis.best_use as string) || "";
+    return (
+      bestUse === "wide" ||
+      /\bfar\b|distant|small|walk.*away|tiny|field|background|far away/.test(desc)
+    );
   }
 
-  // ── Pass 1: precompute timing for every scene ──────────────────────────────
+  // ── Pass 1: compute timing with speed stretching ───────────────────────────
+  // Each clip is slowed down (min 0.5×) to fill its targetPerClip slot so the
+  // video actually reaches targetDuration seconds. Images stay at normal pace.
   interface SceneTiming {
-    time: number; dur: number; trimStart: number; trimEnd: number; isVideo: boolean; hasAudio: boolean;
+    time: number;
+    dur: number;       // displayed duration (after speed adjustment)
+    trimStart: number;
+    trimEnd: number;
+    speed: number;     // playback rate (0.5 = half speed → twice as long)
+    isVideo: boolean;
+    hasAudio: boolean;
+    farAway: boolean;
   }
-  const validCount = plan.scene_order.filter(s => clips.get(s.clip_id)?.file_path).length;
 
-  // Spread clips to fill the target duration — each clip gets an equal share, min 3s max 15s
+  const validCount = plan.scene_order.filter(s => clips.get(s.clip_id)?.file_path).length;
+  // Each clip gets an equal share of targetDuration, between 4 s and 15 s
   const targetPerClip = validCount > 0
-    ? Math.max(3, Math.min(15, targetDuration / validCount))
+    ? Math.max(4, Math.min(15, targetDuration / validCount))
     : 8;
 
   let clipStartTime = 0;
@@ -93,77 +91,128 @@ function buildCreatomateSource(
   const sceneTimings: (SceneTiming | null)[] = plan.scene_order.map(scene => {
     const clip = clips.get(scene.clip_id);
     if (!clip?.file_path) return null;
-    const { dur, trimStart, trimEnd } = safeClipDur(scene, clip, targetPerClip);
+
+    const isVideo = clip.file_type === "video";
+    const actualDur = clip.video_duration_sec ?? 5;
+    const a = clip.ai_analysis || {};
+
+    // Prefer AI best_moment over plan trims for tighter clip selection
+    let trimStart = (a.best_moment_start as number) ?? scene.start_trim_sec ?? 0;
+    let trimEnd   = (a.best_moment_end   as number) ?? scene.end_trim_sec   ?? 0;
+
+    if (trimEnd <= trimStart || trimEnd === 0) {
+      trimStart = 0;
+      trimEnd = actualDur;
+    }
+    trimEnd   = Math.min(trimEnd, actualDur);
+    trimStart = Math.max(0, Math.min(trimStart, trimEnd - 1));
+
+    const sourceDur = trimEnd - trimStart;
+
+    // Speed: slow clip down to fill targetPerClip (floor at 0.5× = cinematic slow-mo)
+    // Images don't have a speed concept — use them at fixed 5 s
+    let speed = 1;
+    let dur: number;
+    if (isVideo) {
+      speed = Math.max(0.5, Math.min(1.0, sourceDur / targetPerClip));
+      dur   = Math.min(sourceDur / speed, targetPerClip);
+    } else {
+      dur = Math.min(5, targetPerClip);
+    }
+    dur = Math.max(1.5, dur);
+
     const isLastValid = validIdx === validCount - 1;
     const thisTime = clipStartTime;
     clipStartTime += dur - (isLastValid ? 0 : CROSSFADE_DUR);
     validIdx++;
-    const a = clip.ai_analysis || {};
-    const hasAudio = clip.file_type === "video" && !!(a.has_laughter === true || a.has_natural_audio === true);
-    return { time: thisTime, dur, trimStart, trimEnd, isVideo: clip.file_type === "video", hasAudio };
+
+    const hasAudio = isVideo && !!(a.has_laughter === true || a.has_natural_audio === true);
+    const farAway  = isDistantSubject(a);
+    return { time: thisTime, dur, trimStart, trimEnd, speed, isVideo, hasAudio, farAway };
   });
 
-  // Total video duration accounts for all crossfade overlaps
   const totalClipDur = clipStartTime;
 
   // ── Pass 2: build media elements ──────────────────────────────────────────
-  // All clips go on track 1 so Creatomate can perform engine-native dissolve transitions.
-  // Using the `transition` property creates a TRUE cross-dissolve (both clips visible
-  // simultaneously at complementary opacities) — no alternating-track hack needed.
   let placedCount = 0;
   const mediaElements = plan.scene_order.map((scene, i) => {
     const timing = sceneTimings[i];
     const clip = clips.get(scene.clip_id);
     if (!timing || !clip?.file_path) return null;
 
-    const { dur: clipDur, trimStart, trimEnd, isVideo } = timing;
+    const { dur: clipDur, trimStart, trimEnd, speed, isVideo, farAway } = timing;
     const analysis = clip.ai_analysis || {};
     const hasPerson = !!(analysis.has_speech || analysis.has_laughter || analysis.has_natural_audio);
 
-    // Alternate zoom in/out; person clips start tighter
-    const zoomIn = i % 2 === 0;
-    const baseScale = hasPerson ? "115%" : "100%";
-    const endScale  = hasPerson ? (zoomIn ? "125%" : "115%") : (zoomIn ? "110%" : "100%");
+    // ── Ken Burns zoom ────────────────────────────────────────────────────
+    // Alternate push-in / pull-back for visual rhythm.
+    // Far-away clips get a strong 55% zoom-in to bring the viewer close.
+    const zoomIn    = i % 2 === 0;
+    let startScale: string;
+    let endScale:   string;
+
+    if (farAway) {
+      // Aggressive push-in: subject is small — zoom right in
+      startScale = "100%";
+      endScale   = "155%";
+    } else if (hasPerson) {
+      startScale = zoomIn ? "110%" : "122%";
+      endScale   = zoomIn ? "122%" : "110%";
+    } else {
+      startScale = zoomIn ? "100%" : "112%";
+      endScale   = zoomIn ? "112%" : "100%";
+    }
+
+    // Animation must span the FULL clip duration for visible Ken Burns movement
     const zoomAnimation = {
-      easing: "linear", type: "scale", scope: "element",
-      start_scale: baseScale, end_scale: endScale,
+      type: "scale",
+      easing: "linear",
+      time: 0,
+      duration: clipDur,
+      start_scale: startScale,
+      end_scale:   endScale,
     };
 
     const el: Record<string, unknown> = {
       type: isVideo ? "video" : "image",
       track: 1,
-      // No explicit `time` — Creatomate auto-sequences clips on the same track.
-      // The `transition` property tells the engine to overlap by CROSSFADE_DUR
-      // and blend outgoing → incoming simultaneously (real dissolve, no black).
+      time: Math.max(0, timing.time),
       duration: clipDur,
       source: clip.file_path,
       fit: "cover",
-      ...(isVideo ? { trim_start: trimStart, trim_end: trimEnd } : {}),
-      // Only keep audio for clips where AI explicitly detected laughter/baby sounds.
+      // Mute clips unless AI explicitly confirmed baby/natural audio
       volume: timing.hasAudio ? "100%" : "0%",
       animations: [zoomAnimation],
     };
 
-    // Dissolve transition on every clip after the first
+    if (isVideo) {
+      el.trim_start = trimStart;
+      el.trim_end   = trimEnd;
+      // Apply speed only when we need to stretch (< 1.0)
+      if (speed < 0.99) el.speed = speed;
+    }
+
+    // ── Native cross-dissolve transition (Creatomate engine, not manual overlay) ──
+    // type:"fade" = true dissolve — outgoing fades out as incoming fades in simultaneously.
     if (placedCount > 0) {
-      el.transition = { duration: CROSSFADE_DUR };
+      el.transition = { type: "fade", duration: CROSSFADE_DUR };
     }
 
     placedCount++;
     return el;
   }).filter(Boolean);
 
-  // Text overlays from scene_order (only if text_amount is not "none")
+  // ── Text overlays ─────────────────────────────────────────────────────────
   const textElements: Record<string, unknown>[] = [];
   const showText = style.text_amount !== "none";
 
   if (showText) {
-    // Title card — track 3+ so it floats above video clips on tracks 1/2
+    // Title card on track 3 (above all video)
     textElements.push({
       type: "text",
       track: 3,
-      time: 0.3,
-      duration: 2.5,
+      time: 0.4,
+      duration: 2.8,
       text: title.toUpperCase(),
       width: "75%",
       x: "50%", y: "50%",
@@ -177,82 +226,71 @@ function buildCreatomateSource(
       text_alignment: "center",
       letter_spacing: "8%",
       animations: [
-        { type: "fade", fade_duration: "0.8 s" },
-        { type: "scale", easing: "quadratic-out", scope: "element", start_scale: "90%", end_scale: "100%" },
+        { type: "fade", time: 0, duration: 0.8 },
+        { type: "scale", easing: "quadratic-out", time: 0, duration: 0.8, start_scale: "90%", end_scale: "100%" },
       ],
     });
 
-    // Overlay text from scenes — use Pass 1 timings so positions match clip times exactly
+    // Per-scene captions using Pass 1 times
     plan.scene_order.forEach((scene, i) => {
       const timing = sceneTimings[i];
-      if (!timing) return;
-      if (scene.overlay_text && scene.overlay_text.trim()) {
-        textElements.push({
-          type: "text",
-          track: 4,
-          time: timing.time + 0.5,
-          duration: Math.min(timing.dur - 0.5, 3),
-          text: scene.overlay_text,
-          width: "80%",
-          x: "50%", y: "82%",
-          x_alignment: "50%", y_alignment: "50%",
-          font_family: "Montserrat",
-          font_weight: "600",
-          font_size: "5 vmin",
-          fill_color: "#ffffff",
-          shadow_color: "rgba(0,0,0,0.5)",
-          shadow_blur: "10",
-          text_alignment: "center",
-          animations: [{ type: "fade", fade_duration: "0.5 s" }],
-        });
-      }
+      if (!timing || !scene.overlay_text?.trim()) return;
+      textElements.push({
+        type: "text",
+        track: 4,
+        time: timing.time + 0.5,
+        duration: Math.max(1, Math.min(timing.dur - 0.6, 3.5)),
+        text: scene.overlay_text,
+        width: "80%",
+        x: "50%", y: "82%",
+        x_alignment: "50%", y_alignment: "50%",
+        font_family: "Montserrat",
+        font_weight: "600",
+        font_size: "5 vmin",
+        fill_color: "#ffffff",
+        shadow_color: "rgba(0,0,0,0.55)",
+        shadow_blur: "10",
+        text_alignment: "center",
+        animations: [{ type: "fade", time: 0, duration: 0.5 }],
+      });
     });
-
-    // NOTE: plan.ending is intentionally NOT rendered as a text overlay —
-    // Claude uses it for internal editor notes. Showing it on-screen was a bug.
   }
 
   // ── Audio elements ────────────────────────────────────────────────────────
+  // SINGLE music element on track 2 — multiple audio elements on the same
+  // implicit track cancel each other out in Creatomate; one element is reliable.
+  // Volume ducking is applied globally: lower when baby audio is present in any clip.
   const audioElements: Record<string, unknown>[] = [];
   const finalMusicUrl = musicUrl || MUSIC_FALLBACK[Math.floor(Math.random() * MUSIC_FALLBACK.length)];
+  const hasAnyNaturalAudio = sceneTimings.some(t => t?.hasAudio);
 
-  // ── Intelligent per-clip audio ducking ────────────────────────────────────
-  // For video clips: music ducks to 18% so Ellie's voice / laughter comes through at 100%.
-  // For image clips (no natural audio): music rises to 68% and fills the space.
-  // Each segment has short fades (0.4s) so volume transitions blend smoothly.
-  // trim_start keeps the song playing continuously across all segments.
-  let musicOffset = 0;
-  const validTimings = sceneTimings.filter((t): t is NonNullable<typeof t> => t !== null);
-  validTimings.forEach((timing, idx) => {
-    const isFirst = idx === 0;
-    const isLast = idx === validTimings.length - 1;
-    // Duck music when this clip has confirmed baby audio; otherwise music is prominent.
-    const vol = timing.hasAudio ? "18%" : "65%";
-    audioElements.push({
-      type: "audio",
-      source: finalMusicUrl,
-      time: Math.max(0, timing.time),
-      duration: timing.dur,
-      trim_start: musicOffset,
-      volume: vol,
-      audio_fade_in: isFirst ? 1.5 : 0.4,
-      audio_fade_out: isLast ? 3.0 : 0.4,
-    });
-    musicOffset += timing.dur;
+  audioElements.push({
+    type: "audio",
+    track: 2,
+    time: 0,
+    duration: totalClipDur,
+    source: finalMusicUrl,
+    // Duck slightly when baby audio is present, prominent otherwise
+    volume: hasAnyNaturalAudio ? "22%" : "65%",
+    audio_fade_in: 1.5,
+    audio_fade_out: 3.0,
   });
 
-  // Voiceover
+  // Voiceover on track 3 (audio)
   if (voiceoverUrl) {
     audioElements.push({
       type: "audio",
-      track: 5,
+      track: 3,
       time: 1,
+      duration: totalClipDur - 1,
       source: voiceoverUrl,
-      volume: "100%",
-      audio_fade_in: 0.3,
-      audio_fade_out: 0.5,
+      volume: "90%",
+      audio_fade_in: 0.4,
+      audio_fade_out: 0.8,
     });
   }
+
+  console.log(`[buildCreatomateSource] clips=${validCount} targetPerClip=${targetPerClip.toFixed(1)}s totalDur=${totalClipDur.toFixed(1)}s music=${finalMusicUrl.slice(0,60)} voiceover=${!!voiceoverUrl}`);
 
   return {
     output_format: "mp4",
@@ -326,33 +364,43 @@ export async function POST(req: NextRequest) {
       clipMap.set(c.id, c);
     }
 
-    // Check for / generate voiceover
+    // ── Voiceover ───────────────────────────────────────────────────────────
+    // Generate from plan.voiceover_script regardless of voiceover_needed flag.
+    // Also check project.voiceover_script as a secondary source.
+    // Cache in voiceovers table so re-renders reuse the same file.
     let voiceoverUrl: string | null = null;
-    if (plan.voiceover_needed && plan.voiceover_script) {
-      // Check if we already have one
+    const voScript = plan.voiceover_script?.trim() || (project.voiceover_script as string | null)?.trim() || "";
+    if (voScript) {
       const voRes = await query(
         "SELECT audio_url FROM voiceovers WHERE project_id = $1 AND status = 'completed' AND audio_type = 'voiceover' ORDER BY created_at DESC LIMIT 1",
         [projectId]
       );
       if (voRes.rows[0]?.audio_url) {
         voiceoverUrl = voRes.rows[0].audio_url as string;
+        console.log("[render-plan] Reusing cached voiceover");
       } else if (process.env.ELEVENLABS_API_KEY) {
-        // Generate voiceover with ElevenLabs
         try {
           const voiceRes = await fetch(`${reqOrigin}/api/voice/generate`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Cookie: cookieHeader },
-            body: JSON.stringify({ projectId, script: plan.voiceover_script }),
+            body: JSON.stringify({ projectId, script: voScript }),
           });
           if (voiceRes.ok) {
-            const voiceData = await voiceRes.json();
+            const voiceData = await voiceRes.json() as { audioUrl?: string };
             voiceoverUrl = voiceData.audioUrl || null;
+            console.log("[render-plan] Voiceover generated:", voiceoverUrl?.slice(0, 60));
+          } else {
+            console.warn("[render-plan] Voiceover generation failed:", await voiceRes.text().catch(() => ""));
           }
-          await logStage(projectId, userId, "voiceover_generation", { script: plan.voiceover_script.slice(0, 100) }, { voiceoverUrl }, undefined, 0);
+          await logStage(projectId, userId, "voiceover_generation", { script: voScript.slice(0, 100) }, { voiceoverUrl }, undefined, 0);
         } catch (err) {
-          console.error("Voiceover generation failed:", err);
+          console.error("[render-plan] Voiceover error:", err instanceof Error ? err.message : err);
         }
+      } else {
+        console.warn("[render-plan] ELEVENLABS_API_KEY not set — voiceover skipped");
       }
+    } else {
+      console.log("[render-plan] No voiceover script in plan — skipping");
     }
 
     const title = project.title as string;

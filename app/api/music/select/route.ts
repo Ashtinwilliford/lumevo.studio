@@ -69,7 +69,40 @@ export async function POST(req: NextRequest) {
         if (ssData.track?.url) {
           console.log(`[music/select] TIER 1 Soundstripe: "${ssData.track.name}" — ${ssData.reason}`);
 
-          // Cache in music_tracks so repeated renders skip the API call
+          // ── Proxy Soundstripe URL through Cloudinary ───────────────────────
+          // Soundstripe CDN URLs may require authentication that Creatomate
+          // can't provide. Download server-side and re-host on Cloudinary so
+          // Creatomate can always stream the file.
+          let publicUrl = ssData.track.url;
+          try {
+            const audioRes = await fetch(ssData.track.url, {
+              headers: process.env.SOUNDSTRIPE_API_KEY
+                ? { Authorization: `Bearer ${process.env.SOUNDSTRIPE_API_KEY}` }
+                : {},
+              signal: AbortSignal.timeout(20_000),
+            });
+            if (audioRes.ok) {
+              const { v2: cloudinary } = await import("cloudinary");
+              cloudinary.config({
+                cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+                api_key: process.env.CLOUDINARY_API_KEY,
+                api_secret: process.env.CLOUDINARY_API_SECRET,
+              });
+              const buf = Buffer.from(await audioRes.arrayBuffer());
+              const uploadResult = await cloudinary.uploader.upload(
+                `data:audio/mpeg;base64,${buf.toString("base64")}`,
+                { resource_type: "video", folder: "lumevo/music", format: "mp3" }
+              );
+              publicUrl = uploadResult.secure_url;
+              console.log(`[music/select] Soundstripe proxied to Cloudinary: ${publicUrl.slice(0, 60)}`);
+            } else {
+              console.warn(`[music/select] Soundstripe download failed (${audioRes.status}) — using direct URL`);
+            }
+          } catch (proxyErr) {
+            console.warn("[music/select] Cloudinary proxy failed, using direct URL:", proxyErr instanceof Error ? proxyErr.message : proxyErr);
+          }
+
+          // Cache in music_tracks so repeated renders reuse the Cloudinary URL
           await query(
             `INSERT INTO music_tracks (name, artist, genre, vibe_tags, bpm, duration_sec, url)
              VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -81,12 +114,12 @@ export async function POST(req: NextRequest) {
               `{${vibeKey}}`,
               ssData.track.bpm ?? null,
               ssData.track.duration ?? null,
-              ssData.track.url,
+              publicUrl,
             ]
           ).catch(() => { /* non-fatal */ });
 
           return NextResponse.json({
-            track: ssData.track,
+            track: { ...ssData.track, url: publicUrl },
             vibe: vibeKey,
             reason: ssData.reason,
             source: "soundstripe",
