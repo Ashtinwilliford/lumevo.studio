@@ -79,12 +79,24 @@ export async function POST(req: NextRequest) {
 
     // Load creator style
     const styleRes = await query("SELECT * FROM creator_styles WHERE user_id = $1", [userId]);
-    let style = styleRes.rows[0] as unknown as CreatorStyle | undefined;
-    if (!style) {
+    let styleRaw = styleRes.rows[0] as Record<string, unknown> | undefined;
+    if (!styleRaw) {
       await query("INSERT INTO creator_styles (user_id) VALUES ($1) ON CONFLICT DO NOTHING", [userId]);
       const s2 = await query("SELECT * FROM creator_styles WHERE user_id = $1", [userId]);
-      style = s2.rows[0] as unknown as CreatorStyle;
+      styleRaw = s2.rows[0] as Record<string, unknown>;
     }
+    // Parse any JSONB array fields returned as strings by the postgres driver
+    function parseJsonbField<T>(val: unknown): T | undefined {
+      if (!val) return undefined;
+      if (typeof val === "string") { try { return JSON.parse(val) as T; } catch { return undefined; } }
+      return val as T;
+    }
+    const style: CreatorStyle = {
+      ...(styleRaw as object),
+      vibe_keywords: parseJsonbField<string[]>(styleRaw?.vibe_keywords) ?? [],
+      preferred_hooks: parseJsonbField<string[]>(styleRaw?.preferred_hooks) ?? [],
+      banned_elements: parseJsonbField<string[]>(styleRaw?.banned_elements) ?? [],
+    } as CreatorStyle;
 
     // Load clips for this project
     const clipRes = await query(
@@ -113,7 +125,13 @@ export async function POST(req: NextRequest) {
 
     // Build clip descriptions for Claude
     const clipDescriptions = clips.map((c, i) => {
-      const a = c.ai_analysis || {};
+      // postgres returns JSONB as string — parse if needed
+      let a: Record<string, unknown> = {};
+      try {
+        const raw = c.ai_analysis;
+        if (raw && typeof raw === "string") a = JSON.parse(raw);
+        else if (raw && typeof raw === "object") a = raw as Record<string, unknown>;
+      } catch { a = {}; }
       const dur = c.video_duration_sec;
       return [
         `Clip ${i + 1}: id="${c.id}"`,
