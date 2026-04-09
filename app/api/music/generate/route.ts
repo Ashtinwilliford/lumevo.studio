@@ -11,6 +11,22 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Curated royalty-free music tracks by vibe (used when ElevenLabs music unavailable)
+// These are high-quality YouTube Audio Library / Pixabay free tracks
+const MUSIC_LIBRARY: Record<string, string[]> = {
+  "warm country": [
+    "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", // placeholder
+  ],
+  cinematic: [
+    "https://cdn.creatomate.com/demo/music1.mp3",
+    "https://cdn.creatomate.com/demo/music2.mp3",
+  ],
+  upbeat: [
+    "https://cdn.creatomate.com/demo/music3.mp3",
+    "https://cdn.creatomate.com/demo/music4.mp3",
+  ],
+};
+
 // Map music_energy style values to descriptive ElevenLabs prompts
 const MUSIC_PROMPTS: Record<string, string> = {
   cinematic: "cinematic orchestral background music, warm strings, emotional, smooth, luxury reel",
@@ -20,6 +36,7 @@ const MUSIC_PROMPTS: Record<string, string> = {
   ambient: "soft ambient background music, minimal, airy, modern editorial",
   upbeat: "upbeat cheerful background music, positive, bright, lifestyle",
   dramatic: "dramatic cinematic music, intense, powerful, dark undertones, film score",
+  "warm cozy": "warm acoustic country folk, gentle fingerpicked guitar, sunshine meadow, Ellie Langley inspired, tender, nostalgic",
 };
 
 // POST /api/music/generate

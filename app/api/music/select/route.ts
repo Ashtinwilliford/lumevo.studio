@@ -41,11 +41,32 @@ export async function POST(req: NextRequest) {
     query("SELECT music_genre_preference, creator_archetype, emotional_arc_preference, pacing_style FROM brand_profiles WHERE user_id = $1", [userId]),
   ]);
 
-  const tracks = tracksRows.rows as unknown as MusicTrack[];
+  let tracks = tracksRows.rows as unknown as MusicTrack[];
   const brand = brandRows.rows[0] as unknown as BrandProfile | undefined;
 
   if (!tracks.length) {
-    return NextResponse.json({ track: null, reason: "No music library" });
+    // Fallback to hardcoded tracks when library is empty
+    const warmTracks = [
+      { url: "https://www.bensound.com/bensound-music/bensound-ukulele.mp3", name: "Ukulele", genre: "folk" },
+      { url: "https://www.bensound.com/bensound-music/bensound-sunny.mp3", name: "Sunny", genre: "country" },
+      { url: "https://www.bensound.com/bensound-music/bensound-acousticbreeze.mp3", name: "Acoustic Breeze", genre: "folk" },
+      { url: "https://www.bensound.com/bensound-music/bensound-tenderness.mp3", name: "Tenderness", genre: "emotional" },
+      { url: "https://www.bensound.com/bensound-music/bensound-happiness.mp3", name: "Happiness", genre: "folk" },
+    ];
+    const track = warmTracks[Math.floor(Math.random() * warmTracks.length)];
+    return NextResponse.json({ track, musicVolumeUnderVoice: 0.15, musicVolumeNoVoice: 0.4, introFadeInSec: 1.5, outroFadeOutSec: 2.5, reason: "Warm folk fallback" });
+  }
+
+  // Smart vibe-tag filtering: if vibe contains warm/cozy/country/folk words, prefer matching tracks
+  const vibeStr = (vibe || "").toLowerCase();
+  const warmKeywords = ["cozy", "warm", "country", "folk", "acoustic", "sunny", "happy", "tender", "gentle"];
+  const matchingKeywords = warmKeywords.filter(k => vibeStr.includes(k));
+  if (matchingKeywords.length > 0) {
+    const filtered = tracks.filter(t =>
+      t.vibe_tags?.some(tag => matchingKeywords.includes(tag.toLowerCase())) ||
+      matchingKeywords.includes(t.genre?.toLowerCase())
+    );
+    if (filtered.length > 0) tracks = filtered;
   }
 
   // Build a rich selection prompt

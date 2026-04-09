@@ -5,12 +5,12 @@ import { logStage } from "@/lib/genlog";
 
 export const maxDuration = 60;
 
-// Publicly accessible music tracks (Creatomate CDN)
+// Royalty-free fallback music tracks (Bensound CC)
 const MUSIC_FALLBACK = [
-  "https://cdn.creatomate.com/demo/music1.mp3",
-  "https://cdn.creatomate.com/demo/music2.mp3",
-  "https://cdn.creatomate.com/demo/music3.mp3",
-  "https://cdn.creatomate.com/demo/music4.mp3",
+  "https://www.bensound.com/bensound-music/bensound-ukulele.mp3",
+  "https://www.bensound.com/bensound-music/bensound-sunny.mp3",
+  "https://www.bensound.com/bensound-music/bensound-acousticbreeze.mp3",
+  "https://www.bensound.com/bensound-music/bensound-tenderness.mp3",
 ];
 
 interface SceneItem {
@@ -369,43 +369,46 @@ export async function POST(req: NextRequest) {
     const title = project.title as string;
     const targetDuration = (project.target_duration as number) || 30;
 
-    // Generate music with ElevenLabs if key is configured
+    // Use music/select to pick from real royalty-free track library
     let musicUrl: string | null = null;
-    if (process.env.ELEVENLABS_API_KEY) {
-      try {
-        // Check if we already have a music track for this project
-        const existingMusic = await query(
-          "SELECT audio_url FROM voiceovers WHERE project_id = $1 AND audio_type = 'music' AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
-          [projectId]
-        );
-        if (existingMusic.rows[0]?.audio_url) {
-          musicUrl = existingMusic.rows[0].audio_url as string;
-        } else {
-          // Generate new music — parse claude_plan JSONB string if needed for music prompt derivation
-          let parsedPlanForMusic: { music_brief?: string } | null = null;
-          try {
-            const rawPlan = project.claude_plan;
-            if (rawPlan && typeof rawPlan === "string") parsedPlanForMusic = JSON.parse(rawPlan);
-            else if (rawPlan && typeof rawPlan === "object") parsedPlanForMusic = rawPlan as { music_brief?: string };
-          } catch { parsedPlanForMusic = null; }
-          void parsedPlanForMusic; // music/generate endpoint handles its own plan lookup
-
-          const musicRes = await fetch(`${reqOrigin}/api/music/generate`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Cookie: cookieHeader },
-            body: JSON.stringify({ projectId, durationSeconds: Math.min(targetDuration + 5, 60) }),
-          });
-          if (musicRes.ok) {
-            const musicData = await musicRes.json();
-            musicUrl = musicData.audioUrl || null;
+    try {
+      const existingMusic = await query(
+        "SELECT audio_url FROM voiceovers WHERE project_id = $1 AND audio_type = 'music' AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
+        [projectId]
+      );
+      if (existingMusic.rows[0]?.audio_url) {
+        musicUrl = existingMusic.rows[0].audio_url as string;
+      } else {
+        // Pick a real track from the library based on project vibe
+        const vibe = project.vibe as string || "warm cozy";
+        const platform = project.target_platform as string || "instagram";
+        const selectRes = await fetch(`${reqOrigin}/api/music/select`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: cookieHeader },
+          body: JSON.stringify({
+            vibe,
+            platform,
+            duration: targetDuration,
+            title: project.title,
+          }),
+        });
+        if (selectRes.ok) {
+          const selectData = await selectRes.json();
+          if (selectData.track?.url) {
+            musicUrl = selectData.track.url as string;
+            // Cache it
+            await query(
+              `INSERT INTO voiceovers (user_id, project_id, audio_url, status, audio_type, style_prompt)
+               VALUES ($1, $2, $3, 'completed', 'music', $4) ON CONFLICT DO NOTHING`,
+              [userId, projectId, musicUrl, vibe]
+            );
           }
         }
-        await logStage(projectId, userId, "music_generation", { prompt: plan.music_brief }, { musicUrl }, undefined, 0);
-      } catch (err) {
-        console.error("Music generation failed, using fallback:", err);
-        // Non-fatal — falls back to Creatomate CDN music
       }
+    } catch (err) {
+      console.error("Music selection failed, using fallback:", err);
     }
+    await logStage(projectId, userId, "music_generation", { prompt: plan.music_brief }, { musicUrl }, undefined, 0);
 
     // Build Creatomate source
     const source = buildCreatomateSource(plan, clipMap, style, targetDuration, title, voiceoverUrl, musicUrl);
