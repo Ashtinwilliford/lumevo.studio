@@ -243,8 +243,14 @@ export async function POST(req: NextRequest) {
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
 
     // Use DB plan if available, fall back to plan passed in request body
-    const plan = (project.claude_plan as VideoPlan) || (bodyPlan as VideoPlan) || null;
-    if (!plan?.scene_order?.length) return NextResponse.json({ error: "No plan generated yet. Generate a plan first." }, { status: 400 });
+    const dbPlan = project.claude_plan as VideoPlan;
+    const plan = (dbPlan && typeof dbPlan === 'object' && Array.isArray((dbPlan as VideoPlan).scene_order) && (dbPlan as VideoPlan).scene_order.length > 0 ? dbPlan : null)
+      || (bodyPlan as VideoPlan)
+      || null;
+    console.log("[render-plan] dbPlan type:", typeof dbPlan, "dbPlan keys:", dbPlan ? Object.keys(dbPlan) : "null");
+    console.log("[render-plan] bodyPlan type:", typeof bodyPlan, "bodyPlan scene_order length:", (bodyPlan as VideoPlan)?.scene_order?.length ?? "N/A");
+    console.log("[render-plan] resolved plan scene_order length:", plan?.scene_order?.length ?? "NONE");
+    if (!plan?.scene_order?.length) return NextResponse.json({ error: "No plan generated yet. Generate a plan first.", debug: { dbPlanType: typeof dbPlan, dbPlanKeys: dbPlan ? Object.keys(dbPlan) : null, bodyPlanSceneCount: (bodyPlan as VideoPlan)?.scene_order?.length ?? null } }, { status: 400 });
 
     // Load creator style
     const styleRes = await query("SELECT * FROM creator_styles WHERE user_id = $1", [userId]);
