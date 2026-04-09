@@ -107,13 +107,16 @@ function buildCreatomateSource(
   const totalClipDur = clipStartTime;
 
   // ── Pass 2: build media elements ──────────────────────────────────────────
+  // All clips go on track 1 so Creatomate can perform engine-native dissolve transitions.
+  // Using the `transition` property creates a TRUE cross-dissolve (both clips visible
+  // simultaneously at complementary opacities) — no alternating-track hack needed.
   let placedCount = 0;
   const mediaElements = plan.scene_order.map((scene, i) => {
     const timing = sceneTimings[i];
     const clip = clips.get(scene.clip_id);
     if (!timing || !clip?.file_path) return null;
 
-    const { dur: clipDur, trimStart, trimEnd, isVideo, time: thisTime } = timing;
+    const { dur: clipDur, trimStart, trimEnd, isVideo } = timing;
     const analysis = clip.ai_analysis || {};
     const hasPerson = !!(analysis.has_speech || analysis.has_laughter || analysis.has_natural_audio);
 
@@ -126,28 +129,28 @@ function buildCreatomateSource(
       start_scale: baseScale, end_scale: endScale,
     };
 
-    // First clip: no transition; subsequent clips fade IN over the tail of the previous
-    const animations = placedCount === 0
-      ? [zoomAnimation]
-      : [zoomAnimation, { type: "fade", duration: `${CROSSFADE_DUR} s` }];
-
-    // Alternate tracks 1/2 so overlapping clips dissolve correctly
-    const track = (placedCount % 2) + 1;
-    placedCount++;
-
-    return {
+    const el: Record<string, unknown> = {
       type: isVideo ? "video" : "image",
-      track,
-      time: Math.max(0, thisTime),
+      track: 1,
+      // No explicit `time` — Creatomate auto-sequences clips on the same track.
+      // The `transition` property tells the engine to overlap by CROSSFADE_DUR
+      // and blend outgoing → incoming simultaneously (real dissolve, no black).
       duration: clipDur,
       source: clip.file_path,
       fit: "cover",
       ...(isVideo ? { trim_start: trimStart, trim_end: trimEnd } : {}),
       // Only keep audio for clips where AI explicitly detected laughter/baby sounds.
-      // Default when ai_analysis is null = muted (safe — avoids playing unwanted voices).
       volume: timing.hasAudio ? "100%" : "0%",
-      animations,
+      animations: [zoomAnimation],
     };
+
+    // Dissolve transition on every clip after the first
+    if (placedCount > 0) {
+      el.transition = { duration: CROSSFADE_DUR };
+    }
+
+    placedCount++;
+    return el;
   }).filter(Boolean);
 
   // Text overlays from scene_order (only if text_amount is not "none")
@@ -179,25 +182,16 @@ function buildCreatomateSource(
       ],
     });
 
-    // Overlay text from scenes (if provided and minimal)
-    let timeOffset = 0;
+    // Overlay text from scenes — use Pass 1 timings so positions match clip times exactly
     plan.scene_order.forEach((scene, i) => {
-      const clip = clips.get(scene.clip_id);
-      const isVideo = clip?.file_type === "video";
-      const rawDur = scene.end_trim_sec - scene.start_trim_sec;
-      let clipDur: number;
-      if (isVideo) {
-        const sourceDur = clip?.video_duration_sec ?? rawDur;
-        clipDur = rawDur > 5 ? Math.max(1.5, Math.min(sourceDur, 5)) : Math.max(1.5, rawDur);
-      } else {
-        clipDur = 3.5;
-      }
+      const timing = sceneTimings[i];
+      if (!timing) return;
       if (scene.overlay_text && scene.overlay_text.trim()) {
         textElements.push({
           type: "text",
           track: 4,
-          time: timeOffset + 0.5,
-          duration: Math.min(clipDur - 0.5, 3),
+          time: timing.time + 0.5,
+          duration: Math.min(timing.dur - 0.5, 3),
           text: scene.overlay_text,
           width: "80%",
           x: "50%", y: "82%",
@@ -212,8 +206,6 @@ function buildCreatomateSource(
           animations: [{ type: "fade", fade_duration: "0.5 s" }],
         });
       }
-      timeOffset += clipDur;
-      void i;
     });
 
     // NOTE: plan.ending is intentionally NOT rendered as a text overlay —
