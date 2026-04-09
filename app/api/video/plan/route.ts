@@ -203,6 +203,7 @@ Color grade: ${style.color_grade}
 Text amount: ${style.text_amount}
 
 === AVAILABLE CLIPS ===
+CRITICAL: You MUST use the EXACT clip id values shown below (UUID format). Do NOT invent or modify clip IDs.
 ${clipDescriptions}
 
 ${pastFeedback ? `=== CREATOR FEEDBACK — YOU MUST ADDRESS THESE NOTES IN YOUR PLAN ===\nThe creator reviewed the last video and specifically asked for these changes. Prioritize them above all other style decisions:\n${pastFeedback}\n` : ""}
@@ -255,7 +256,7 @@ Output ONLY this JSON (no markdown, no explanation):
     let attempts = 0;
     let lastError = "";
 
-    while (!plan && attempts < 3) {
+    while (!plan && attempts < 2) {
       attempts++;
       try {
         const completion = await ai.messages.create({
@@ -276,12 +277,16 @@ Output ONLY this JSON (no markdown, no explanation):
         if (!plan?.scene_order?.length) throw new Error("No scenes in plan");
         if (!plan.video_concept) throw new Error("Missing video_concept");
 
-        // Validate clip IDs exist
+        // Filter out scenes with invalid clip IDs (Claude sometimes hallucinates)
+        // instead of throwing — avoids costly retry loops that cause 504 timeouts.
         const validIds = new Set(clips.map(c => c.id));
-        for (const scene of plan.scene_order) {
-          if (!validIds.has(scene.clip_id)) {
-            throw new Error(`Invalid clip_id: ${scene.clip_id}`);
-          }
+        const beforeCount = plan.scene_order.length;
+        plan.scene_order = plan.scene_order.filter(scene => validIds.has(scene.clip_id));
+        if (plan.scene_order.length < beforeCount) {
+          console.warn(`[plan] Filtered out ${beforeCount - plan.scene_order.length} scenes with invalid clip_ids`);
+        }
+        if (plan.scene_order.length === 0) {
+          throw new Error("All clip_ids were invalid — Claude didn't use real IDs");
         }
       } catch (err) {
         lastError = err instanceof Error ? err.message : "Parse error";

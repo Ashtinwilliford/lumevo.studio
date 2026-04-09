@@ -212,8 +212,9 @@ export default function ProjectPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: id }),
       });
-      const planData = await planRes.json();
-      if (planData.error) { setGenError(planData.error); setGenStatus(null); setGenerating(false); return; }
+      let planData: Record<string, unknown>;
+      try { planData = await planRes.json(); } catch { planData = { error: `Server error (${planRes.status}) — try again` }; }
+      if (planData.error) { setGenError(planData.error as string); setGenStatus(null); setGenerating(false); return; }
 
       // Update local plan state if returned
       if (planData.plan) {
@@ -230,8 +231,9 @@ export default function ProjectPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: id, plan: planData.plan }),
       });
-      const renderData = await renderRes.json();
-      if (renderData.error) { setGenError(renderData.error); setGenStatus(null); setGenerating(false); return; }
+      let renderData: Record<string, unknown>;
+      try { renderData = await renderRes.json(); } catch { renderData = { error: `Render error (${renderRes.status}) — try again` }; }
+      if (renderData.error) { setGenError(renderData.error as string); setGenStatus(null); setGenerating(false); return; }
 
       // Step 3: Poll
       if (renderData.renderId) {
@@ -241,15 +243,16 @@ export default function ProjectPage() {
           attempts++;
           try {
             const statusRes = await fetch(`/api/video/status?renderId=${renderData.renderId}`);
-            const statusData = await statusRes.json();
+            let statusData: Record<string, unknown>;
+            try { statusData = await statusRes.json(); } catch { continue; }
             if (statusData.status === "succeeded") {
-              setVideoUrl(statusData.url || renderData.videoUrl);
+              setVideoUrl((statusData.url as string) || (renderData.videoUrl as string));
               setGenStatus(null);
               setGenerating(false);
               return;
             }
             if (statusData.status === "failed") {
-              setGenError(statusData.errorMessage || "Render failed");
+              setGenError((statusData.errorMessage as string) || "Render failed");
               setGenStatus(null);
               setGenerating(false);
               return;
