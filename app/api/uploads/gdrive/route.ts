@@ -206,13 +206,25 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        console.log(`Found ${files.length} files in folder`);
+        console.log(`[gdrive] Found ${files.length} files in folder, importing in parallel`);
 
-        for (const file of files) {
-          const { upload, error } = await importOneFile(file.id, session.id, cookie, projectId);
-          if (upload) results.push(upload);
-          if (error) errors.push(`${file.name}: ${error}`);
+        // Import ALL files in parallel — much faster than sequential
+        const settled = await Promise.allSettled(
+          files.map(file =>
+            importOneFile(file.id, session.id, cookie, projectId).then(r => ({ ...r, name: file.name }))
+          )
+        );
+
+        for (const s of settled) {
+          if (s.status === "fulfilled") {
+            if (s.value.upload) results.push(s.value.upload);
+            if (s.value.error) errors.push(`${s.value.name}: ${s.value.error}`);
+          } else {
+            errors.push(`Import failed: ${s.reason}`);
+          }
         }
+
+        console.log(`[gdrive] Imported ${results.length} of ${files.length} files`);
       } catch (err) {
         errors.push(err instanceof Error ? err.message : "Folder import failed");
       }
@@ -234,6 +246,7 @@ export async function POST(req: NextRequest) {
       error: errors[0],
       errors,
       imported: 0,
+      found: 0,
     }, { status: 400 });
   }
 
@@ -241,5 +254,6 @@ export async function POST(req: NextRequest) {
     uploads: results,
     errors: errors.length > 0 ? errors : undefined,
     imported: results.length,
+    found: results.length + errors.length,
   });
 }

@@ -158,8 +158,11 @@ export default function ProjectPage() {
       try { data = await res.json(); } catch { data = { error: `Server error (${res.status})` }; }
       if (!res.ok) throw new Error((data.error as string) || "Import failed");
       const count = (data.imported as number) ?? 0;
+      const found = (data.found as number) ?? count;
       if (count === 0) throw new Error("No files imported — make sure the folder/file is shared as 'Anyone with the link'");
-      setGdriveStatus(`${count} file${count !== 1 ? "s" : ""} imported`);
+      const msg = found > count ? `${count} of ${found} files imported` : `${count} file${count !== 1 ? "s" : ""} imported`;
+      const errs = data.errors as string[] | undefined;
+      setGdriveStatus(errs?.length ? `${msg} (${errs.length} failed)` : msg);
       setGdriveUrl("");
       load();
     } catch (err) { setGdriveStatus(err instanceof Error ? err.message : "Import failed"); }
