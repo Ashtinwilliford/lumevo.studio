@@ -190,7 +190,8 @@ function buildCreatomateSource(
     if (isVideo) {
       el.trim_start = trimStart;
       el.trim_end   = trimEnd;
-      if (speed < 0.99) el.speed = speed;
+      // Creatomate expects speed as percentage: 50 = half speed, 100 = normal, 200 = 2x
+      if (speed < 0.99) el.speed = `${Math.round(speed * 100)}%`;
     }
 
     // Creatomate SDK: transition = "animation between this and previous element"
