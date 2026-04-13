@@ -9,7 +9,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 function extractFolderId(url: string): string | null {
   const m = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
@@ -228,9 +228,18 @@ export async function POST(req: NextRequest) {
     if (error) errors.push(error);
   }
 
+  // Return error status if nothing was imported
+  if (results.length === 0 && errors.length > 0) {
+    return NextResponse.json({
+      error: errors[0],
+      errors,
+      imported: 0,
+    }, { status: 400 });
+  }
+
   return NextResponse.json({
     uploads: results,
     errors: errors.length > 0 ? errors : undefined,
-    count: results.length,
+    imported: results.length,
   });
 }

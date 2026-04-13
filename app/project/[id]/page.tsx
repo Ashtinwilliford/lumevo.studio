@@ -154,9 +154,12 @@ export default function ProjectPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: gdriveUrl.trim(), projectId: id }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Import failed");
-      setGdriveStatus(`${data.imported ?? 1} file${(data.imported ?? 1) !== 1 ? "s" : ""} imported`);
+      let data: Record<string, unknown>;
+      try { data = await res.json(); } catch { data = { error: `Server error (${res.status})` }; }
+      if (!res.ok) throw new Error((data.error as string) || "Import failed");
+      const count = (data.imported as number) ?? 0;
+      if (count === 0) throw new Error("No files imported — make sure the folder/file is shared as 'Anyone with the link'");
+      setGdriveStatus(`${count} file${count !== 1 ? "s" : ""} imported`);
       setGdriveUrl("");
       load();
     } catch (err) { setGdriveStatus(err instanceof Error ? err.message : "Import failed"); }
