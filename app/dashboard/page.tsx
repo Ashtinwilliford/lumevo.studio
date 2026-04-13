@@ -563,12 +563,17 @@ function LibrarySection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
 }
 
 // ─── STYLE ──────────────────────────────────────────────────────────────────
-function StyleSection() {
+function StyleSection({ tier }: { tier: string }) {
   const [style, setStyle] = useState<Record<string, unknown> | null>(null);
   const [saved, setSaved] = useState(false);
+  const [elitePrompt, setElitePrompt] = useState("");
+  const [eliteProcessing, setEliteProcessing] = useState(false);
 
   useEffect(() => {
-    fetch("/api/style").then(r => r.json()).then(d => setStyle(d.style || {}));
+    fetch("/api/style").then(r => r.json()).then(d => {
+      setStyle(d.style || {});
+      if (d.style?.style_prompt) setElitePrompt(d.style.style_prompt as string);
+    });
   }, []);
 
   async function applyPreset(preset: Record<string, string>) {
@@ -578,6 +583,25 @@ function StyleSection() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
+
+  async function applyEliteStyle() {
+    if (!elitePrompt.trim()) return;
+    setEliteProcessing(true);
+    try {
+      await fetch("/api/style", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ style_prompt: elitePrompt.trim(), interpret_style: true }),
+      });
+      const d = await (await fetch("/api/style")).json();
+      setStyle(d.style || {});
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch { /* ignore */ }
+    finally { setEliteProcessing(false); }
+  }
+
+  const isElite = tier === "elite";
 
   const PRESETS = [
     { name: "Luxe Beach", sub: "Warm, smooth, elegant", icon: "○", values: { color_grade: "warm", pacing: "slow", music_energy: "cinematic", caption_style: "minimal", text_amount: "minimal" } },
@@ -593,24 +617,51 @@ function StyleSection() {
       <div style={{ marginBottom: 32 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 10 }}>Visual Identity</div>
         <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 32, fontWeight: 800, marginBottom: 4 }}>Your Style</h2>
-        <p style={{ fontSize: 14, color: "#7c7660" }}>Pick a preset to set your video aesthetic. Your AI will use this on every generation.</p>
+        <p style={{ fontSize: 14, color: "#7c7660" }}>
+          {isElite
+            ? "Describe your vision and your AI will build a custom style for every video."
+            : "Pick a preset to set your video aesthetic. Your AI will use this on every generation."}
+        </p>
       </div>
 
       {saved && <div style={{ background: "#f0fff4", border: "1px solid rgba(45,164,78,0.2)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, fontSize: 13, color: "#2da44e", fontWeight: 600 }}>Style updated</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 32 }}>
-        {PRESETS.map(preset => (
-          <div key={preset.name} onClick={() => applyPreset(preset.values)}
-            style={{ background: "#fff", borderRadius: 16, padding: "22px 20px", border: "1px solid rgba(0,0,0,0.08)", cursor: "pointer", transition: "box-shadow 0.15s" }}
-            onMouseEnter={e => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.08)")}
-            onMouseLeave={e => (e.currentTarget.style.boxShadow = "none")}>
-            <div style={{ fontSize: 22, color: "#7c7660", marginBottom: 12 }}>{preset.icon}</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 4 }}>{preset.name}</div>
-            <div style={{ fontSize: 12, color: "#7c7660", marginBottom: 12 }}>{preset.sub}</div>
-            <div style={{ fontSize: 11, color: "#FF2D2D", fontWeight: 700 }}>Apply style →</div>
+      {/* ─── ELITE: AI-driven style from natural language ─── */}
+      {isElite && (
+        <div style={{ background: "#fff", borderRadius: 16, border: "1.5px solid rgba(255,45,45,0.15)", padding: "24px", marginBottom: 32 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#FF2D2D" }}>Elite</div>
+            <div style={{ fontSize: 12, color: "#7c7660" }}>Describe your style — AI handles the rest</div>
           </div>
-        ))}
-      </div>
+          <textarea
+            value={elitePrompt}
+            onChange={e => setElitePrompt(e.target.value)}
+            placeholder={"e.g. I want my videos to feel like a luxury lifestyle brand — warm golden tones, slow cinematic pacing, soft country music, minimal text, premium feel like a high-end commercial..."}
+            rows={4}
+            style={{ width: "100%", padding: "14px 16px", borderRadius: 12, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 14, lineHeight: 1.6, resize: "vertical", outline: "none", color: "#1a1a1a" }} />
+          <button onClick={applyEliteStyle} disabled={!elitePrompt.trim() || eliteProcessing}
+            style={{ marginTop: 12, background: elitePrompt.trim() ? "#FF2D2D" : "#ccc", color: "#fff", border: "none", borderRadius: 10, padding: "12px 24px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: elitePrompt.trim() ? "pointer" : "default" }}>
+            {eliteProcessing ? "Applying..." : "Apply My Vision"}
+          </button>
+        </div>
+      )}
+
+      {/* ─── PRESETS: shown for all tiers (elite gets them too as quick options) ─── */}
+      {!isElite && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 32 }}>
+          {PRESETS.map(preset => (
+            <div key={preset.name} onClick={() => applyPreset(preset.values)}
+              style={{ background: "#fff", borderRadius: 16, padding: "22px 20px", border: "1px solid rgba(0,0,0,0.08)", cursor: "pointer", transition: "box-shadow 0.15s" }}
+              onMouseEnter={e => (e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.08)")}
+              onMouseLeave={e => (e.currentTarget.style.boxShadow = "none")}>
+              <div style={{ fontSize: 22, color: "#7c7660", marginBottom: 12 }}>{preset.icon}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a1a", marginBottom: 4 }}>{preset.name}</div>
+              <div style={{ fontSize: 12, color: "#7c7660", marginBottom: 12 }}>{preset.sub}</div>
+              <div style={{ fontSize: 11, color: "#FF2D2D", fontWeight: 700 }}>Apply style →</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {style && (
         <div style={{ background: "#fff", borderRadius: 16, border: "1px solid rgba(0,0,0,0.08)", padding: "20px 24px" }}>
@@ -886,7 +937,7 @@ export default function DashboardPage() {
         {section === "studio" && <StudioSection user={user} uploads={uploads} projects={projects} brand={brand} onNav={setSection} />}
         {section === "create" && <CreateSection user={user} uploads={uploads} onRefresh={fetchData} />}
         {section === "library" && <LibrarySection uploads={uploads} onRefresh={fetchData} />}
-        {section === "style" && <StyleSection />}
+        {section === "style" && <StyleSection tier={user.subscription_tier} />}
         {section === "brand" && <BrandSection brand={brand} user={user} />}
         {section === "analytics" && <AnalyticsSection uploads={uploads} projects={projects} />}
         {section === "settings" && <SettingsSection user={user} onRefresh={fetchData} />}

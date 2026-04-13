@@ -118,6 +118,9 @@ export async function GET() {
   await run("music_tracks.source", `ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'library'`);
   await run("music_tracks.soundstripe_id", `ALTER TABLE music_tracks ADD COLUMN IF NOT EXISTS soundstripe_id TEXT`);
 
+  // migrate-v7.sql — Elite AI-driven style prompt
+  await run("creator_styles.style_prompt", `ALTER TABLE creator_styles ADD COLUMN IF NOT EXISTS style_prompt TEXT`);
+
   // Ensure unique constraint exists (table may have been created without it)
   await run("music_tracks.url_unique", `CREATE UNIQUE INDEX IF NOT EXISTS music_tracks_url_unique ON music_tracks(url)`);
 
