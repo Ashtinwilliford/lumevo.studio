@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 interface Upload {
@@ -55,6 +55,14 @@ export default function ProjectPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeMessage, setAnalyzeMessage] = useState<string | null>(null);
   const [clipAnalysis, setClipAnalysis] = useState<Record<string, { has_laughter: boolean; mood: string; description: string }>>({});
+
+  // Upload state
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [gdriveUrl, setGdriveUrl] = useState("");
+  const [gdriveImporting, setGdriveImporting] = useState(false);
+  const [gdriveStatus, setGdriveStatus] = useState<string | null>(null);
 
   async function load() {
     const res = await fetch(`/api/projects/${id}`);
@@ -112,6 +120,47 @@ export default function ProjectPage() {
       if (res.ok) setUploads(prev => prev.filter(u => u.id !== uploadId));
     } catch (err) { console.error(err); }
     setDeletingId(null);
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setUploadProgress(`Uploading ${i + 1} of ${files.length}: ${file.name}`);
+        const sigRes = await fetch("/api/uploads/sign");
+        const sig = await sigRes.json();
+        const form = new FormData();
+        form.append("file", file); form.append("signature", sig.signature); form.append("timestamp", String(sig.timestamp)); form.append("folder", sig.folder); form.append("api_key", sig.apiKey);
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`, { method: "POST", body: form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || "Upload failed");
+        await fetch("/api/uploads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileName: file.name, fileType: file.type.startsWith("video/") ? "video" : "image", mimeType: file.type, fileSize: file.size, filePath: data.secure_url, projectId: id }) });
+      }
+      setUploadProgress(null);
+      load();
+    } catch (err) { setGenError(err instanceof Error ? err.message : "Upload failed"); }
+    finally { setUploading(false); setUploadProgress(null); if (fileRef.current) fileRef.current.value = ""; }
+  }
+
+  async function importGdrive() {
+    if (!gdriveUrl.trim()) return;
+    setGdriveImporting(true); setGdriveStatus("Importing...");
+    try {
+      const res = await fetch("/api/uploads/gdrive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: gdriveUrl.trim(), projectId: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      setGdriveStatus(`${data.imported ?? 1} file${(data.imported ?? 1) !== 1 ? "s" : ""} imported`);
+      setGdriveUrl("");
+      load();
+    } catch (err) { setGdriveStatus(err instanceof Error ? err.message : "Import failed"); }
+    finally { setGdriveImporting(false); }
   }
 
   async function sendFeedback(feedbackText: string) {
@@ -594,16 +643,41 @@ export default function ProjectPage() {
         </div>
       </div>
 
+      {/* Upload section — always visible */}
+      <div style={{ background: "#fff", borderRadius: 16, border: "1px solid rgba(0,0,0,0.08)", padding: "20px 22px", marginBottom: 24 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "#FF2D2D", marginBottom: 14 }}>Add Media</div>
+
+        {/* Google Drive */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input value={gdriveUrl} onChange={e => setGdriveUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") importGdrive(); }}
+            placeholder="Paste Google Drive folder or file link..."
+            style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 13, outline: "none" }} />
+          <button onClick={importGdrive} disabled={!gdriveUrl.trim() || gdriveImporting}
+            style={{ background: gdriveUrl.trim() ? "#FF2D2D" : "#ccc", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: gdriveUrl.trim() ? "pointer" : "default" }}>
+            {gdriveImporting ? "..." : "Import"}
+          </button>
+        </div>
+        {gdriveStatus && <div style={{ fontSize: 12, marginBottom: 10, fontWeight: 600, color: gdriveStatus.includes("imported") ? "#16a34a" : gdriveStatus === "Importing..." ? "#7B61FF" : "#FF2D2D" }}>{gdriveStatus}</div>}
+
+        {/* Device drag & drop */}
+        <div onClick={() => fileRef.current?.click()} onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); if (fileRef.current && e.dataTransfer.files.length > 0) { const fake = { target: { files: e.dataTransfer.files } } as unknown as React.ChangeEvent<HTMLInputElement>; handleFileUpload(fake); } }}
+          style={{ border: "2px dashed rgba(0,0,0,0.1)", borderRadius: 12, padding: "28px 20px", textAlign: "center", cursor: "pointer" }}>
+          {uploading ? (
+            <><div style={{ fontSize: 14, fontWeight: 600, color: "#FF2D2D" }}>Uploading...</div><div style={{ fontSize: 12, color: "#7c7660", marginTop: 4 }}>{uploadProgress}</div></>
+          ) : (
+            <><div style={{ fontSize: 14, fontWeight: 600, color: "#1a1a1a" }}>Drop files or click to browse</div><div style={{ fontSize: 12, color: "#7c7660", marginTop: 4 }}>Videos and photos</div></>
+          )}
+        </div>
+        <input ref={fileRef} type="file" style={{ display: "none" }} onChange={handleFileUpload} accept="video/*,image/*" multiple />
+      </div>
+
       {/* Generate button */}
       {!genStatus && (
         uploads.length === 0 ? (
-          <div style={{ background: "#fff", borderRadius: 16, padding: "32px", border: "1px solid rgba(0,0,0,0.08)", textAlign: "center" }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: "#1a1a1a", marginBottom: 8 }}>No media yet</div>
-            <div style={{ fontSize: 13, color: "#7c7660", marginBottom: 20 }}>Go back to the dashboard and add media to this project to generate a video.</div>
-            <button onClick={() => router.push("/dashboard")}
-              style={{ background: "#FF2D2D", color: "#fff", border: "none", borderRadius: 999, padding: "12px 24px", fontFamily: "inherit", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-              Add Media
-            </button>
+          <div style={{ textAlign: "center", padding: "20px", color: "#7c7660", fontSize: 14 }}>
+            Upload clips above to get started.
           </div>
         ) : !videoUrl ? (
           <button onClick={generateVideo} disabled={generating}

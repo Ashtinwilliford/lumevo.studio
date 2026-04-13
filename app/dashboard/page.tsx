@@ -455,6 +455,28 @@ function LibrarySection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [gdriveUrl, setGdriveUrl] = useState("");
+  const [gdriveImporting, setGdriveImporting] = useState(false);
+  const [gdriveStatus, setGdriveStatus] = useState<string | null>(null);
+
+  async function importGdrive() {
+    if (!gdriveUrl.trim()) return;
+    setGdriveImporting(true); setGdriveStatus("Importing..."); setError(null);
+    try {
+      const res = await fetch("/api/uploads/gdrive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: gdriveUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      setGdriveStatus(`${data.imported ?? 1} file${(data.imported ?? 1) !== 1 ? "s" : ""} imported`);
+      setGdriveUrl("");
+      onRefresh();
+    } catch (err) {
+      setGdriveStatus(err instanceof Error ? err.message : "Import failed");
+    } finally { setGdriveImporting(false); }
+  }
 
   async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
@@ -487,6 +509,23 @@ function LibrarySection({ uploads, onRefresh }: { uploads: Upload[]; onRefresh: 
         <p style={{ fontSize: 14, color: "#7c7660" }}>{uploads.length} file{uploads.length !== 1 ? "s" : ""} in your library.</p>
       </div>
 
+      {/* Google Drive Import */}
+      <div style={{ background: "#fff", borderRadius: 14, border: "1px solid rgba(0,0,0,0.08)", padding: "16px 18px", marginBottom: 12 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>Google Drive</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input value={gdriveUrl} onChange={e => setGdriveUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") importGdrive(); }}
+            placeholder="Paste folder or file link..."
+            style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "1.5px solid rgba(0,0,0,0.1)", fontFamily: "inherit", fontSize: 13, outline: "none" }} />
+          <button onClick={importGdrive} disabled={!gdriveUrl.trim() || gdriveImporting}
+            style={{ background: gdriveUrl.trim() ? "#FF2D2D" : "#ccc", color: "#fff", border: "none", borderRadius: 10, padding: "10px 18px", fontFamily: "inherit", fontSize: 13, fontWeight: 700, cursor: gdriveUrl.trim() ? "pointer" : "default" }}>
+            {gdriveImporting ? "..." : "Import"}
+          </button>
+        </div>
+        {gdriveStatus && <div style={{ fontSize: 12, marginTop: 8, fontWeight: 600, color: gdriveStatus.includes("imported") ? "#16a34a" : gdriveStatus === "Importing..." ? "#7B61FF" : "#FF2D2D" }}>{gdriveStatus}</div>}
+      </div>
+
+      {/* Device Upload — drag & drop */}
       <div onClick={() => fileRef.current?.click()} onDragOver={e => e.preventDefault()}
         onDrop={e => { e.preventDefault(); if (fileRef.current && e.dataTransfer.files.length > 0) { const fake = { target: { files: e.dataTransfer.files } } as unknown as React.ChangeEvent<HTMLInputElement>; handleFiles(fake); } }}
         style={{ border: "2px dashed rgba(0,0,0,0.1)", borderRadius: 16, padding: "40px 24px", textAlign: "center", cursor: "pointer", background: "#fff", marginBottom: 20 }}>
