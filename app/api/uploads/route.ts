@@ -58,10 +58,24 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   try {
-    const { projectId, fileName, fileType, mimeType, fileSize, filePath } = await req.json();
+    const { projectId, fileName, fileType, mimeType, fileSize, filePath, videoDuration } = await req.json();
+
+    // Get video duration from Cloudinary if not provided and it's a video
+    let duration: number | null = videoDuration ?? null;
+    if (!duration && fileType === "video" && filePath?.includes("res.cloudinary.com")) {
+      try {
+        // Extract public_id from Cloudinary URL and query resource info
+        const match = filePath.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/);
+        if (match?.[1]) {
+          const info = await cloudinary.api.resource(match[1], { resource_type: "video" });
+          duration = info.duration ?? null;
+        }
+      } catch { /* non-fatal — duration stays null */ }
+    }
+
     const result = await query(
-      `INSERT INTO uploads (user_id, project_id, file_name, file_type, mime_type, file_path, file_size, analysis_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, file_name, file_type, mime_type, file_path, file_size, analysis_status, created_at`,
-      [session.id, projectId || null, fileName, fileType, mimeType, filePath, fileSize, "ready"]
+      `INSERT INTO uploads (user_id, project_id, file_name, file_type, mime_type, file_path, file_size, video_duration_sec, analysis_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, file_name, file_type, mime_type, file_path, file_size, video_duration_sec, analysis_status, created_at`,
+      [session.id, projectId || null, fileName, fileType, mimeType, filePath, fileSize, duration, "ready"]
     );
     // Fire-and-forget AI analysis
     const uploadRow = result.rows[0];

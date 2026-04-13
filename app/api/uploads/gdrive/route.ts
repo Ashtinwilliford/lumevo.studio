@@ -147,12 +147,15 @@ async function importOneFile(
     });
 
     const filePath = cloudResult.secure_url as string;
+    // Cloudinary returns duration for video uploads
+    const videoDuration = isVideo ? (cloudResult.duration as number) || null : null;
 
     const insertRow = await query(
-      `INSERT INTO uploads (user_id, project_id, file_type, file_name, mime_type, file_size, file_path, analysis_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'ready') RETURNING id, file_type, file_name, mime_type, file_size, file_path, analysis_status, created_at`,
-      [userId, projectId, fileType, filename, mimetype, buffer.length, filePath]
+      `INSERT INTO uploads (user_id, project_id, file_type, file_name, mime_type, file_size, file_path, video_duration_sec, analysis_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ready') RETURNING id, file_type, file_name, mime_type, file_size, file_path, video_duration_sec, analysis_status, created_at`,
+      [userId, projectId, fileType, filename, mimetype, buffer.length, filePath, videoDuration]
     );
+    if (videoDuration) console.log(`[gdrive] ${filename}: ${videoDuration.toFixed(1)}s`);
 
     const uploadRow = insertRow.rows[0];
 

@@ -93,7 +93,9 @@ function buildCreatomateSource(
     if (!clip?.file_path) return null;
 
     const isVideo = clip.file_type === "video";
-    const actualDur = clip.video_duration_sec ?? 5;
+    // When duration is unknown, assume a generous 15s so clips aren't cut to 5s stubs
+    const actualDur = clip.video_duration_sec ?? (isVideo ? 15 : 5);
+    if (!clip.video_duration_sec && isVideo) console.warn(`[render-plan] Clip ${scene.clip_id.slice(0,8)} missing duration — using ${actualDur}s default`);
     const a = clip.ai_analysis || {};
 
     // Prefer AI best_moment over plan trims for tighter clip selection
