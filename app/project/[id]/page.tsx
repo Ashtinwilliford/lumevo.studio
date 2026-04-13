@@ -194,7 +194,7 @@ export default function ProjectPage() {
 
   async function analyzeClips() {
     setAnalyzing(true);
-    setAnalyzeMessage("Scanning clips for Elliott's laughter...");
+    setAnalyzeMessage("Analyzing clips...");
     try {
       const res = await fetch("/api/uploads/analyze", {
         method: "POST",
@@ -241,7 +241,7 @@ export default function ProjectPage() {
 
     try {
       // Step 0: Analyze clips for laughter/natural audio (skips already-analyzed ones)
-      setGenStatus("Scanning clips for Elliott's voice and laughter...");
+      setGenStatus("Analyzing your clips...");
       try {
         const analyzeRes = await fetch("/api/uploads/analyze", {
           method: "POST",
@@ -533,7 +533,7 @@ export default function ProjectPage() {
             Media ({uploads.length} file{uploads.length !== 1 ? "s" : ""})
             {Object.keys(clipAnalysis).length > 0 && (
               <span style={{ marginLeft: 8, fontWeight: 400, textTransform: "none", letterSpacing: 0, color: "#22a454" }}>
-                · {Object.values(clipAnalysis).filter(a => a.has_laughter).length} with baby sounds
+                · {Object.values(clipAnalysis).filter(a => a.has_laughter).length} with natural audio
               </span>
             )}
           </div>

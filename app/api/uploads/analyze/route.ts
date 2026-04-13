@@ -70,20 +70,19 @@ async function analyzeUpload(
 
   // ── Build Claude prompt ─────────────────────────────────────────────────
   const systemContext = fileType === "video"
-    ? `You are analyzing a frame from a short video clip of a baby/toddler named Elliott.
-IMPORTANT: Look carefully at Elliott's expression. A big open mouth, scrunched eyes, raised cheeks = LAUGHING.
-Any adult speaking = has_speech. Outdoor nature setting = has_natural_audio may be true.
+    ? `You are analyzing a frame from a short video clip for a content creator.
+Look for: people's expressions (laughter, joy, emotion), speech, natural/ambient sounds worth keeping.
 If the subject is far away or tiny in frame, set best_use to "wide".`
-    : `You are analyzing a photo from a baby/toddler outing.`;
+    : `You are analyzing a photo for a content creator's video project.`;
 
   const textPrompt = `${systemContext}
 
 Respond with ONLY this JSON (no markdown, no explanation):
 {
   "description": "one sentence: what is actually happening in the clip/photo",
-  "has_laughter": true or false (Elliott laughing or giggling — look for open mouth, joy expression),
-  "has_speech": true or false (any adult clearly talking),
-  "has_natural_audio": true or false (meaningful sounds like laughter, nature, or joy worth keeping),
+  "has_laughter": true or false (anyone laughing, giggling, or showing joy),
+  "has_speech": true or false (anyone clearly talking),
+  "has_natural_audio": true or false (meaningful sounds like laughter, nature, music, or ambient audio worth keeping),
   "energy": "high" or "medium" or "low",
   "mood": "joyful" or "playful" or "calm" or "tender" or "excited",
   "warmth_score": 1-10,
@@ -101,9 +100,9 @@ Respond with ONLY this JSON (no markdown, no explanation):
   const fallbackTextContent: Anthropic.MessageParam["content"] = [
     {
       type: "text",
-      text: `Analyze this ${fileType} clip named "${fileName}". It's from a baby strawberry picking video.
+      text: `Analyze this ${fileType} clip named "${fileName}".
 ${existingDuration ? `Duration: ${existingDuration.toFixed(1)}s.` : ""}
-For a baby outing video, estimate: is there likely laughter? Speech? Joyful energy?
+Estimate the content based on the filename.
 Return ONLY JSON:
 {
   "description": "estimated content based on filename",
@@ -238,7 +237,7 @@ export async function POST(req: NextRequest) {
     laughterDetected: laughterCount,
     results,
     message: laughterCount > 0
-      ? `Found ${laughterCount} clip${laughterCount > 1 ? "s" : ""} with Elliott's laughter!`
-      : "Analysis complete. No laughter detected — music will play over all clips.",
+      ? `Found ${laughterCount} clip${laughterCount > 1 ? "s" : ""} with natural audio!`
+      : "Analysis complete — music will play over all clips.",
   });
 }
